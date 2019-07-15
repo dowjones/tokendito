@@ -1,0 +1,69 @@
+version: 2
+
+tox_shared_config: &tox_shared_config
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+          - v1-dependencies-{{ checksum "requirements-dev.txt" }}
+          - v1-dependencies-
+      - run:
+          name: install dependencies
+          command: |
+            virtualenv venv
+            . venv/bin/activate
+            pip install -r requirements-dev.txt
+      - save_cache:
+          paths:
+            - ./venv
+          key: v1-dependencies-{{ checksum "requirements-dev.txt" }}
+      - run:
+          name: run tests
+          command: |
+            . venv/bin/activate
+            tox -e "${CIRCLE_JOB}"
+
+jobs:
+  lint:
+    <<: *tox_shared_config
+    docker:
+      - image: circleci/python:3.7
+
+  py27:
+    <<: *tox_shared_config
+    docker:
+      - image: circleci/python:2.7
+
+  py36:
+    <<: *tox_shared_config
+    docker:
+      - image: circleci/python:3.6
+
+  py37:
+    <<: *tox_shared_config
+    docker:
+      - image: circleci/python:3.7
+  functional:
+    <<: *tox_shared_config
+    docker:
+      - image: circleci/python:3.7
+
+workflows:
+  version: 2
+  hygiene_and_tests:
+    jobs:
+      - lint
+      - py27:
+          requires:
+            - lint
+      - py36:
+          requires:
+            - lint
+      - py37:
+          requires:
+            - lint
+      - functional:
+          requires:
+            - py27
+            - py36
+            - py37

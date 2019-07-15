@@ -1,0 +1,11 @@
+-r ./requirements.txt
+flake8
+flake8-colors
+flake8-docstrings
+flake8-import-order>=0.9
+pep8-naming
+pexpect>=4.6.0
+pylint>=1.8.4
+pydocstyle==3.0.0
+pyroma
+tox<3.7.0

@@ -1,0 +1,11 @@
+[default]
+okta_aws_app_url = https://acme.oktapreview.com/home/amazon_aws/b07384d113edec49eaa6/123
+okta_username = jane.doe@acme.com
+mfa_method = push
+
+[my_prod_okta_tile]
+okta_aws_app_url = https://acme.okta.com/home/amazon_aws/b07384d113edec49f00d/272?fromHome=true
+
+[my_dev_okta_tile]
+okta_aws_app_url = https://acme.oktapreview.com/home/amazon_aws/b07384d113edec49eaa6/123
+okta_username = jane.doe@acme.com
