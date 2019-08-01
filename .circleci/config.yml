@@ -61,6 +61,9 @@ workflows:
       - py27:
           requires:
             - lint
+      - py35:
+          requires:
+            - lint
       - py36:
           requires:
             - lint
@@ -70,5 +73,6 @@ workflows:
       - functional:
           requires:
             - py27
+            - py35
             - py36
             - py37
