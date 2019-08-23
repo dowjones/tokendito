@@ -17,7 +17,7 @@ Then execute: ``tokendito`` in your command line.
 
 Multi-tile Guide!
 """""""""""""""""
-If you have multiple AWS-type Okta tiles assigned to you, please update your local `$HOME/.aws/okta_auth <okta_auth.example>`_ with the links to your AWS tiles in Okta. You can get the link to your tile by right clicking on the tile in Okta and selecting "Copy Link URL." 
+If you have multiple AWS-type Okta tiles assigned to you, please update your local `$HOME/.aws/okta_auth <okta_auth.example>`_ with the links to your AWS tiles in Okta. You can get the link to your tile by right clicking on the tile in Okta and selecting "Copy Link URL."
 This file supports multiple profiles, in case there is a need to connect with different Okta Orgs and tiles. tokendito can access the profiles by name, by passing in the ``--okta-profile`` parameter.
 
 ex:
@@ -40,7 +40,7 @@ You can just pass in your information at runtime:
     --okta-aws-app-url https://acme.oktapreview.com/home/amazon_aws/b07384d113edec49eaa6/123 \
 
 
-Or you can put your parameters into a single `profile <okta_auth.example>`_ in ``$HOME/aws/.okta_auth`` and reference that profile.
+Or you can put your parameters into a single `profile <okta_auth.example>`_ in ``$HOME/.aws/okta_auth`` and reference that profile.
 
 .. code-block:: txt
 
@@ -62,7 +62,7 @@ Regarding the Okta password, we are fans of automation but do not recommend pass
 Additional Usage Reference
 --------------------------
 
-.. code-block:: txt 
+.. code-block:: txt
 
     usage: tokendito  [-h] [--version] [--configure] [--username USERNAME]
                       [--password PASSWORD] [--config-file CONFIG_FILE]
