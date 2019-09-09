@@ -125,9 +125,9 @@ def test_generate_credentials(custom_args):
 
     # Emulate helpers.process_options() bypassing interactive portions.
     tool_args = helpers.setup(custom_args)
+    helpers.process_environment()
     helpers.process_ini_file(tool_args.config_file, 'default')
     helpers.process_arguments(tool_args)
-    helpers.process_environment()
 
     if settings.role_arn is None or \
        settings.okta_aws_app_url is None or \
@@ -158,9 +158,9 @@ def test_aws_credentials(custom_args):
     from tokendito import helpers, settings
     # Emulate helpers.process_options() bypassing interactive portions.
     tool_args = helpers.setup(custom_args)
+    helpers.process_environment()
     helpers.process_ini_file(tool_args.config_file, 'default')
     helpers.process_arguments(tool_args)
-    helpers.process_environment()
 
     if settings.role_arn is None:
         pytest.skip('No AWS profile defined, test will be skipped.')

@@ -124,7 +124,7 @@ def test_process_environment(monkeypatch, valid_settings, invalid_settings):
     import os
 
     # ENV standard is uppercase
-    valid_keys = {key.upper(): val for (key, val) in valid_settings.items()}
+    valid_keys = {'TOKENDITO_{}'.format(key.upper()): val for (key, val) in valid_settings.items()}
     invalid_keys = {key.upper(): val for (key, val) in invalid_settings.items()}
 
     # Python 2.7 does not support {**dict1, **dict2} for concatenation

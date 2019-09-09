@@ -407,16 +407,19 @@ def process_arguments(args):
             setattr(settings, key, val)
 
 
-def process_environment():
+def process_environment(prefix='TOKENDITO'):
     """Process environment variables.
 
     :return: None
     """
+    prefix += '_'
     for (key, val) in os.environ.items():
-        key = key.lower()
-        if hasattr(settings, key):
-            logging.debug('Set option {}={} from environment'.format(key, val))
-            setattr(settings, key, os.getenv(key.upper()))
+        logging.debug('Evaluating option {} in environment'.format(key))
+        if key.startswith(prefix):
+            key = key.split(prefix)[1].lower()
+            if hasattr(settings, key) and val != '':
+                logging.debug('Set option {}={} from environment'.format(key, val))
+                setattr(settings, key, val)
 
 
 def process_okta_credentials():
@@ -612,12 +615,12 @@ def process_options(args):
         update_configuration(args.config_file, args.okta_profile)
         sys.exit(0)
 
-    # 1: read ini file (if it exists)
-    process_ini_file(args.config_file, args.okta_profile)
-    # 2: override with args
-    process_arguments(args)
-    # 3: override with ENV
+    # 1: process ENV
     process_environment()
+    # 2: read ini file (if it exists)
+    process_ini_file(settings.config_file, settings.okta_profile)
+    # 3: override with args
+    process_arguments(args)
 
     process_okta_aws_app_url()
     # Set username and password for Okta Authentication
