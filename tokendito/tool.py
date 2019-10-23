@@ -18,10 +18,10 @@ from tokendito import settings
 standard_library.install_aliases()
 
 
-def cli():
+def cli(args):
     """Tokendito retrieves AWS credentials after authenticating with Okta."""
     # Set some required initial values
-    args = helpers.setup()
+    args = helpers.setup(args)
 
     logging.debug(
         "tokendito retrieves AWS credentials after authenticating with Okta."

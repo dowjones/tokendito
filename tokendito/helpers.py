@@ -14,46 +14,48 @@ import getpass
 import json
 import logging
 import os
+import platform
 import re
 import sys
 from urllib.parse import urlparse
 
 from botocore import __version__ as __botocore_version__
+from bs4 import __version__ as __bs4_version__
 from bs4 import BeautifulSoup
 from future import standard_library
 import requests
+from requests import __version__ as __requests_version__
 from tokendito import settings
 from tokendito.__version__ import __version__
 
 standard_library.install_aliases()
 
 
-def setup():
+def setup(args):
     """Parse command line arguments.
 
     :return: args parse object
     """
     parser = argparse.ArgumentParser(
+        prog='tokendito',
         description='Gets a STS token to use with the AWS CLI')
-    parser.add_argument('--version', '-v', action='version',
-                        version='{}/{} botocore/{}'.format(
-                            parser.prog, __version__, __botocore_version__),
+    parser.add_argument('--version', '-v', action='store_true',
                         help='Displays version and exit')
     parser.add_argument('--configure', '-c', action='store_true', help='Prompt user for '
                         'configuration parameters')
-
     parser.add_argument('--username', '-u', type=to_unicode, dest='okta_username',
                         help='username to login to Okta. You can '
                         'also use the OKTA_USERNAME environment variable.')
     parser.add_argument('--password', '-p', type=to_unicode, dest='okta_password',
                         help='password to login to Okta. You '
                         'can also user the OKTA_PASSWORD environment variable.')
-
     parser.add_argument('--config-file', '-C', type=to_unicode,
+                        default=settings.config_file,
                         help='Use an alternative configuration file')
     parser.add_argument('--okta-aws-app-url', '-ou', type=to_unicode,
                         help='Okta App URL to use.')
     parser.add_argument('--okta-profile', '-op', type=to_unicode,
+                        default=settings.okta_profile,
                         help='Okta configuration profile to use.')
     parser.add_argument('--aws-region', '-r', type=to_unicode,
                         help='Sets the AWS region for the profile')
@@ -74,22 +76,24 @@ def setup():
                         help='[DEBUG|INFO|WARN|ERROR], default loglevel is ERROR.'
                         ' Note: DEBUG level may display credentials')
 
-    args = parser.parse_args()
-    set_logging(args)
-    logging.debug("Parse command line arguments [{}]".format(args))
+    parsed_args = parser.parse_args(args)
+    set_logging(parsed_args)
+    logging.debug("Parse command line arguments [{}]".format(parsed_args))
 
-    return args
+    return parsed_args
 
 
 def to_unicode(bytestring):
-    """Convert a str into a Unicode object.
+    """Convert a string into a Unicode compliant object.
 
     The `unicode()` method is only available in Python 2. Python 3
     generates a `NameError`, and the same string is returned unmodified.
 
     :param bytestring:
-    :return: unicode-escaped string
+    :return: unicode-compliant string
     """
+    if type(bytestring) == bytes:
+        bytestring = bytestring.decode(settings.encoding)
     unicode_string = bytestring
     try:
         unicode_string = unicode(bytestring, settings.encoding)
@@ -109,7 +113,7 @@ def create_directory(dir_name):
             sys.exit(1)
 
 
-def set_okta_user_name():
+def set_okta_username():
     """Set okta username in a constant settings variable.
 
     :return: okta_username
@@ -342,26 +346,34 @@ def get_account_aliases(saml_xml, saml_response_string):
     return alias_table
 
 
-def process_init_file(config):
-    """Process options from a ConfigParser init file.
+def display_version():
+    """Print program version and exit."""
+    python_version = platform.python_version()
+    (system, _, release, _, _, _) = platform.uname()
+    print('tokendito/{} Python/{} {}/{} botocore/{} bs4/{} requests/{}'.format(
+        __version__, python_version, system, release,
+        __botocore_version__, __bs4_version__, __requests_version__))
 
-    :param config: ConfigParser object
+
+def process_ini_file(file, profile):
+    """Process options from a ConfigParser ini file.
+
+    :param file: filename
+    :param profile: profile to read
     :return: None
     """
-    # Read defaults from config
-    if 'default' in config.sections():
-        for (key, val) in config.items('default'):
-            logging.debug(
-                'Set option {}={} from config default'.format(key, val))
-            setattr(settings, key, val)
-    # Override with local profile config
-    if settings.okta_profile in config.sections():
-        for (key, val) in config.items(settings.okta_profile):
-            logging.debug('Set option {}={} from {}'.format(
-                key, val, settings.okta_profile))
-            setattr(settings, key, val)
-    else:
-        logging.warning('Profile \'{}\' does not exist.'.format(settings.okta_profile))
+    config = configparser.ConfigParser(default_section=settings.okta_profile)
+    if config.read(file) == []:
+        return
+
+    try:
+        for (key, val) in config.items(profile):
+            if hasattr(settings, key):
+                logging.debug('Set option {}={} from ini file'.format(key, val))
+                setattr(settings, key, val)
+    except configparser.NoSectionError:
+        logging.error('Profile \'{}\' does not exist.'.format(profile))
+        sys.exit(2)
 
 
 def process_arguments(args):
@@ -371,9 +383,8 @@ def process_arguments(args):
     :return: None
     """
     for (key, val) in vars(args).items():
-        if val is not None:
-            logging.debug(
-                'Set option {}={} from command line'.format(key, val))
+        if hasattr(settings, key) and val is not None:
+            logging.debug('Set option {}={} from command line'.format(key, val))
             setattr(settings, key, val)
 
 
@@ -383,12 +394,45 @@ def process_environment():
     :return: None
     """
     for (key, val) in os.environ.items():
-        if key.startswith('OKTA_') or \
-           key == 'AWS_CONFIG_FILE' or \
-           key == 'AWS_SHARED_CREDENTIALS_FILE':
-            logging.debug(
-                'Set option {}={} from environment'.format(key.lower(), val))
-            setattr(settings, key.lower(), val)
+        key = key.lower()
+        if hasattr(settings, key):
+            logging.debug('Set option {}={} from environment'.format(key, val))
+            setattr(settings, key, os.getenv(key.upper()))
+
+
+def process_okta_credentials():
+    """Set Okta credentials.
+
+    :return: Success or error message
+    """
+    logging.debug("Set Okta credentials.")
+    set_okta_username()
+    set_okta_password()
+
+
+def process_okta_aws_app_url(app_url=None):
+    """Process Okta app url.
+
+    :param app_url: string with okta tile URL.
+    :return: None.
+    """
+    if app_url is None:
+        logging.error(
+            "Okta Application URL not found in profile '{}'.\nPlease verify your options"
+            " or re-run this application with the --configure flag".format(settings.okta_profile))
+        sys.exit(2)
+    # Prepare final Okta and AWS app Url
+    url = urlparse(app_url)
+
+    if url.scheme == '' or url.netloc == '' or url.path == '':
+        logging.error("Okta Application URL invalid. Please check your configuration"
+                      " and try again.")
+        sys.exit(2)
+
+    okta_org = '{}://{}'.format(url.scheme, url.netloc)
+    okta_aws_app_url = '{}{}'.format(okta_org, url.path)
+    setattr(settings, 'okta_org', okta_org)
+    setattr(settings, 'okta_aws_app_url', okta_aws_app_url)
 
 
 def user_configuration_input():
@@ -429,10 +473,10 @@ def update_configuration(okta_file, profile):
     if not config.has_section(profile):
         config.add_section(profile)
         logging.debug("Add section to Okta config [{}]".format(profile))
-    (app_url, user_name) = user_configuration_input()
+    (app_url, username) = user_configuration_input()
 
     url = urlparse(app_url.strip())
-    okta_username = user_name.strip()
+    okta_username = username.strip()
 
     if url.scheme == '' or url.netloc == '' or url.path == '':
         sys.exit('Okta Application URL invalid or not found. Please reconfigure.')
@@ -529,56 +573,23 @@ def update_aws_config(profile, output, region):
         config.write(file)
 
 
-def initialize_okta_credentials():
-    """Set Okta credentials.
-
-    :return: Success or error message
-
-    """
-    logging.debug("Set Okta credentials.")
-    set_okta_user_name()
-    set_okta_password()
-
-
 def process_options(args):
     """Collect all user-specific credentials and config params."""
-    # Point to the correct profile
-    if args.okta_profile is not None:
-        logging.debug('okta_profile={}'.format(settings.okta_profile))
-        settings.okta_profile = args.okta_profile
-
-    if args.configure:
-        update_configuration(
-            settings.config_file, settings.okta_profile)
+    if args.version:
+        display_version()
         sys.exit(0)
 
-    config = configparser.ConfigParser()
-    config.read(settings.config_file)
+    if args.configure:
+        update_configuration(args.config_file, args.okta_profile)
+        sys.exit(0)
 
-    # 1: read init file (if it exists)
-    process_init_file(config)
+    # 1: read ini file (if it exists)
+    process_ini_file(args.config_file, args.okta_profile)
     # 2: override with args
     process_arguments(args)
     # 3: override with ENV
     process_environment()
 
-    if settings.okta_aws_app_url is None:
-        logging.error(
-            "Okta Application URL not found in profile '{}'.\nPlease verify your options"
-            " or re-run this application with the --configure flag".format(settings.okta_profile))
-        sys.exit(2)
-    # Prepare final Okta and AWS app Url
-    url = urlparse(settings.okta_aws_app_url)
-
-    if url.scheme == '' or url.netloc == '' or url.path == '':
-        logging.error("Okta Application URL invalid. Please check your configuration"
-                      " and try again.")
-        sys.exit(2)
-
-    okta_org = '{}://{}'.format(url.scheme, url.netloc)
-    okta_aws_app_url = '{}{}'.format(okta_org, url.path)
-    setattr(settings, 'okta_org', okta_org)
-    setattr(settings, 'okta_aws_app_url', okta_aws_app_url)
-
+    process_okta_aws_app_url(settings.okta_aws_app_url)
     # Set username and password for Okta Authentication
-    initialize_okta_credentials()
+    process_okta_credentials()
