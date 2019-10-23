@@ -6,7 +6,7 @@ Generate temporary AWS credentials via Okta.
 .. image:: https://circleci.com/gh/dowjones/tokendito/tree/master.svg?style=svg
     :target: https://circleci.com/gh/dowjones/tokendito/tree/master
 
-.. image:: https://img.shields.io/badge/python-2.7%2C%203.5%2C%203.6%2C%203.7-blueviolet
+.. image:: https://img.shields.io/badge/python-2.7%2C%203.5%2C%203.6%2C%203.7%2C%203.8-blueviolet
     :target: https://pypi.org/project/tokendito/
 
 .. image:: https://img.shields.io/badge/license-Apache%202.0-ff69b4

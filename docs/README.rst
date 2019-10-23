@@ -48,7 +48,7 @@ Or you can put your parameters into a single `profile <okta_auth.example>`_ in `
     okta_aws_app_url = https://acme.oktapreview.com/home/amazon_aws/b07384d113edec49eaa6/123
     okta_username = jane.doe@acme.com
     mfa_method = push
-    role-arn = arn:aws:iam::123456789000:role/dowjones-hammer-engineer
+    role_arn = arn:aws:iam::123456789000:role/dowjones-hammer-engineer
 
 
 And execute:

@@ -48,10 +48,11 @@ jobs:
     <<: *tox_shared_config
     docker:
       - image: circleci/python:3.7
-  functional:
+
+  py38:
     <<: *tox_shared_config
     docker:
-      - image: circleci/python:3.7
+      - image: circleci/python:3.8
 
 workflows:
   version: 2
@@ -70,9 +71,6 @@ workflows:
       - py37:
           requires:
             - lint
-      - functional:
+      - py38:
           requires:
-            - py27
-            - py35
-            - py36
-            - py37
+            - lint
