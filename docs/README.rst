@@ -121,7 +121,7 @@ Installing from github:
 
 ``pip install git+ssh://git@github.com/dowjones/tokendito.git@<version>``
 
-For instance, ``pip install git+ssh://git@github.com/dowjones/tokendito.git@1.0.0``
+For instance, ``pip install git+ssh://git@github.com/dowjones/tokendito.git@1.0.1``
 
 Troubleshooting:
 ----------------
