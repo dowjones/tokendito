@@ -312,6 +312,25 @@ def validate_saml_response(html):
     return xml
 
 
+def validate_okta_aws_app_url(input_url=None):
+    """Validate whether a given URL is a valid AWS app URL in Okta.
+
+    :param input_url: string
+    :return: bool. True if valid, False otherwise
+    """
+    logging.debug('Will try to match \'{}\' to a valid URL'.format(input_url))
+
+    url = urlparse(input_url)
+    # Here, we could also check url.netloc against r'.*\.okta(preview)?\.com$'
+    # but Okta allows the usage of custome URLs such as login.acme.com
+    if url.scheme == 'https' and \
+       re.match(r'^/home/amazon_aws/\w{20}/\d{3}$', url.path) is not None:
+        return True
+
+    logging.debug('{} does not look like a valid match.'.format(url))
+    return False
+
+
 def get_account_aliases(saml_xml, saml_response_string):
     """Parse AWS SAML page for account aliases.
 
@@ -410,25 +429,18 @@ def process_okta_credentials():
     set_okta_password()
 
 
-def process_okta_aws_app_url(app_url=None):
+def process_okta_aws_app_url():
     """Process Okta app url.
 
     :param app_url: string with okta tile URL.
     :return: None.
     """
-    if app_url is None:
-        logging.error(
-            "Okta Application URL not found in profile '{}'.\nPlease verify your options"
-            " or re-run this application with the --configure flag".format(settings.okta_profile))
-        sys.exit(2)
-    # Prepare final Okta and AWS app Url
-    url = urlparse(app_url)
-
-    if url.scheme == '' or url.netloc == '' or url.path == '':
-        logging.error("Okta Application URL invalid. Please check your configuration"
-                      " and try again.")
+    if not validate_okta_aws_app_url(settings.okta_aws_app_url):
+        logging.error("Okta Application URL not found, or invalid. Please check "
+                      "your configuration and try again.")
         sys.exit(2)
 
+    url = urlparse(settings.okta_aws_app_url)
     okta_org = '{}://{}'.format(url.scheme, url.netloc)
     okta_aws_app_url = '{}{}'.format(okta_org, url.path)
     setattr(settings, 'okta_org', okta_org)
@@ -442,14 +454,33 @@ def user_configuration_input():
 
     """
     logging.debug("Obtain user input for the user.")
-
-    all_config_msgs = ['Okta App URL. E.g https://acme.okta.com/home/'
-                       'amazon_aws/b07384d113edec49eaa6/123: ',
-                       'Organization username. E.g jane.doe@acme.com: ']
+    url = ''
+    username = ''
     config_details = []
-    for config_msg in all_config_msgs:
-        user_input = to_unicode(input(config_msg))
-        config_details.append(user_input)
+    message = {
+        'app_url': '\nOkta App URL. E.g https://acme.okta.com/home/'
+                   'amazon_aws/b07384d113edec49eaa6/123\n[none]: ',
+        'username': '\nOrganization username. E.g jane.doe@acme.com'
+                    '\n[none]: '
+    }
+
+    while url == '':
+        user_data = to_unicode(input(message['app_url']))
+        user_data = user_data.strip()
+        if validate_okta_aws_app_url(user_data):
+            url = user_data
+        else:
+            print('Invalid input, try again.')
+    config_details.append(url)
+
+    while username == '':
+        user_data = to_unicode(input(message['username']))
+        user_data = user_data.strip()
+        if user_data != '':
+            username = user_data
+        else:
+            print('Invalid input, try again.')
+    config_details.append(username)
 
     return (config_details[0], config_details[1])
 
@@ -473,13 +504,11 @@ def update_configuration(okta_file, profile):
     if not config.has_section(profile):
         config.add_section(profile)
         logging.debug("Add section to Okta config [{}]".format(profile))
+
     (app_url, username) = user_configuration_input()
 
     url = urlparse(app_url.strip())
     okta_username = username.strip()
-
-    if url.scheme == '' or url.netloc == '' or url.path == '':
-        sys.exit('Okta Application URL invalid or not found. Please reconfigure.')
 
     okta_aws_app_url = '{}://{}{}'.format(url.scheme, url.netloc, url.path)
 
@@ -590,6 +619,6 @@ def process_options(args):
     # 3: override with ENV
     process_environment()
 
-    process_okta_aws_app_url(settings.okta_aws_app_url)
+    process_okta_aws_app_url()
     # Set username and password for Okta Authentication
     process_okta_credentials()
