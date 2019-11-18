@@ -1,10 +1,10 @@
 .. image:: https://raw.githubusercontent.com/dowjones/tokendito/master/docs/tokendito.png
    :align: center
 
-Generate temporary AWS credentials via Okta. 
+Generate temporary AWS credentials via Okta.
 
-.. image:: https://circleci.com/gh/dowjones/tokendito/tree/master.svg?style=svg
-    :target: https://circleci.com/gh/dowjones/tokendito/tree/master
+.. image:: https://github.com/dowjones/tokendito/workflows/Test%2C%20Build%2C%20and%20Publish/badge.svg?branch=master
+    :target: https://github.com/dowjones/tokendito/workflows/Test%2C%20Build%2C%20and%20Publish/badge.svg?branch=master
 
 .. image:: https://img.shields.io/badge/python-2.7%2C%203.5%2C%203.6%2C%203.7%2C%203.8-blueviolet
     :target: https://pypi.org/project/tokendito/
@@ -24,7 +24,7 @@ NOTE: Advanced users may shorten the tokendito interaction to a `single command 
 
 .. _STS: https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp.html
 
-Use tokendito to generate temporary AWS credentials via Okta for programmatic authentication to AWS. Tokendito signs you in to Okta and uses your existing AWS integration to broker your SAML assertion into your AWS accounts, returning STS_ tokens into your local ``~/.aws/credentials`` file. 
+Use tokendito to generate temporary AWS credentials via Okta for programmatic authentication to AWS. Tokendito signs you in to Okta and uses your existing AWS integration to broker your SAML assertion into your AWS accounts, returning STS_ tokens into your local ``~/.aws/credentials`` file.
 
 Requirements
 ------------
