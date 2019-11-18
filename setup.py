@@ -4,11 +4,13 @@
 """`tokendito` is in Github: <https://github.com/dowjones/tokendito>_."""
 
 from codecs import open
+import datetime
 import os
 from os import path
 import sys
 
 from setuptools import find_packages, setup
+
 
 here = path.abspath(path.dirname(__file__))
 
@@ -21,6 +23,10 @@ with open('requirements.txt') as f:
 about = {}
 with open(os.path.join(here, 'tokendito', '__version__.py'), 'r') as f:
     exec(f.read(), about)
+
+if 'DEVBUILD' in os.environ:
+    now = datetime.datetime.now()
+    about['__version__'] = about['__version__'] + '.dev' + now.strftime('%Y%m%d%H%M%S')
 
 setup(
     name='tokendito',
@@ -57,6 +63,5 @@ setup(
     entry_points={
         'console_scripts': ['tokendito=tokendito.__main__:main'],
     },
-
     # $ pip install -e . [dev,test]
 )
