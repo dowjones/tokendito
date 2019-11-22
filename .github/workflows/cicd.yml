@@ -54,6 +54,7 @@ jobs:
   testpypipublish:
     name: Build Test Distribution
     needs: test
+    if: github.repository == 'dowjones/tokendito'
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
@@ -81,7 +82,7 @@ jobs:
   pypipublish:
     name: Build Production Distribution
     needs: testpypipublish
-    if: github.ref == 'refs/heads/master' && startsWith(github.event.ref, 'refs/tags')
+    if: github.repository == 'dowjones/tokendito' && github.ref == 'refs/heads/master' && startsWith(github.event.ref, 'refs/tags')
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
