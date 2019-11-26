@@ -52,9 +52,10 @@ jobs:
     - name: Test with tox
       run: tox
   testpypipublish:
-    name: Build Test Distribution
+    name: Build and Publish Test Distribution
     needs: test
-    if: github.repository == 'dowjones/tokendito'
+    if: github.event.pull_request.head.repo.full_name == github.repository ||
+        github.event.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
@@ -80,9 +81,11 @@ jobs:
         user: __token__
         password: ${{ secrets.PYPITEST_PASSWORD }}
   pypipublish:
-    name: Build Production Distribution
-    needs: testpypipublish
-    if: github.repository == 'dowjones/tokendito' && github.ref == 'refs/heads/master' && startsWith(github.event.ref, 'refs/tags')
+    name: Build and Publish Production Distribution
+    needs: test
+    if: github.event.repository.full_name == github.repository &&
+        github.event.base_ref == 'refs/heads/master' &&
+        startsWith(github.event.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
