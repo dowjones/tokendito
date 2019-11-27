@@ -104,6 +104,20 @@ def test_set_okta_password(monkeypatch):
     assert settings.okta_password == 'pytest_patched'
 
 
+@pytest.mark.parametrize('url,expected', [
+    ('pytest_deadbeef', False),
+    ('http://acme.org/', False),
+    ('https://acme.okta.org/app/UserHome', False),
+    ('http://login.acme.org/home/amazon_aws/0123456789abcdef0123/456', False),
+    ('https://login.acme.org/home/amazon_aws/0123456789abcdef0123/456', True),
+    ('https://acme.okta.org/home/amazon_aws/0123456789abcdef0123/456?fromHome=true', True)])
+def test_validate_okta_aws_app_url(url, expected):
+    """Test whether the Okta URL functions."""
+    from tokendito import helpers
+
+    assert helpers.validate_okta_aws_app_url(input_url=url) is expected
+
+
 def test_process_environment(monkeypatch, valid_settings, invalid_settings):
     """Test whether environment variables are set in settings.*."""
     from tokendito import helpers, settings
