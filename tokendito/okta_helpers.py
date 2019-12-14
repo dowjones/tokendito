@@ -15,8 +15,10 @@ from builtins import (ascii, bytes, chr, dict, filter, hex, input,  # noqa: F401
                       round, str, super, zip)
 import json
 import logging
+import socketserver
 import sys
 import time
+import webbrowser
 
 from future import standard_library
 import requests
@@ -151,7 +153,7 @@ def user_mfa_options(selected_mfa_option,
 
     logging.debug("User MFA options selected: [{}]".format(
         selected_mfa_option['factorType']))
-    if selected_mfa_option['factorType'] == 'push':
+    if selected_mfa_option['factorType'] == 'push' or selected_mfa_option['provider'] == 'DUO':
         return push_approval(headers, mfa_challenge_url, payload)
 
     if settings.mfa_response is None:
@@ -203,6 +205,8 @@ def push_approval(headers, mfa_challenge_url, payload):
     print('Waiting for an approval from device...')
     mfa_status = "WAITING"
 
+    duo_embed_shown = False
+
     while mfa_status == "WAITING":
         mfa_verify = okta_verify_api_method(
             mfa_challenge_url, payload, headers)
@@ -230,6 +234,10 @@ def push_approval(headers, mfa_challenge_url, payload):
             logging.error("Device approval window has expired.")
             sys.exit(2)
 
+        if mfa_verify['_embedded']['factor']['provider'] == 'DUO' and not duo_embed_shown:
+            duo_embed_shown = True
+            show_duo_embed(mfa_verify)
+
         time.sleep(2)
 
     return mfa_verify
@@ -244,7 +252,8 @@ def select_preferred_mfa_index(mfa_options):
     logging.debug("Show all the MFA options to the users.")
     print('\nSelect your preferred MFA method and press Enter')
     for (mfa_counter, mfa_option) in enumerate(mfa_options):
-        print("[{}] {}".format(mfa_counter, mfa_option['factorType']))
+        print("[{}] {} ({})".format(mfa_counter, mfa_option['provider'].capitalize(),
+                                    mfa_option['factorType']))
     while True:
         user_input = helpers.to_unicode(input('-> '))
         logging.debug("User input [{}]".format(user_input))
@@ -259,3 +268,53 @@ def select_preferred_mfa_index(mfa_options):
         print('Invalid choice')
         continue
     return user_input
+
+
+def show_duo_embed(mfa_verify):
+    """Show Duo embed.
+
+    :param mfa_verify: Okta/Duo factor verification response
+    :return: None
+    """
+    html = """
+        <h1>Return to tokendito after completing Duo</h1>
+        <iframe id="duo_iframe" width="620" height="330" frameborder="0"></iframe>
+        <form method="POST" id="duo_form">
+            <input type="hidden" name="stateToken" value='%s' />
+        </form>
+        <script src="%s"></script>
+        <script>
+            Duo.init({
+                'host': '%s',
+                'sig_request': '%s',
+                'post_action': '%s'
+            });
+        </script>"""
+
+    html = html % (
+        mfa_verify['stateToken'],
+        mfa_verify['_embedded']['factor']['_embedded']['verification']['_links']['script']['href'],
+        mfa_verify['_embedded']['factor']['_embedded']['verification']['host'],
+        mfa_verify['_embedded']['factor']['_embedded']['verification']['signature'],
+        mfa_verify['_embedded']['factor']['_embedded']['verification']['_links']['complete']['href']
+    )
+
+    class MyTCPRequestHandler(socketserver.StreamRequestHandler):
+        def handle(self):
+            headers = '\r\n'.join([
+                'HTTP/1.1 200 OK',
+                'Connection: close',
+                'Content-Type: text/html; charset=UTF-8',
+                'Content-Length: %d' % len(html.encode('UTF-8')),
+                'Access-Control-Allow-Origin: *'
+            ])
+            self.wfile.write((headers + '\r\n\r\n' + html).encode('UTF-8'))
+
+    httpd = socketserver.TCPServer(("127.0.0.1", 0), MyTCPRequestHandler)
+    httpd.port = httpd.server_address[1]
+    print("(Duo MFA) Opening browser to: http://127.0.0.1:{}\n".format(httpd.port))
+    webbrowser.open("http://127.0.0.1:{}".format(httpd.port))
+    httpd.handle_request()
+    httpd.server_close()
+
+    return None
