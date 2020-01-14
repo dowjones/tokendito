@@ -1,7 +1,7 @@
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
 """tokendito version."""
-__version__ = '1.0.1'
+__version__ = '1.1.0'
 __title__ = 'tokendito'
 __description__ = 'Get AWS STS tokens from Okta SSO'
 __long_description_content_type__ = 'text/x-rst'

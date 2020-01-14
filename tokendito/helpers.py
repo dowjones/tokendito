@@ -204,6 +204,29 @@ def select_role_arn(role_arns, saml_xml, saml_response_string):
     return selected_role
 
 
+def select_preferred_mfa_index(mfa_options, factor_key="provider", subfactor_key="factorType"):
+    """Show all the MFA options to the users.
+
+    :param mfa_options: List of available MFA options
+    :return: MFA option selected index by the user from the output
+    """
+    logging.debug("Show all the MFA options to the users.")
+    print('\nSelect your preferred MFA method and press Enter:')
+
+    longest_index = len(str(len(mfa_options)))
+    for (i, mfa_option) in enumerate(mfa_options):
+        padding_index = longest_index - len(str(i))
+        longest_factor_name = max([len(d[factor_key]) for d in mfa_options])
+
+        print('[{}] {}{: <{}}    {}'.format(
+            i, padding_index*' ', mfa_option[factor_key], longest_factor_name,
+            mfa_option[subfactor_key]))
+
+    user_input = collect_integer(len(mfa_options))
+
+    return user_input
+
+
 def prompt_role_choices(role_arns, saml_xml, saml_response_string):
     """Ask user to select role.
 
@@ -229,22 +252,8 @@ def prompt_role_choices(role_arns, saml_xml, saml_response_string):
         print('[{}] {}{: <{}}    {}'.format(
             i, padding_index*' ', account_alias, longest_alias, arn))
 
-    while True:
-        user_input = to_unicode(input('-> '))
-
-        try:
-            user_input = int(user_input)
-        except ValueError as error:
-            print('Invalid input, try again.' + str(error))
-            logging.warning("Invalid input [{}]".format(error))
-            continue
-        if user_input in range(0, len(role_arns)):
-            logging.debug("User selected item {}.".format(user_input))
-            break
-        continue
-
+    user_input = collect_integer(len(role_arns))
     selected_role = sorted_role_arns[user_input]
-
     logging.debug("Selected role [{}]".format(user_input))
 
     return selected_role
@@ -265,8 +274,8 @@ def print_selected_role(profile_name, expiration_time):
         '\nOR\n\t'
         'export AWS_PROFILE=\'{}\'\n\n'
         'Credentials are valid until {}.'
-        ).format(profile_name, settings.aws_shared_credentials_file,
-                 profile_name, profile_name, expiration_time)
+    ).format(profile_name, settings.aws_shared_credentials_file,
+             profile_name, profile_name, expiration_time)
 
     return print(msg)
 
@@ -360,7 +369,8 @@ def get_account_aliases(saml_xml, saml_response_string):
 
     soup = BeautifulSoup(aws_response.text, "html.parser")
     account_names = soup.find_all(text=re.compile('Account:'))
-    alias_table = {str(i.split(" ")[-1]).strip("()"): i.split(" ")[1] for i in account_names}
+    alias_table = {str(i.split(" ")[-1]).strip("()"):
+                   i.split(" ")[1] for i in account_names}
 
     return alias_table
 
@@ -388,7 +398,8 @@ def process_ini_file(file, profile):
     try:
         for (key, val) in config.items(profile):
             if hasattr(settings, key):
-                logging.debug('Set option {}={} from ini file'.format(key, val))
+                logging.debug(
+                    'Set option {}={} from ini file'.format(key, val))
                 setattr(settings, key, val)
     except configparser.NoSectionError:
         logging.error('Profile \'{}\' does not exist.'.format(profile))
@@ -403,7 +414,8 @@ def process_arguments(args):
     """
     for (key, val) in vars(args).items():
         if hasattr(settings, key) and val is not None:
-            logging.debug('Set option {}={} from command line'.format(key, val))
+            logging.debug(
+                'Set option {}={} from command line'.format(key, val))
             setattr(settings, key, val)
 
 
@@ -417,16 +429,6 @@ def process_environment():
         if hasattr(settings, key):
             logging.debug('Set option {}={} from environment'.format(key, val))
             setattr(settings, key, os.getenv(key.upper()))
-
-
-def process_okta_credentials():
-    """Set Okta credentials.
-
-    :return: Success or error message
-    """
-    logging.debug("Set Okta credentials.")
-    set_okta_username()
-    set_okta_password()
 
 
 def process_okta_aws_app_url():
@@ -451,7 +453,6 @@ def user_configuration_input():
     """Obtain user input for the user.
 
     :return: (okta app url, organization username)
-
     """
     logging.debug("Obtain user input for the user.")
     url = ''
@@ -552,8 +553,6 @@ def update_aws_credentials(profile, aws_access_key, aws_secret_key, aws_session_
     :param aws_access_key: AWS access key
     :param aws_secret_key: AWS secret access key
     :param aws_session_token: Session token
-    :return:
-
     """
     cred_file = settings.aws_shared_credentials_file
     cred_dir = os.path.dirname(cred_file)
@@ -602,6 +601,98 @@ def update_aws_config(profile, output, region):
         config.write(file)
 
 
+def check_within_range(user_input, valid_range):
+    """Validate the user input is within the range of the presented menu.
+
+    :param user_input: integer-validated user input.
+    :param valid_range: the valid range presented on the user's menu.
+    :return range_validation: true or false
+    """
+    range_validation = False
+    if int(user_input) in range(0, valid_range):
+        range_validation = True
+    else:
+        logging.debug("Valid range is {}".format(valid_range))
+        logging.error("Value is not in within the selection range.")
+    return range_validation
+
+
+def check_integer(value):
+    """Validate integer.
+
+    :param value: value to be validated.
+    :return: True when the number is a positive integer, false otherwise.
+    """
+    integer_validation = False
+    if str(value).isdigit():
+        integer_validation = True
+    else:
+        logging.error("Please enter a valid integer.")
+
+    return integer_validation
+
+
+def validate_input(value, valid_range):
+    """Validate user input is an integer and within menu range.
+
+    :param value: user input
+    :param valid_range: valid range based on how many menu options available to user.
+    """
+    integer_validation = check_integer(value)
+    if integer_validation and valid_range:
+        integer_validation = check_within_range(value, valid_range)
+    return integer_validation
+
+
+def get_input(prompt='-> '):
+    """Collect user input for TOTP.
+
+    :return user_input: raw from user.
+    """
+    user_input = to_unicode(input(prompt))
+    logging.debug("User input [{}]".format(user_input))
+
+    return user_input
+
+
+def collect_integer(valid_range):
+    """Collect input from user.
+
+    Prompt the user for input. Validate it and cast to integer.
+
+    :param valid_range: number of menu options available to user.
+    :return user_input: validated, casted integer from user.
+    """
+    user_input = None
+    while True:
+        user_input = get_input()
+        valid_input = validate_input(user_input, valid_range)
+        logging.debug("User input validation status is {}".format(valid_input))
+        if valid_input:
+            user_input = int(user_input)
+            break
+    return user_input
+
+
+def prepare_payload(**kwargs):
+    """Prepare payload for the HTTP request header.
+
+    :param kwargs: parameters to get together
+    :return: payload for the http header
+    """
+    logging.debug("Prepare payload")
+
+    payload_dict = {}
+    if kwargs is not None:
+        for key, value in list(kwargs.items()):
+            payload_dict[key] = value
+
+            if key != 'password':
+                logging.debug("Prepare payload [{} {}]".format(key, value))
+
+    return payload_dict
+
+
 def process_options(args):
     """Collect all user-specific credentials and config params."""
     if args.version:
@@ -621,4 +712,6 @@ def process_options(args):
 
     process_okta_aws_app_url()
     # Set username and password for Okta Authentication
-    process_okta_credentials()
+    logging.debug("Set Okta credentials.")
+    set_okta_username()
+    set_okta_password()
