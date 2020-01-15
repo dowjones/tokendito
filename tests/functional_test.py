@@ -86,7 +86,8 @@ def custom_args(request):
 @pytest.mark.run('first')
 def test_package_uninstall():
     """Uninstall tokendito if it is already installed."""
-    proc = run_process([sys.executable, '-m', 'pip', 'uninstall', '-y', 'tokendito'])
+    proc = run_process([sys.executable, '-m', 'pip', 'uninstall', '-q', '-q', '-y', 'tokendito'])
+    assert not proc['stderr']
     assert proc['exit_status'] == 0
 
 
@@ -95,12 +96,14 @@ def test_package_install():
     """Install tokendito as a python package."""
     repo_root = path.dirname(path.dirname(path.abspath(__file__)))
     proc = run_process([sys.executable, '-m', 'pip', 'install', '-e', repo_root])
+    assert not proc['stderr']
     assert proc['exit_status'] == 0
 
 
 def test_package_exists():
     """Check whether the package is installed."""
-    proc = run_process([sys.executable, '-m', 'pip', 'show', '-q', 'tokendito'])
+    proc = run_process([sys.executable, '-m', 'pip', 'show', 'tokendito'])
+    assert not proc['stderr']
     assert proc['exit_status'] == 0
 
 
