@@ -1,4 +1,5 @@
 -r ./requirements.txt
+docutils<0.16,>=0.10
 flake8
 flake8-colors
 flake8-docstrings
@@ -9,6 +10,7 @@ pylint>=1.8.4
 pydocstyle==3.0.0
 pyroma
 pytest
+pytest-env
 pytest-ordering
 semver
 tox
