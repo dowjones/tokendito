@@ -114,10 +114,10 @@ def test_package_exists():
 def test_version(package_version, package_regex, runnable):
     """Check if the package version is the same when running in different ways."""
     proc = run_process(runnable)
-    match = re.match(package_regex, proc['stdout'])
-    local_version = match.group('version')
     assert not proc['stderr']
     assert proc['exit_status'] == 0
+    match = re.match(package_regex, proc['stdout'])
+    local_version = match.group('version')
     assert package_version == local_version
 
 
