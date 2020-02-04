@@ -11,6 +11,7 @@ pydocstyle==3.0.0
 pyroma
 pytest
 pytest-env
+pytest-mock
 pytest-ordering
 semver
 tox

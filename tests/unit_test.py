@@ -160,7 +160,7 @@ def test_process_arguments(valid_settings, invalid_settings):
 
 @pytest.mark.skipif(sys.version_info[:2] == (3, 5),
                     reason="ConfigParser bug, see https://bugs.python.org/issue29623")
-def test_process_ini_file(tmpdir, valid_settings, invalid_settings):
+def test_process_ini_file(tmpdir, valid_settings, invalid_settings, mocker):
     """Test whether ini config elements are correctly set in settings.*."""
     from tokendito import helpers, settings
     # Create a mock config file
@@ -180,7 +180,8 @@ def test_process_ini_file(tmpdir, valid_settings, invalid_settings):
 
     # Ensure we fail if the section is not found
     with pytest.raises(SystemExit) as err:
-        helpers.process_ini_file(path, 'expected_failure')
+        mocker.patch('logging.error')
+        helpers.process_ini_file(path, 'pytest_expected_failure')
         # assert err.type == SystemExit
         assert err.value.code == 2
 
