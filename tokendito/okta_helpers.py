@@ -52,7 +52,8 @@ def okta_verify_api_method(mfa_challenge_url, payload, headers=None):
     try:
         response = response.json()
     except ValueError:
-        response = response.content
+        logging.debug("Received type of response: {}".format(type(response.text)))
+        response = response.text
 
     if 'errorCode' in response:
         error_string = "Exiting due to Okta API error [{}]\n{}".format(
