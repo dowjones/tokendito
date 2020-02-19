@@ -390,8 +390,8 @@ def process_ini_file(file, profile):
             if hasattr(settings, key):
                 logging.debug('Set option {}={} from ini file'.format(key, val))
                 setattr(settings, key, val)
-    except configparser.NoSectionError:
-        logging.error('Profile \'{}\' does not exist.'.format(profile))
+    except configparser.Error as err:
+        logging.error('Could not load profile \'{}\': {}'.format(profile, str(err)))
         sys.exit(2)
 
 
