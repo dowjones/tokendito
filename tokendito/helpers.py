@@ -204,28 +204,23 @@ def select_role_arn(role_arns, saml_xml, saml_response_string):
     return selected_role
 
 
-def select_preferred_mfa_index(mfa_options, duo=False):
+def select_preferred_mfa_index(mfa_options, factor_key="provider", subfactor_key="factorType"):
     """Show all the MFA options to the users.
 
     :param mfa_options: List of available MFA options
     :return: MFA option selected index by the user from the output
     """
     logging.debug("Show all the MFA options to the users.")
-    print('\nSelect your preferred MFA method and press Enter')
+    print('\nSelect your preferred MFA method and press Enter:')
 
     longest_index = len(str(len(mfa_options)))
     for (i, mfa_option) in enumerate(mfa_options):
-        if duo:
-            factor = "factor"
-            subfactor = "device"
-        else:
-            factor = "provider"
-            subfactor = "factorType"
-
         padding_index = longest_index - len(str(i))
-        longest_factor_name = max([len(d[factor]) for d in mfa_options])
+        longest_factor_name = max([len(d[factor_key]) for d in mfa_options])
+
         print('[{}] {}{: <{}}    {}'.format(
-            i, padding_index*' ', mfa_option[factor], longest_factor_name, mfa_option[subfactor]))
+            i, padding_index*' ', mfa_option[factor_key], longest_factor_name,
+            mfa_option[subfactor_key]))
 
     user_input = collect_integer(len(mfa_options))
 
@@ -609,9 +604,6 @@ def update_aws_config(profile, output, region):
 def check_within_range(user_input, valid_range):
     """Validate the user input is within the range of the presented menu.
 
-    This should only get invoked when valid_range is not None, which
-    is only true during menu selection validation and not for TOTP validation.
-
     :param user_input: integer-validated user input.
     :param valid_range: the valid range presented on the user's menu.
     :return range_validation: true or false
@@ -629,13 +621,12 @@ def check_integer(value):
     """Validate integer.
 
     :param value: value to be validated.
-    :return passcode:
+    :return: True when the number is a positive integer, false otherwise.
     """
     integer_validation = False
-    try:
-        if int(value) >= 0:
-            integer_validation = True
-    except ValueError:
+    if str(value).isdigit():
+        integer_validation = True
+    else:
         logging.error("Please enter a valid integer.")
 
     return integer_validation
@@ -653,12 +644,12 @@ def validate_input(value, valid_range):
     return integer_validation
 
 
-def get_input():
+def get_input(prompt='-> '):
     """Collect user input for TOTP.
 
     :return user_input: raw from user.
     """
-    user_input = to_unicode(input('\n-> '))
+    user_input = to_unicode(input(prompt))
     logging.debug("User input [{}]".format(user_input))
 
     return user_input

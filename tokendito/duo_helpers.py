@@ -312,8 +312,7 @@ def set_passcode(mfa_option):
     """
     passcode = None
     if mfa_option["factor"].lower() == "passcode":
-        print("\nPlease enter your TOTP:")
-        passcode = helpers.collect_integer()
+        passcode = helpers.get_input('Please enter your TOTP: ')
     return passcode
 
 
@@ -339,7 +338,9 @@ def authenticate_duo(selected_okta_factor):
     # Collect devices, factors, auth params for Duo
     duo_info, duo_auth_response = get_duo_sid(duo_info)
     factor_options = get_duo_devices(duo_auth_response)
-    mfa_index = helpers.select_preferred_mfa_index(factor_options, duo=True)
+    mfa_index = helpers.select_preferred_mfa_index(
+        factor_options, factor_key="factor", subfactor_key="device")
+
     mfa_option = factor_options[mfa_index]
     logging.debug("Selected MFA is [{}]".format(mfa_option))
     passcode = set_passcode(mfa_option)

@@ -188,7 +188,7 @@ def user_mfa_options(selected_mfa_option,
     if settings.mfa_response is None:
         logging.debug("Getting verification code from user.")
         print('Type verification code and press Enter')
-        settings.mfa_response = helpers.to_unicode(input('-> '))
+        settings.mfa_response = helpers.get_input()
 
     # time to verify the mfa method
     payload = helpers.prepare_payload(
