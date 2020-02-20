@@ -655,13 +655,10 @@ def get_input(prompt='-> '):
     return user_input
 
 
-def collect_integer(valid_range=None):
+def collect_integer(valid_range):
     """Collect input from user.
 
     Prompt the user for input. Validate it and cast to integer.
-    If a valid_range is provided, it means the user has a
-    limited menu of options available to select from. Otherwise,
-    if entering a TOTP, this does not apply.
 
     :param valid_range: number of menu options available to user.
     :return user_input: validated, casted integer from user.

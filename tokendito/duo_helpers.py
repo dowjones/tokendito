@@ -9,6 +9,7 @@ from builtins import (ascii, bytes, chr, dict, filter, hex, input,  # noqa: F401
                       round, str, super, zip)
 import json
 import logging
+import sys
 import time
 from urllib.parse import unquote, urlparse
 
@@ -61,7 +62,7 @@ def duo_api_post(url, params={}, headers={}, payload={}):
     except Exception as request_issue:
         logging.error(
             "There was an error connecting to the Duo API: \n{}".format(request_issue))
-        exit()
+        sys.exit(1)
 
     json_message = None
     try:
@@ -69,16 +70,16 @@ def duo_api_post(url, params={}, headers={}, payload={}):
     except ValueError:
         logging.debug("Non-json response from Duo API: \n{}".format(response))
 
-    if response.status_code != 200 and response.status_code != 204:
-        print("Your Duo authentication has failed with status {}.".format(
+    if response.status_code != 200:
+        logging.critical("Your Duo authentication has failed with status {}.".format(
             response.status_code))
         if json_message and json_message["stat"].lower() != "ok":
-            print("\n{}".format(
+            logging.critical("\n{}".format(
                 response.status_code, json_message["message"]))
         else:
-            print('Please re-run the program with parameter'
-                  ' "--loglevel debug" to see more information.')
-        exit(1)
+            logging.critical('Please re-run the program with parameter'
+                             ' "--loglevel debug" to see more information.')
+        sys.exit(2)
 
     return response
 
@@ -128,7 +129,7 @@ def get_duo_devices(duo_auth):
     devices = ["{} - {}".format(d["value"], d.text) for d in device_soup]
     if not devices:
         logging.error("Please configure devices for your Duo MFA and retry.")
-        exit(2)
+        sys.exit(2)
 
     factor_options = []
     for device in devices:
@@ -156,17 +157,17 @@ def parse_duo_mfa_challenge(mfa_challenge):
     except ValueError as value_error:
         logging.error(
             "The Duo API returned a non-json response: \n{}".format(value_error))
-        exit(1)
+        sys.exit(1)
     except KeyError as key_error:
         logging.error(
             "The Duo API response is missing a required parameter: \n{}".format(key_error))
         print(json.dumps(mfa_challenge))
-        exit(1)
+        sys.exit(1)
 
     if mfa_status == "fail":
         logging.error("Your Duo authentication has failed: \n{}".format(
             mfa_challenge["message"]))
-        exit(1)
+        sys.exit(1)
     return txid
 
 
@@ -210,7 +211,7 @@ def get_mfa_response(mfa_result):
     except Exception as parse_error:
         logging.error(
             "There was an error parsing the mfa challenge result: \n{}".format(parse_error))
-        exit(1)
+        sys.exit(1)
     return verify_mfa
 
 
@@ -224,7 +225,6 @@ def parse_challenge(verify_mfa, challenge_result):
     challenge_reason = None
 
     if "status" in verify_mfa:
-        logging.info("Status received:")
         print(verify_mfa["status"])
 
     if "reason" in verify_mfa:
@@ -265,9 +265,9 @@ def duo_mfa_verify(duo_info, txid):
             logging.debug("Successful MFA challenge received")
             break
         elif challenge_result == "failure":
-            print("MFA challenge has failed for reason: {}\n"
-                  " {}. Please try again.".format(challenge_result, challenge_reason))
-            exit(2)
+            logging.critical("MFA challenge has failed:"
+                             " {}. Please try again.".format(challenge_reason))
+            sys.exit(2)
         else:
             logging.debug("MFA challenge result: {}"
                           "Reason: {}\n\n".format(challenge_result, challenge_reason))
@@ -312,7 +312,8 @@ def set_passcode(mfa_option):
     """
     passcode = None
     if mfa_option["factor"].lower() == "passcode":
-        passcode = helpers.get_input('Please enter your TOTP: ')
+        print('Type your TOTP and press Enter')
+        passcode = helpers.get_input()
     return passcode
 
 
@@ -333,7 +334,7 @@ def authenticate_duo(selected_okta_factor):
         logging.error(
             "There was an issue parsing the Okta factor."
             " Please try again. \n{}".format(missing_key))
-        exit(1)
+        sys.exit(1)
 
     # Collect devices, factors, auth params for Duo
     duo_info, duo_auth_response = get_duo_sid(duo_info)
