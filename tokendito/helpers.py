@@ -204,6 +204,31 @@ def select_role_arn(role_arns, saml_xml, saml_response_string):
     return selected_role
 
 
+def mfa_option_info(mfa_option):
+    """Build an optional string with the MFA factor information.
+
+    :param mfa_option: dictionary with a single MFA response.
+    :return: pre-formatted string with MFA factor info if available, None
+             otherwise.
+    """
+    logging.debug('Building info for: {}'.format(json.dumps(mfa_option)))
+    factor_info = None
+    if 'factorType' in mfa_option:
+        factor_type = mfa_option['factorType']
+        if factor_type == 'token' or factor_type == 'token:software:totp':
+            factor_info = mfa_option['profile']['credentialId']
+        elif factor_type == 'push':
+            factor_info = mfa_option['profile']['name']
+        elif factor_type == 'sms' or factor_type == 'call':
+            factor_info = mfa_option['profile']['phoneNumber']
+        elif factor_type == 'webauthn':
+            factor_info = mfa_option['profile']['authenticatorName']
+        elif factor_type == 'web' or factor_type == 'u2f':
+            factor_info = mfa_option['vendorName']
+
+    return factor_info
+
+
 def select_preferred_mfa_index(mfa_options, factor_key="provider", subfactor_key="factorType"):
     """Show all the MFA options to the users.
 
@@ -211,16 +236,24 @@ def select_preferred_mfa_index(mfa_options, factor_key="provider", subfactor_key
     :return: MFA option selected index by the user from the output
     """
     logging.debug("Show all the MFA options to the users.")
+    logging.debug(json.dumps(mfa_options))
+
     print('\nSelect your preferred MFA method and press Enter:')
 
     longest_index = len(str(len(mfa_options)))
-    for (i, mfa_option) in enumerate(mfa_options):
-        padding_index = longest_index - len(str(i))
-        longest_factor_name = max([len(d[factor_key]) for d in mfa_options])
+    longest_factor_name = max([len(d[factor_key]) for d in mfa_options])
+    longest_subfactor_name = max([len(d[subfactor_key]) for d in mfa_options])
 
-        print('[{}] {}{: <{}}    {}'.format(
-            i, padding_index*' ', mfa_option[factor_key], longest_factor_name,
-            mfa_option[subfactor_key]))
+    for (i, mfa_option) in enumerate(mfa_options):
+        factor_info = mfa_option_info(mfa_option)
+        print('[{: >{}}]  {: <{}}  {: <{}}'.format(
+            i, longest_index,
+            mfa_option[factor_key], longest_factor_name,
+            mfa_option[subfactor_key], longest_subfactor_name,
+            mfa_option_info(mfa_option)
+            ), end='')
+        if factor_info:
+            print('  ({})'.format(factor_info))
 
     user_input = collect_integer(len(mfa_options))
 
