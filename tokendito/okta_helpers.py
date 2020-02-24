@@ -20,12 +20,14 @@ import time
 
 from future import standard_library
 import requests
+from tokendito import duo_helpers
 from tokendito import helpers
 from tokendito import settings
+
 standard_library.install_aliases()
 
 
-def okta_verify_api_method(mfa_challenge_url, payload, headers):
+def okta_verify_api_method(mfa_challenge_url, payload, headers=None):
     """Okta MFA authentication.
 
     :param mfa_challenge_url: MFA challenge url
@@ -33,16 +35,25 @@ def okta_verify_api_method(mfa_challenge_url, payload, headers):
     :param headers: Headers of the request
     :return: Okta authentication response
     """
-    logging.debug("Okta MFA authentication URL [{}] headers [{}]".format(
-        mfa_challenge_url, headers))
-
     try:
-        response = json.loads(requests.request('POST', mfa_challenge_url,
-                                               data=json.dumps(payload), headers=headers).text)
+        if headers:
+            response = requests.request('POST', mfa_challenge_url,
+                                        data=json.dumps(payload), headers=headers)
+        else:
+            response = requests.request(
+                'POST', mfa_challenge_url, data=payload)
     except Exception as request_error:
         logging.error(
             "There was an error connecting to Okta: \n{}".format(request_error))
         sys.exit(1)
+
+    logging.debug("Okta authentication response: \n{}".format(response))
+
+    try:
+        response = response.json()
+    except ValueError:
+        logging.debug("Received type of response: {}".format(type(response.text)))
+        response = response.text
 
     if 'errorCode' in response:
         error_string = "Exiting due to Okta API error [{}]\n{}".format(
@@ -71,14 +82,17 @@ def authenticate_user(okta_url, okta_username, okta_password):
         'content-type': 'application/json',
         'accept': 'application/json'
     }
-    payload = prepare_payload(
+    payload = helpers.prepare_payload(
         username=okta_username, password=okta_password)
 
     primary_auth = okta_verify_api_method(
         '{}/api/v1/authn'.format(okta_url), payload, headers)
     logging.debug("Authenticate Okta header [{}] ".format(headers))
 
-    return user_mfa_challenge(headers, primary_auth)
+    session_token = user_mfa_challenge(headers, primary_auth)
+
+    logging.info("User has been succesfully authenticated.")
+    return session_token
 
 
 def user_mfa_challenge(headers, primary_auth):
@@ -115,22 +129,39 @@ def user_mfa_challenge(headers, primary_auth):
         logging.warning(
             "No MFA provided or provided MFA does not exist. [{}]".format(
                 settings.mfa_method))
-        mfa_index = select_preferred_mfa_index(mfa_options)
+        mfa_index = helpers.select_preferred_mfa_index(mfa_options)
 
     # time to challenge the mfa option
     selected_mfa_option = mfa_options[mfa_index]
     logging.debug("Selected MFA is [{}]".format(selected_mfa_option))
 
     mfa_challenge_url = selected_mfa_option['_links']['verify']['href']
-    payload = prepare_payload(stateToken=primary_auth['stateToken'],
-                              factorType=selected_mfa_option['factorType'],
-                              provider=selected_mfa_option['provider'],
-                              profile=selected_mfa_option['profile'])
-    okta_verify_api_method(mfa_challenge_url, payload, headers)
-    logging.debug("mfa_challenge_url [{}] headers [{}]".format(
+
+    payload = helpers.prepare_payload(stateToken=primary_auth['stateToken'],
+                                      factorType=selected_mfa_option['factorType'],
+                                      provider=selected_mfa_option['provider'],
+                                      profile=selected_mfa_option['profile'])
+    selected_factor = okta_verify_api_method(
+        mfa_challenge_url, payload, headers)
+
+    mfa_provider = selected_factor["_embedded"]["factor"]["provider"].lower()
+    logging.debug("MFA Challenge URL: [{}] headers: {}".format(
         mfa_challenge_url, headers))
-    mfa_verify = user_mfa_options(selected_mfa_option,
-                                  headers, mfa_challenge_url, payload, primary_auth)
+
+    if mfa_provider == "duo":
+        payload, headers, callback_url = duo_helpers.authenticate_duo(
+            selected_factor)
+        okta_verify_api_method(callback_url, payload)
+        payload.pop("id", "sig_response")
+        mfa_verify = okta_verify_api_method(
+            mfa_challenge_url, payload, headers)
+    elif mfa_provider == "okta" or mfa_provider == "google":
+        mfa_verify = user_mfa_options(selected_mfa_option,
+                                      headers, mfa_challenge_url, payload, primary_auth)
+    else:
+        logging.error("Sorry, the MFA provider '{}' is not yet supported."
+                      " Please retry with another option.".format(mfa_provider))
+        exit(1)
     return mfa_verify['sessionToken']
 
 
@@ -157,35 +188,15 @@ def user_mfa_options(selected_mfa_option,
     if settings.mfa_response is None:
         logging.debug("Getting verification code from user.")
         print('Type verification code and press Enter')
-        settings.mfa_response = helpers.to_unicode(input('-> '))
+        settings.mfa_response = helpers.get_input()
 
     # time to verify the mfa method
-    payload = prepare_payload(
+    payload = helpers.prepare_payload(
         stateToken=primary_auth['stateToken'], passCode=settings.mfa_response)
     mfa_verify = okta_verify_api_method(mfa_challenge_url, payload, headers)
-    logging.debug("mfa_verify [{}]".format(mfa_verify))
+    logging.debug("mfa_verify [{}]".format(json.dumps(mfa_verify)))
 
     return mfa_verify
-
-
-def prepare_payload(**kwargs):
-    """Prepare payload for the HTTP request header.
-
-    :param kwargs: parameters to get together
-    :return: payload for the http header
-
-    """
-    logging.debug("Prepare payload")
-
-    payload_dict = {}
-    if kwargs is not None:
-        for key, value in list(kwargs.items()):
-            payload_dict[key] = value
-
-            if key != 'password':
-                logging.debug("Prepare payload [{} {}]".format(key, value))
-
-    return payload_dict
 
 
 def push_approval(headers, mfa_challenge_url, payload):
@@ -233,29 +244,3 @@ def push_approval(headers, mfa_challenge_url, payload):
         time.sleep(2)
 
     return mfa_verify
-
-
-def select_preferred_mfa_index(mfa_options):
-    """Show all the MFA options to the users.
-
-    :param mfa_options: List of available MFA options
-    :return: MFA option selected index by the user from the output
-    """
-    logging.debug("Show all the MFA options to the users.")
-    print('\nSelect your preferred MFA method and press Enter')
-    for (mfa_counter, mfa_option) in enumerate(mfa_options):
-        print("[{}] {}".format(mfa_counter, mfa_option['factorType']))
-    while True:
-        user_input = helpers.to_unicode(input('-> '))
-        logging.debug("User input [{}]".format(user_input))
-
-        try:
-            user_input = int(user_input)
-        except ValueError as error:
-            print('Invalid input, try again.\n{}'.format(error))
-            continue
-        if user_input in range(0, len(mfa_options)):
-            break
-        print('Invalid choice')
-        continue
-    return user_input
