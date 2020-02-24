@@ -112,10 +112,97 @@ def test_set_okta_password(monkeypatch):
     ('https://login.acme.org/home/amazon_aws/0123456789abcdef0123/456', True),
     ('https://acme.okta.org/home/amazon_aws/0123456789abcdef0123/456?fromHome=true', True)])
 def test_validate_okta_aws_app_url(url, expected):
-    """Test whether the Okta URL functions."""
+    """Test whether the Okta URL is parsed correctly."""
     from tokendito import helpers
 
     assert helpers.validate_okta_aws_app_url(input_url=url) is expected
+
+
+@pytest.mark.parametrize('test,limit,expected', [
+    (0, 10, True),
+    (5, 10, True),
+    (10, 10, False),
+    (-1, 10, False),
+    (1, 0, False)
+])
+def test_check_within_range(mocker, test, limit, expected):
+    """Test whether a given number is in the range 0 >= num < limit."""
+    from tokendito import helpers
+
+    mocker.patch('logging.error')
+    assert helpers.check_within_range(test, limit) is expected
+
+
+@pytest.mark.parametrize('value,expected', [
+    ('-1', False),
+    ('0', True),
+    ('1', True),
+    (-1, False),
+    (0, True),
+    (1, True),
+    (3.7, False),
+    ('3.7', False),
+    ('seven', False),
+    ('0xff', False),
+    (None, False)])
+def test_check_integer(value, expected, mocker):
+    """Test whether the integer testing function works within boundaries."""
+    from tokendito import helpers
+
+    mocker.patch('logging.error')
+    assert helpers.check_integer(value) is expected
+
+
+@pytest.mark.parametrize('test,limit,expected', [
+    (1, 10, True),
+    (-1, 10, False),
+    ('pytest', 10, False)
+])
+def test_validate_input(mocker, test, limit, expected):
+    """Check if a given input is within the 0 >= num < limit range."""
+    from tokendito import helpers
+
+    mocker.patch('logging.error')
+    assert helpers.validate_input(test, limit) is expected
+
+
+def test_get_input(monkeypatch):
+    """Check if provided input is return unmodified."""
+    from tokendito import helpers
+
+    monkeypatch.setattr('tokendito.helpers.input', lambda _: 'pytest_patched')
+    assert helpers.get_input() == 'pytest_patched'
+
+
+@pytest.mark.parametrize('value,expected', [
+    ('00', 0),
+    ('01', 1),
+    ('5', 5)
+])
+def test_collect_integer(monkeypatch, value, expected):
+    """Check if a given digit or series of digits are properly casted to int."""
+    from tokendito import helpers
+
+    monkeypatch.setattr('tokendito.helpers.input', lambda _: value)
+    assert helpers.collect_integer(10) == expected
+
+
+def test_prepare_payload():
+    """Check if values passed return in a dictionary."""
+    from tokendito import helpers
+
+    assert helpers.prepare_payload(pytest_key='pytest_val') == {'pytest_key': 'pytest_val'}
+    assert helpers.prepare_payload(pytest_key=None) == {'pytest_key': None}
+    assert helpers.prepare_payload(pytest_key1='pytest_val1', pytest_key2='pytest_val2') == {
+        'pytest_key1': 'pytest_val1', 'pytest_key2': 'pytest_val2'}
+
+
+def test_set_passcode(monkeypatch):
+    """Check if numerical passcode can handle leading zero values."""
+    from tokendito import duo_helpers
+
+    monkeypatch.setattr('tokendito.helpers.input', lambda _: '0123456')
+    assert duo_helpers.set_passcode({'factor': 'passcode'}) == '0123456'
 
 
 def test_process_environment(monkeypatch, valid_settings, invalid_settings):
