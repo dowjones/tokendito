@@ -79,6 +79,7 @@ Additional Usage Reference
       -h, --help            show this help message and exit
       --version, -v         Displays version and exit
       --configure, -c       Prompt user for configuration parameters
+      --quiet, -q           Hide non-error output
       --username USERNAME, -u USERNAME
                             username to login to Okta. You can also use the
                             OKTA_USERNAME environment variable.

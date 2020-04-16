@@ -41,6 +41,8 @@ def setup(args):
         description='Gets a STS token to use with the AWS CLI')
     parser.add_argument('--version', '-v', action='store_true',
                         help='Displays version and exit')
+    parser.add_argument('--quiet', '-q', action='store_true',
+                        help='Suppress non-error output')
     parser.add_argument('--configure', '-c', action='store_true', help='Prompt user for '
                         'configuration parameters')
     parser.add_argument('--username', '-u', type=to_unicode, dest='okta_username',
@@ -523,7 +525,7 @@ def update_configuration(okta_file, profile):
             "Write new section Okta config [{} {}]".format(okta_file, config))
 
 
-def set_local_credentials(assume_role_response, role_name, aws_region, aws_output):
+def set_local_credentials(assume_role_response, role_name, aws_region, aws_output, args):
     """Write to local files to insert credentials.
 
     :param assume_role_response AWS AssumeRoleWithSaml response:
@@ -543,7 +545,8 @@ def set_local_credentials(assume_role_response, role_name, aws_region, aws_outpu
                            aws_session_token)
     update_aws_config(role_name, aws_output, aws_region)
 
-    print_selected_role(role_name, expiration_time)
+    if not args.quiet:
+        print_selected_role(role_name, expiration_time)
 
 
 def update_aws_credentials(profile, aws_access_key, aws_secret_key, aws_session_token):

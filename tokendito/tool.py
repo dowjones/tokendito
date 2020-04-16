@@ -45,4 +45,4 @@ def cli(args):
     aws_helpers.ensure_keys_work(assume_role_response)
 
     helpers.set_local_credentials(assume_role_response, role_name,
-                                  settings.aws_region, settings.aws_output)
+                                  settings.aws_region, settings.aws_output, args)
