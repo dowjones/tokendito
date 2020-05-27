@@ -189,7 +189,11 @@ def select_role_arn(role_arns, saml_xml, saml_response_string):
 
     """
     logging.debug("Select the role user wants to pick [{}]".format(role_arns))
-    if settings.role_arn is None:
+    role_names = dict((role.split("/")[-1], role) for role in role_arns)
+    if settings.aws_profile in role_names.keys():
+        selected_role = role_names[settings.aws_profile]
+        logging.debug("Using aws_profile env var for role: [{}]".format(settings.aws_profile))
+    elif settings.role_arn is None:
         selected_role = prompt_role_choices(
             role_arns, saml_xml, saml_response_string)
     elif settings.role_arn in role_arns:
