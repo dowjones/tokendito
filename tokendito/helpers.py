@@ -703,12 +703,12 @@ def process_options(args):
         update_configuration(args.config_file, args.okta_profile)
         sys.exit(0)
 
-    # 1: read ini file (if it exists)
-    process_ini_file(args.config_file, args.okta_profile)
-    # 2: override with args
-    process_arguments(args)
-    # 3: override with ENV
+    # 1: start with ENV options
     process_environment()
+    # 2: override with ini file (if it exists)
+    process_ini_file(args.config_file, args.okta_profile)
+    # 3: override with args
+    process_arguments(args)
 
     process_okta_aws_app_url()
     # Set username and password for Okta Authentication
