@@ -89,7 +89,10 @@ def authenticate_user(okta_url, okta_username, okta_password):
         '{}/api/v1/authn'.format(okta_url), payload, headers)
     logging.debug("Authenticate Okta header [{}] ".format(headers))
 
-    session_token = user_mfa_challenge(headers, primary_auth)
+    if 'sessionToken' in primary_auth:
+        session_token = primary_auth['sessionToken']
+    else:
+        session_token = user_mfa_challenge(headers, primary_auth)
 
     logging.info("User has been succesfully authenticated.")
     return session_token
