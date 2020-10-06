@@ -74,7 +74,7 @@ def duo_api_post(url, params={}, headers={}, payload={}):
         logging.critical("Your Duo authentication has failed with status {}.".format(
             response.status_code))
         if json_message and json_message["stat"].lower() != "ok":
-            logging.critical("\n{}".format(
+            logging.critical("\n{} {}".format(
                 response.status_code, json_message["message"]))
         else:
             logging.critical('Please re-run the program with parameter'
