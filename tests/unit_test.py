@@ -245,6 +245,7 @@ def test_process_arguments(valid_settings, invalid_settings):
     for key_name in invalid_settings:
         assert getattr(settings, key_name, 'not_found') == 'not_found'
 
+
 @pytest.mark.skipif(sys.version_info[:2] == (3, 5),
                     reason="ConfigParser bug, see https://bugs.python.org/issue29623")
 def test_process_ini_file(tmpdir, valid_settings, invalid_settings, mocker):
