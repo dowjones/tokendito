@@ -95,6 +95,16 @@ def authenticate_user(okta_url, okta_username, okta_password):
     return session_token
 
 
+def user_get_session_token(primary_auth):
+    """Return session_token if already available in the okta response."""
+    session_token = None
+    try:
+        session_token = primary_auth['sessionToken']
+    except KeyError:
+        logging.debug("Session Token not found in initial Okta response")
+    return session_token
+
+
 def user_mfa_challenge(headers, primary_auth):
     """Handle user mfa challenges.
 
@@ -105,9 +115,7 @@ def user_mfa_challenge(headers, primary_auth):
     """
     logging.debug("Handle user MFA challenges")
     try:
-        """ Return session_token if already available in the okta response.
-        """
-        session_token = primary_auth['sessionToken']
+        session_token = user_get_session_token(primary_auth)
         if session_token is not None:
             return session_token
         mfa_options = primary_auth['_embedded']['factors']
