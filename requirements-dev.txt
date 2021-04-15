@@ -1,6 +1,7 @@
 -r ./requirements.txt
 docutils<0.16,>=0.10
 flake8
+flake8-black; python_version >= '3.6'
 flake8-colors
 flake8-docstrings
 flake8-import-order>=0.9
