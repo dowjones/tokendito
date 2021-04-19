@@ -20,6 +20,9 @@ Generate temporary AWS credentials via Okta.
 
 .. image:: https://raw.githubusercontent.com/dowjones/tokendito/master/docs/tokendito-scaled.gif
 
+
+**WARNING: Python2.7 and Python3.5 support will be dropped in a near time, pin tokendito version to current if you want to keep it working in automation.**
+
 NOTE: Advanced users may shorten the tokendito interaction to a `single command <https://github.com/dowjones/tokendito/tree/master/docs#single-command-usage>`_.
 
 .. _STS: https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp.html
