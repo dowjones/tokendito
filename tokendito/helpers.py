@@ -40,13 +40,13 @@ from urllib.parse import urlparse
 from botocore import __version__ as __botocore_version__
 from bs4 import __version__ as __bs4_version__
 from bs4 import BeautifulSoup
-from dateutil.parser import parse
 from future import standard_library
 import pytz
 import requests
 from requests import __version__ as __requests_version__
 from tokendito import settings
 from tokendito.__version__ import __version__
+from tzlocal import get_localzone
 
 
 standard_library.install_aliases()
@@ -150,15 +150,13 @@ def setup(args):
     return parsed_args
 
 
-def utc_to_local(utc_str):
+def utc_to_local(utc_dt):
     """Convert UTC time into local time.
 
-    :param:utc_str
+    :param:utc_str:datetime
     :return:local_time:string
     """
-    utc_str = str(utc_str)
-    utc_dt = parse(utc_str)
-    local_time = utc_dt.replace(tzinfo=pytz.utc).astimezone(tz=None)
+    local_time = utc_dt.replace(tzinfo=pytz.utc).astimezone(tz=get_localzone())
     local_time = local_time.strftime("%Y-%m-%d %H:%M:%S %Z")
 
     return local_time
