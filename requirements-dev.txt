@@ -15,5 +15,7 @@ pytest
 pytest-env
 pytest-mock
 pytest-ordering
+pytz==2021.1
+python-dateutil==2.8.1
 semver
 tox

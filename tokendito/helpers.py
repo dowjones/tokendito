@@ -40,11 +40,14 @@ from urllib.parse import urlparse
 from botocore import __version__ as __botocore_version__
 from bs4 import __version__ as __bs4_version__
 from bs4 import BeautifulSoup
+from dateutil.parser import parse
 from future import standard_library
+import pytz
 import requests
 from requests import __version__ as __requests_version__
 from tokendito import settings
 from tokendito.__version__ import __version__
+
 
 standard_library.install_aliases()
 
@@ -145,6 +148,20 @@ def setup(args):
     logging.debug("Parse command line arguments [{}]".format(parsed_args))
 
     return parsed_args
+
+
+def utc_to_local(utc_str):
+    """Convert UTC time into local time.
+
+    :param:utc_str
+    :return:local_time:string
+    """
+    utc_str = str(utc_str)
+    utc_dt = parse(utc_str)
+    local_time = utc_dt.replace(tzinfo=pytz.utc).astimezone(tz=None)
+    local_time = local_time.strftime("%Y-%m-%d %H:%M:%S %Z")
+
+    return local_time
 
 
 def to_unicode(bytestring):
@@ -342,19 +359,21 @@ def print_selected_role(profile_name, expiration_time):
     :return:
 
     """
+    expiration_time_local = utc_to_local(expiration_time)
     msg = (
         "\nGenerated profile '{}' in {}.\n"
         "\nUse profile to authenticate to AWS:\n\t"
         "aws --profile '{}' sts get-caller-identity"
         "\nOR\n\t"
         "export AWS_PROFILE='{}'\n\n"
-        "Credentials are valid until {}."
+        "Credentials are valid until {} ({})."
     ).format(
         profile_name,
         settings.aws_shared_credentials_file,
         profile_name,
         profile_name,
         expiration_time,
+        expiration_time_local,
     )
 
     return print(msg)
