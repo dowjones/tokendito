@@ -25,6 +25,7 @@ from builtins import (  # noqa: F401
     super,
     zip,
 )
+from datetime import datetime
 from os import path
 import sys
 
@@ -242,6 +243,19 @@ def test_collect_integer(monkeypatch, value, expected):
 
     monkeypatch.setattr("tokendito.helpers.input", lambda _: value)
     assert helpers.collect_integer(10) == expected
+
+
+def test_utc_to_local():
+    """Check if passed utc datestamp becomes local one."""
+    import pytz
+    from tokendito import helpers
+    from tzlocal import get_localzone
+
+    utc = datetime.now(pytz.utc)
+    local_time = utc.replace(tzinfo=pytz.utc).astimezone(tz=get_localzone())
+    local_time = local_time.strftime("%Y-%m-%d %H:%M:%S %Z")
+
+    assert helpers.utc_to_local(utc) == local_time
 
 
 def test_prepare_payload():
