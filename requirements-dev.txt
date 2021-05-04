@@ -15,7 +15,5 @@ pytest
 pytest-env
 pytest-mock
 pytest-ordering
-pytz==2021.1
 semver
 tox
-tzlocal
