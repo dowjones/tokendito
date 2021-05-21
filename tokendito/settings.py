@@ -22,6 +22,12 @@ encoding = sys.stdin.encoding
 mfa_method = None
 mfa_response = None
 okta_aws_app_url = None
+okta_status_dict = {
+    "E0000004": "Authentication failed",
+    "E0000047": "API call exceeded rate limit due to too many requests",
+    "PASSWORD_EXPIRED": "Your password is expired",
+    "LOCKED_OUT": "Your account is locked out",
+}
 okta_org = None
 okta_password = ""
 okta_profile = "default"
