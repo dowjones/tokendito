@@ -6,15 +6,14 @@
 from codecs import open
 import datetime
 import os
-from os import path
 import sys
 
 from setuptools import find_packages, setup
 
 
-here = path.abspath(path.dirname(__file__))
+here = os.path.abspath(os.path.dirname(__file__))
 
-with open(path.join(here, "README.rst"), encoding=sys.stdin.encoding) as f:
+with open(os.path.join(here, "README.rst"), encoding=sys.stdin.encoding) as f:
     long_description = f.read()
 
 with open("requirements.txt") as f:

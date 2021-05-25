@@ -43,7 +43,6 @@ from bs4 import BeautifulSoup
 from future import standard_library
 import pytz
 import requests
-from requests import __version__ as __requests_version__
 from tokendito import settings
 from tokendito.__version__ import __version__
 from tzlocal import get_localzone
@@ -177,6 +176,7 @@ def to_unicode(bytestring):
     try:
         unicode_string = unicode(bytestring, settings.encoding)
     except (NameError, TypeError):
+        # If a TypeError is raised, we are in Python 3, this is a no-op.
         pass
     return unicode_string
 
@@ -489,7 +489,7 @@ def display_version():
             release,
             __botocore_version__,
             __bs4_version__,
-            __requests_version__,
+            requests.__version__,
         )
     )
 

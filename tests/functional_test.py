@@ -51,6 +51,7 @@ def string_decode(bytestring):
     try:
         decoded_string = bytestring.decode("utf-8")
     except (NameError, TypeError):
+        # If a TypeError is raised, we are in Python 3, this is a no-op.
         pass
 
     return decoded_string

@@ -26,7 +26,7 @@ from builtins import (  # noqa: F401
     zip,
 )
 from datetime import datetime
-from os import path
+import os
 import sys
 
 from future import standard_library
@@ -35,7 +35,7 @@ import semver
 from tokendito.settings import okta_status_dict
 
 
-sys.path.insert(0, path.dirname(path.dirname(path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 standard_library.install_aliases()
 
 
@@ -106,10 +106,11 @@ def test_import_location():
     """Ensure module imported is the local one."""
     import tokendito
 
-    local_path = path.realpath(
-        path.dirname(path.dirname(path.abspath(__file__))) + "/tokendito/__init__.py"
+    local_path = os.path.realpath(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        + "/tokendito/__init__.py"
     )
-    imported_path = path.realpath(tokendito.__file__)
+    imported_path = os.path.realpath(tokendito.__file__)
     assert imported_path.startswith(local_path)
 
 
@@ -283,7 +284,6 @@ def test_set_passcode(monkeypatch):
 def test_process_environment(monkeypatch, valid_settings, invalid_settings):
     """Test whether environment variables are set in settings.*."""
     from tokendito import helpers, settings
-    import os
 
     # ENV standard is uppercase
     valid_keys = {key.upper(): val for (key, val) in valid_settings.items()}
@@ -418,10 +418,11 @@ def test_mfa_provider_type(mfa_provider, session_token, expected, mocker):
     )
 
 
-def test_login_error_code_parser():
+def test_login_error_code_parser(mocker):
     """Test whether message on specific status equal."""
     from tokendito.okta_helpers import login_error_code_parser
 
+    mocker.patch("logging.error")
     for key, value in okta_status_dict.items():
         assert (
             login_error_code_parser(key, okta_status_dict)
