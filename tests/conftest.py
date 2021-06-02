@@ -9,19 +9,15 @@ standard_library.install_aliases()
 
 
 def pytest_addoption(parser):
-    """Add command-line option for running functional tests."""
+    """Add command-line options for running functional tests with credentials."""
+    parser.addoption("--username", default="", help="username to login to Okta")
+    parser.addoption("--password", default="", help="password to login to Okta.")
+    parser.addoption("--okta-aws-app-url", default=None, help="Okta App URL to use.")
+    parser.addoption("--mfa-method", default=None, help="Sets the MFA method")
     parser.addoption(
-        "--run-functional",
-        action="store_true",
-        default=False,
-        help="run functional tests",
+        "--mfa-response", default=None, help="Sets the MFA response to a challenge"
     )
-    parser.addoption("--username", help="username to login to Okta")
-    parser.addoption("--password", help="password to login to Okta.")
-    parser.addoption("--okta-aws-app-url", help="Okta App URL to use.")
-    parser.addoption("--mfa-method", help="Sets the MFA method")
-    parser.addoption("--mfa-response", help="Sets the MFA response to a challenge")
-    parser.addoption("--role-arn", help="Sets the IAM role")
+    parser.addoption("--role-arn", default=None, help="Sets the IAM role")
     parser.addoption(
         "--config-file",
         default="/dev/null",

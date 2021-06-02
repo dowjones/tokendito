@@ -25,10 +25,12 @@ from builtins import (  # noqa: F401
     super,
     zip,
 )
-from os import path
+import datetime
+from os import environ, path
 import re
 import subprocess
 import sys
+import time
 
 from future import standard_library
 import pytest
@@ -153,10 +155,15 @@ def test_version(package_version, package_regex, runnable):
     assert package_version == local_version
 
 
+@pytest.mark.skipif(
+    sys.version_info[:2] < (3, 5),
+    reason="PyOTP Not supported in Python 2.x",
+)
 @pytest.mark.run("second-to-last")
 def test_generate_credentials(custom_args):
     """Run the tool and generate credentials."""
     from tokendito import helpers, settings
+    import pyotp
 
     # Emulate helpers.process_options() bypassing interactive portions.
     tool_args = helpers.setup(custom_args)
@@ -173,6 +180,25 @@ def test_generate_credentials(custom_args):
     ):
         pytest.skip("Not enough arguments collected to execute non-interactively.")
 
+    # If a token response is present and is not in the usual 6-digit format,
+    # assume it is a MFA seed and create a valid response from it.
+    if (
+        settings.mfa_response is not None
+        and re.match("[0-9]{6}", settings.mfa_response) is None
+    ):
+        totp = pyotp.TOTP(settings.mfa_response, interval=30)
+        # If there are a few seconds left on the TOTP timer, wait until the next round.
+        time_remaining = (
+            totp.interval - datetime.datetime.now().timestamp() % totp.interval
+        )
+        if time_remaining < 5:
+            time.sleep(1 + time_remaining)
+        settings.mfa_response = totp.now()
+        # Update the environment variable that has been modified, if it exists
+        # as this may be passed down to a subprocess.
+        if "MFA_RESPONSE" in environ:
+            environ["MFA_RESPONSE"] = settings.mfa_response
+
     # Rebuild argument list
     args = [
         "--role-arn",
@@ -188,7 +214,8 @@ def test_generate_credentials(custom_args):
         "--password",
         "{}".format(settings.okta_password),
     ]
-    executable = ["tokendito"]  # Can use sys.executable -m tokendito, or parametrize
+    # run as a local module, as we can't guarantee that the binary is installed.
+    executable = [sys.executable, "-m", "tokendito"]
     runnable = executable + args
 
     proc = run_process(runnable)
@@ -207,7 +234,7 @@ def test_aws_credentials(custom_args):
     helpers.process_arguments(tool_args)
     helpers.process_environment()
 
-    if settings.role_arn is None:
+    if not settings.role_arn:
         pytest.skip("No AWS profile defined, test will be skipped.")
     profile = settings.role_arn.split("/")[-1]
     runnable = ["aws", "--profile", profile, "sts", "get-caller-identity"]
