@@ -107,7 +107,7 @@ Additional Usage Reference
       --output-file OUTPUT_FILE, -o OUTPUT_FILE
                             Log output to filename
       --loglevel {DEBUG,INFO,WARN,ERROR}, -l {DEBUG,INFO,WARN,ERROR}
-                            [DEBUG|INFO|WARN|ERROR], default loglevel is ERROR.
+                            [DEBUG|INFO|WARN|ERROR], default loglevel is WARNING.
                             Note: DEBUG level may display credentials
 
 
