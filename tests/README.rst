@@ -4,10 +4,10 @@ Testing
 
 To run basic tests, execute:
 
-``py.test -v -rA -k 'not tests/functional' -s tests``. This will skip functional (end to end)
+``py.test -v -rA -k 'unit' -s tests``. This will run unit tests, and skip functional (end to end)
 testing.
 
-To run end to end tests, use ``py.test -v -rA -k 'tests/functional' -s tests`` instead. Several
+To run end to end tests, use ``py.test -v -rA -k 'functional' -s tests`` instead. Several
 other arguments can be provided so that the tool can run in non-interactive mode. Currently,
 config file, arguments, and environment variables (mix and match) are supported. The syntax is
 the same as for ``tokendito``.
@@ -30,8 +30,8 @@ Example 2
 
 .. code-block:: sh
 
-  py.test -v -rA -k 'tests/functional' -s tests \
-    --username=jane.doe \
+  py.test -v -rA -k 'functional' -s tests \
+    --username=jane.doe@mycompany.com \
     --password=mysecretpass \
     --mfa-method=push \
     --okta-aws-app-url='https://acme.oktapreview.com/home/amazon_aws/b07384d113edec49eaa6/123' \
@@ -45,6 +45,15 @@ Example 3
 
 .. code-block:: sh
 
-  MFA_METHOD=push py.test -v -rA -k 'tests/functional' -s tests --username=...
+  MFA_METHOD=push py.test -v -rA -k 'functional' -s tests --username=...
 
 This shows how to mix environment variables with ``py.test`` and arguments.
+
+Example 4
+---------
+
+.. code-block:: sh
+
+   OKTA_PASSWORD='mysecretpass' tox -e auth -- --okta-username='jane.doe@mycompany.com'
+
+This shows how to pass credentials through Tox.

@@ -1,0 +1,75 @@
+name: Lint and Test
+on:
+  push:
+    branches:
+      - master
+      - main
+  pull_request:
+    branches:
+      - master
+      - main
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install tox
+      - name: Run Tox lint
+        run: |
+          tox -e lint
+  test:
+    name: Tox Tests
+    needs: lint
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: [2.7, 3.5, 3.6, 3.7, 3.8]
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install tox tox-gh-actions
+    - name: Test with tox
+      run: tox
+  auth:
+    name: Authenticated Tests
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install tox
+      - name: Run Authenticated tests
+        run: |
+          tox -e auth
+        env:
+          OKTA_USERNAME: ${{ secrets.TOXTEST_OKTA_USERNAME }}
+          OKTA_PASSWORD: ${{ secrets.TOXTEST_OKTA_PASSWORD }}
+          MFA_METHOD: ${{ secrets.TOXTEST_MFA_METHOD }}
+          MFA_RESPONSE: ${{ secrets.TOXTEST_MFA_RESPONSE }}
+          OKTA_AWS_APP_URL: ${{ secrets.TOXTEST_OKTA_AWS_APP_URL }}
+          ROLE_ARN: ${{ secrets.TOXTEST_ROLE_ARN }}

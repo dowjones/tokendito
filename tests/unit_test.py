@@ -26,15 +26,16 @@ from builtins import (  # noqa: F401
     zip,
 )
 from datetime import datetime
-from os import path
+import os
 import sys
 
 from future import standard_library
 import pytest
 import semver
+from tokendito.settings import okta_status_dict
 
 
-sys.path.insert(0, path.dirname(path.dirname(path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 standard_library.install_aliases()
 
 
@@ -105,10 +106,11 @@ def test_import_location():
     """Ensure module imported is the local one."""
     import tokendito
 
-    local_path = path.realpath(
-        path.dirname(path.dirname(path.abspath(__file__))) + "/tokendito/__init__.py"
+    local_path = os.path.realpath(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        + "/tokendito/__init__.py"
     )
-    imported_path = path.realpath(tokendito.__file__)
+    imported_path = os.path.realpath(tokendito.__file__)
     assert imported_path.startswith(local_path)
 
 
@@ -282,7 +284,6 @@ def test_set_passcode(monkeypatch):
 def test_process_environment(monkeypatch, valid_settings, invalid_settings):
     """Test whether environment variables are set in settings.*."""
     from tokendito import helpers, settings
-    import os
 
     # ENV standard is uppercase
     valid_keys = {key.upper(): val for (key, val) in valid_settings.items()}
@@ -361,3 +362,74 @@ def test_process_ini_file(tmpdir, valid_settings, invalid_settings, mocker):
     # Test that incorrect options aren't set
     for key_name in invalid_settings:
         assert getattr(settings, key_name, "not_found") == "not_found"
+
+
+@pytest.mark.parametrize(
+    "status, session_token, expected",
+    [("SUCCESS", 123, 123), ("MFA_REQUIRED", 345, 345)],
+)
+def test_user_session_token(status, session_token, expected, mocker):
+    """Test whether function return key on specific status."""
+    from tokendito.okta_helpers import user_session_token
+
+    headers = {"x": "y", "z": "k"}
+    primary_auth = {"status": status, "sessionToken": session_token}
+    mocker.patch(
+        "tokendito.okta_helpers.user_mfa_challenge", return_value=session_token
+    )
+    assert user_session_token(primary_auth, headers) == expected
+
+
+@pytest.mark.parametrize(
+    "mfa_provider, session_token, expected",
+    [("duo", 123, 123), ("okta", 345, 345), ("google", 456, 456)],
+)
+def test_mfa_provider_type(mfa_provider, session_token, expected, mocker):
+    """Test whether function return key on specific MFA provider."""
+    from tokendito.okta_helpers import mfa_provider_type
+
+    payload = {"x": "y", "t": "z"}
+    headers = {"x": "y", "z": "k"}
+    callback_url = "https://www.test.com"
+    mfa_verify = {"sessionToken": session_token}
+    selected_mfa_option = 1
+    mfa_challenge_url = 1
+    primary_auth = 1
+    selected_factor = 1
+    mocker.patch(
+        "tokendito.duo_helpers.authenticate_duo",
+        return_value=(payload, headers, callback_url),
+    )
+    mocker.patch(
+        "tokendito.okta_helpers.okta_verify_api_method", return_value=mfa_verify
+    )
+    mocker.patch("tokendito.okta_helpers.user_mfa_options", return_value=mfa_verify)
+    assert (
+        mfa_provider_type(
+            mfa_provider,
+            selected_factor,
+            mfa_challenge_url,
+            primary_auth,
+            selected_mfa_option,
+            headers,
+            payload,
+        )
+        == session_token
+    )
+
+
+def test_login_error_code_parser(mocker):
+    """Test whether message on specific status equal."""
+    from tokendito.okta_helpers import login_error_code_parser
+
+    mocker.patch("logging.error")
+    for key, value in okta_status_dict.items():
+        assert (
+            login_error_code_parser(key, okta_status_dict)
+            == "Okta auth failed: " + value
+        )
+    unexpected_key = "UNEXPECTED_KEY"
+    value = "Okta auth failed: {}. Please verify your settings and try again.".format(
+        unexpected_key
+    )
+    assert login_error_code_parser(unexpected_key, okta_status_dict) == value

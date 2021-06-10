@@ -10,6 +10,7 @@ pep8-naming
 pexpect>=4.6.0
 pylint>=1.8.4
 pydocstyle==3.0.0
+pyotp
 pyroma
 pytest
 pytest-env
