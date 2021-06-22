@@ -14,11 +14,13 @@ import logging
 import sys
 import time
 
+
 from future import standard_library
 import requests
 from tokendito import duo_helpers
 from tokendito import helpers
 from tokendito import settings
+
 
 standard_library.install_aliases()
 
@@ -166,6 +168,22 @@ def mfa_provider_type(
     return mfa_verify["sessionToken"]
 
 
+def user_mfa_index(preset_mfa, available_mfas, mfa_options):
+    """Get mfa method index in request.
+
+    :param preset_mfa: preset mfa method from settings
+    :param available_mfas: available mfa method ids
+    :param mfa_options: available mfa methods
+    """
+    logging.debug("Get mfa method index in request.")
+    if preset_mfa is not None and preset_mfa in available_mfas:
+        mfa_index = available_mfas.index(preset_mfa)
+    else:
+        mfa_index = helpers.select_preferred_mfa_index(mfa_options)
+
+    return mfa_index
+
+
 def user_mfa_challenge(headers, primary_auth):
     """Handle user mfa challenges.
 
@@ -180,15 +198,20 @@ def user_mfa_challenge(headers, primary_auth):
 
     available_mfas = [d["factorType"] for d in mfa_options]
 
-    if preset_mfa is not None and preset_mfa in available_mfas:
-        mfa_index = available_mfas.index(settings.mfa_method)
-    else:
+    if available_mfas.count(preset_mfa) > 1:
+        mfa_method = settings.mfa_method
+        mfa_index = available_mfas.index(preset_mfa)
+        provider = mfa_options[mfa_index]["provider"]
+        mfa_id = mfa_options[mfa_index]["id"]
+
         logging.warning(
-            "No MFA provided or provided MFA does not exist. [{}]".format(
-                settings.mfa_method
-            )
+            "\n\nMore than one method found with {}.\n"
+            "Defaulting to {} - {} - Id: {}.\n"
+            "This functionality will be deprecated in"
+            "the next major release.\n".format(mfa_method, provider, mfa_method, mfa_id)
         )
-        mfa_index = helpers.select_preferred_mfa_index(mfa_options)
+
+    mfa_index = user_mfa_index(preset_mfa, available_mfas, mfa_options)
 
     # time to challenge the mfa option
     selected_mfa_option = mfa_options[mfa_index]

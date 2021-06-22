@@ -136,9 +136,9 @@ def setup(args):
         "--loglevel",
         "-l",
         type=lambda s: s.upper(),
-        default="ERROR",
+        default="WARNING",
         choices=["DEBUG", "INFO", "WARN", "ERROR"],
-        help="[DEBUG|INFO|WARN|ERROR], default loglevel is ERROR."
+        help="[DEBUG|INFO|WARN|ERROR], default loglevel is WARNING."
         " Note: DEBUG level may display credentials",
     )
 
@@ -283,6 +283,52 @@ def select_role_arn(role_arns, saml_xml, saml_response_string):
     return selected_role
 
 
+def factor_type_info(factor_type, mfa_option):
+    """Get factor info from okta reply.
+
+    :param factor_type: mfa_method
+    :param mfa_option: mfa_option
+    :return: info about mfa_method
+    """
+    logging.debug("Choose factor info depending on factor type.")
+    factor_info = "Not Presented"
+
+    if factor_type in ["token", "token:software:totp", "token:hardware"]:
+        factor_info = mfa_option.get("profile").get("credentialId")
+    elif factor_type == "push":
+        factor_info = mfa_option.get("profile").get("name")
+    elif factor_type == "sms" or factor_type == "call":
+        factor_info = mfa_option.get("profile").get("phoneNumber")
+    elif factor_type == "webauthn":
+        factor_info = mfa_option.get("profile").get("authenticatorName")
+    elif factor_type in ["web", "u2f", "token:hotp"]:
+        factor_info = mfa_option.get("vendorName")
+    elif factor_type == "question":
+        factor_info = mfa_option.get("profile").get("question")
+    elif factor_type == "email":
+        factor_info = mfa_option.get("profile").get("email")
+
+    return factor_info
+
+
+def mfa_option_info(mfa_option):
+    """Build an optional string with the MFA factor information.
+
+    :param mfa_option: dictionary with a single MFA response.
+    :return: pre-formatted string with MFA factor info if available, None
+             otherwise.
+    """
+    logging.debug("Building info for: {}".format(json.dumps(mfa_option)))
+
+    if "factorType" in mfa_option:
+        factor_type = mfa_option["factorType"]
+        factor_info = factor_type_info(factor_type, mfa_option)
+
+    if not factor_info:
+        factor_info = "Not Presented"
+    return factor_info
+
+
 def select_preferred_mfa_index(
     mfa_options, factor_key="provider", subfactor_key="factorType"
 ):
@@ -292,21 +338,31 @@ def select_preferred_mfa_index(
     :return: MFA option selected index by the user from the output
     """
     logging.debug("Show all the MFA options to the users.")
+    logging.debug(json.dumps(mfa_options))
     print("\nSelect your preferred MFA method and press Enter:")
 
     longest_index = len(str(len(mfa_options)))
-    for (i, mfa_option) in enumerate(mfa_options):
-        padding_index = longest_index - len(str(i))
-        longest_factor_name = max([len(d[factor_key]) for d in mfa_options])
+    longest_factor_name = max([len(d[factor_key]) for d in mfa_options])
+    longest_subfactor_name = max([len(d[subfactor_key]) for d in mfa_options])
+    factor_info_indent = max([len(mfa_option_info(d)) for d in mfa_options])
 
+    for (i, mfa_option) in enumerate(mfa_options):
+        factor_id = mfa_option.get("id", "Not presented")
+        factor_info = mfa_option_info(mfa_option)
+        mfa_method = mfa_option.get(subfactor_key, "Not presented")
+        provider = mfa_option.get(factor_key, "Not presented")
         print(
-            "[{}] {}{: <{}}    {}".format(
+            "[{: >{}}]  {: <{}}  {: <{}} {: <{}} Id: {}".format(
                 i,
-                padding_index * " ",
-                mfa_option[factor_key],
+                longest_index,
+                provider,
                 longest_factor_name,
-                mfa_option[subfactor_key],
-            )
+                mfa_method,
+                longest_subfactor_name,
+                factor_info,
+                factor_info_indent,
+                factor_id,
+            ),
         )
 
     user_input = collect_integer(len(mfa_options))
@@ -510,8 +566,8 @@ def process_ini_file(file, profile):
             if hasattr(settings, key):
                 logging.debug("Set option {}={} from ini file".format(key, val))
                 setattr(settings, key, val)
-    except configparser.NoSectionError:
-        logging.error("Profile '{}' does not exist.".format(profile))
+    except configparser.Error as err:
+        logging.error("Could not load profile '{}': {}".format(profile, str(err)))
         sys.exit(2)
 
 
