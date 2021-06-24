@@ -54,10 +54,6 @@ def okta_verify_api_method(mfa_challenge_url, payload, headers=None):
         logging.debug("Received type of response: {}".format(type(response.text)))
         response = response.text
 
-    if "errorCode" in response:
-        login_error_code_parser(response["errorCode"], settings.okta_status_dict)
-        sys.exit(1)
-
     return response
 
 
@@ -87,16 +83,20 @@ def user_session_token(primary_auth, headers):
     param primary_auth: Primary authentication
     return session_token: Session Token from JSON response
     """
-    try:
-        status = primary_auth.get("errorCode", primary_auth["status"])
-    except KeyError:
+    status = None
+    if primary_auth.get("errorCode"):
+        status = primary_auth.get("errorCode")
+    else:
+        status = primary_auth.get("status")
+
+    if status == "SUCCESS":
+        session_token = primary_auth.get("sessionToken")
+    elif status == "MFA_REQUIRED":
+        session_token = user_mfa_challenge(headers, primary_auth)
+    elif status is None:
         logging.debug("Error parsing response: {}".format(json.dumps(primary_auth)))
         logging.error("Okta auth failed: unknown status")
         sys.exit(1)
-    if status == "SUCCESS":
-        session_token = primary_auth["sessionToken"]
-    elif status == "MFA_REQUIRED":
-        session_token = user_mfa_challenge(headers, primary_auth)
     else:
         login_error_code_parser(status, settings.okta_status_dict)
         sys.exit(1)
@@ -126,7 +126,6 @@ def authenticate_user(okta_url, okta_username, okta_password):
     logging.debug("Authenticate Okta header [{}] ".format(headers))
 
     session_token = user_session_token(primary_auth, headers)
-
     logging.info("User has been succesfully authenticated.")
     return session_token
 
@@ -192,8 +191,12 @@ def user_mfa_challenge(headers, primary_auth):
     :return: Okta MFA Session token after the successful entry of the code
     """
     logging.debug("Handle user MFA challenges")
+    try:
+        mfa_options = primary_auth["_embedded"]["factors"]
+    except KeyError as error:
+        logging.error("There was a wrong response structure: \n{}".format(error))
+        sys.exit(1)
 
-    mfa_options = primary_auth["_embedded"]["factors"]
     preset_mfa = settings.mfa_method
 
     available_mfas = [d["factorType"] for d in mfa_options]
