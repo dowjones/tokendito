@@ -1,5 +1,6 @@
 -r ./requirements.txt
 black==20.8b1; python_version >= '3.6'
+coveragepy-lcov; python_version >= '3.8'
 docutils<0.16,>=0.10
 flake8
 flake8-black; python_version >= '3.6'
@@ -8,11 +9,12 @@ flake8-docstrings
 flake8-import-order>=0.9
 pep8-naming
 pexpect>=4.6.0
-pylint>=1.8.4
 pydocstyle==3.0.0
+pylint>=1.8.4
 pyotp
 pyroma
 pytest
+pytest-cov
 pytest-env
 pytest-mock
 pytest-ordering
