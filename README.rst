@@ -18,6 +18,9 @@ Generate temporary AWS credentials via Okta.
 .. image:: https://img.shields.io/badge/OS-Mac%2C%20Windows%2C%20Linux-9cf
     :target: https://github.com/dowjones/tokendito/
 
+.. image:: https://coveralls.io/repos/github/dowjones/tokendito/badge.svg
+    :target: https://coveralls.io/github/dowjones/tokendito
+
 |
 |
 

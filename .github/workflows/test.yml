@@ -48,6 +48,18 @@ jobs:
         pip install tox tox-gh-actions
     - name: Test with tox
       run: tox
+    - name: Convert coverage to LCOV format
+      if: matrix.python-version == '3.8'
+      run: tox -e coverage
+    - name: Upload coverage in Parallel
+      if: matrix.python-version == '3.8'
+      uses: coverallsapp/github-action@master
+      with:
+        github-token: ${{ secrets.github_token }}
+        flag-name: run-${{ matrix.os }}-${{ matrix.python-version }}
+        path-to-lcov: ${{ github.workspace }}/lcov.info
+        parallel: true
+
   auth:
     name: Authenticated Tests
     needs: test
@@ -73,3 +85,19 @@ jobs:
           MFA_RESPONSE: ${{ secrets.TOXTEST_MFA_RESPONSE }}
           OKTA_AWS_APP_URL: ${{ secrets.TOXTEST_OKTA_AWS_APP_URL }}
           ROLE_ARN: ${{ secrets.TOXTEST_ROLE_ARN }}
+      - name: Generate Coverage reports
+        run: |
+          tox -e coverage
+      - name: Upload Coverage for auth tests
+        uses: coverallsapp/github-action@master
+        with:
+          github-token: ${{ secrets.github_token }}
+          path-to-lcov: ${{ github.workspace }}/lcov.info
+          flag-name: run-3.x-auth
+          parallel: true
+      - name: Coveralls Finished
+        uses: coverallsapp/github-action@master
+        with:
+          github-token: ${{ secrets.github_token }}
+          path-to-lcov: ${{ github.workspace }}/lcov.info
+          parallel-finished: true
