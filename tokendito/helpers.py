@@ -268,7 +268,23 @@ def select_role_arn(role_arns, saml_xml, saml_response_string):
 
     """
     logging.debug("Select the role user wants to pick [{}]".format(role_arns))
-    if settings.role_arn is None:
+
+    role_names = dict((role.split("/")[-1], role) for role in role_arns)
+    roles = [role.split("/")[-1] for role in role_arns]
+
+    if roles.count(settings.aws_profile) > 1:
+        logging.error(
+            "There are multiple matches for the profile selected, "
+            "please use the --role-arn option to select one"
+        )
+        sys.exit(2)
+
+    if settings.aws_profile in role_names.keys():
+        selected_role = role_names[settings.aws_profile]
+        logging.debug(
+            "Using aws_profile env var for role: [{}]".format(settings.aws_profile)
+        )
+    elif settings.role_arn is None:
         selected_role = prompt_role_choices(role_arns, saml_xml, saml_response_string)
     elif settings.role_arn in role_arns:
         selected_role = settings.role_arn
