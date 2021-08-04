@@ -8,6 +8,7 @@ on:
     branches:
       - main
       - master
+      - feature/2.0.0
 
 jobs:
   woke:

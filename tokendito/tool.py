@@ -1,17 +1,12 @@
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
 """This module retrieves AWS credentials after authenticating with Okta."""
-from __future__ import absolute_import, division, print_function, unicode_literals
-
 import logging
 
-from future import standard_library
 from tokendito import aws_helpers
 from tokendito import helpers
 from tokendito import okta_helpers
 from tokendito import settings
-
-standard_library.install_aliases()
 
 
 def cli(args):
@@ -34,7 +29,6 @@ def cli(args):
     saml_response_string, saml_xml = aws_helpers.authenticate_to_roles(
         secret_session_token, settings.okta_aws_app_url
     )
-
     assume_role_response, role_name = aws_helpers.select_assumeable_role(
         saml_response_string, saml_xml
     )

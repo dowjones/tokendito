@@ -8,6 +8,7 @@ on:
     branches:
       - master
       - main
+      - feature/2.0.0
 
 jobs:
   lint:
@@ -34,7 +35,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: [2.7, 3.5, 3.6, 3.7, 3.8]
+        python-version: [3.6, 3.7, 3.8]
     steps:
     - name: Checkout
       uses: actions/checkout@v2
