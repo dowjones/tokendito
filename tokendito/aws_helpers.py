@@ -8,8 +8,6 @@ Tasks include:
 3. Updating the AWS Config
 
 """
-from __future__ import absolute_import, division, print_function, unicode_literals
-
 import codecs
 import logging
 import sys
@@ -18,12 +16,8 @@ import boto3
 from botocore import UNSIGNED
 from botocore.client import Config
 from botocore.exceptions import ClientError
-from future import standard_library
 import requests
 from tokendito import helpers
-
-
-standard_library.install_aliases()
 
 
 def authenticate_to_roles(secret_session_token, url):
@@ -35,33 +29,29 @@ def authenticate_to_roles(secret_session_token, url):
 
     """
     payload = {"onetimetoken": secret_session_token}
-    logging.debug("Authenticate AWS user with SAML URL [{}:{}]".format(url, payload))
+    logging.debug(f"Authenticate AWS user with SAML URL [{url}]")
     try:
         response = requests.get(url, params=payload)
         saml_response_string = response.text
         if response.status_code == 400 or response.status_code == 401:
             errmsg = "Invalid Credentials."
-            logging.critical(
-                "{}\nExiting with code:{}".format(errmsg, response.status_code)
-            )
+            logging.critical(f"{errmsg}\nExiting with code:{response.status_code}")
             sys.exit(2)
         elif response.status_code == 404:
             errmsg = "Invalid Okta application URL. Please verify your configuration."
-            logging.critical("{}".format(errmsg))
+            logging.critical(f"{errmsg}")
             sys.exit(2)
         elif response.status_code >= 500 and response.status_code < 504:
             errmsg = "Unable to establish connection with Okta. Verify Okta Org URL and try again."
-            logging.critical(
-                "{}\nExiting with code:{}".format(errmsg, response.status_code)
-            )
+            logging.critical(f"{errmsg}\nExiting with code:{response.status_code}")
             sys.exit(2)
         elif response.status_code != 200:
-            logging.critical("Exiting with code:{}".format(response.status_code))
+            logging.critical(f"Exiting with code:{response.status_code}")
             logging.debug(saml_response_string)
             sys.exit(2)
 
     except Exception as error:
-        errmsg = "Okta auth failed:\n{}".format(error)
+        errmsg = f"Okta auth failed:\n{error}"
         logging.critical(errmsg)
         sys.exit(1)
 
@@ -90,14 +80,13 @@ def assume_role(role_arn, provider_arn, saml):
     # Attempt to assume a role with the following durations:
     # 12h, 8h, 6h, 4h, 2h, 1h, 30m, 15m
     session_times = [43200, 28800, 21600, 14400, 7200, 3600, 1800, 900, "exit"]
+
     for duration in session_times:
         if duration == "exit":
             logging.critical(
                 default_error.format(
                     role_arn,
-                    "IAM role session time is not within set: {}".format(
-                        session_times[:-1]
-                    ),
+                    f"IAM role session time is not within set: {session_times[:-1]}",
                 )
             )
             sys.exit(2)
@@ -119,7 +108,7 @@ def handle_assume_role(role_arn, provider_arn, encoded_xml, duration, default_er
     :param saml: decoded saml response from okta
     :return: AssumeRoleWithSaml API responses
     """
-    logging.debug("Attempting session time [{}]".format(duration))
+    logging.debug(f"Attempting session time [{duration}]")
     client = boto3.client("sts", config=Config(signature_version=UNSIGNED))
     try:
         assume_role_response = client.assume_role_with_saml(
@@ -132,13 +121,12 @@ def handle_assume_role(role_arn, provider_arn, encoded_xml, duration, default_er
     except ClientError as error:
         if error.response["Error"]["Code"] == "ValidationError":
             logging.info(
-                "AssumeRoleWithSaml failed with {} for duration {}".format(
-                    error.response["Error"]["Code"], duration
-                )
+                f"AssumeRoleWithSaml failed with {error.response['Error']['Code']} "
+                f"for duration {duration}"
             )
             assume_role_response = "continue"
         elif error.response["Error"]["Code"] == "AccessDenied":
-            errmsg = "Error assuming intermediate {} SAML role".format(provider_arn)
+            errmsg = f"Error assuming intermediate {provider_arn} SAML role"
             logging.critical(errmsg)
             sys.exit(2)
         else:
@@ -177,9 +165,7 @@ def ensure_keys_work(assume_role_response):
         client.get_caller_identity()
     except Exception as auth_error:
         logging.critical(
-            "There was an error authenticating your keys with AWS: {}".format(
-                auth_error
-            )
+            f"There was an error authenticating your keys with AWS: {auth_error}"
         )
         sys.exit(1)
 

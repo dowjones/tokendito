@@ -1,42 +1,16 @@
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
 """Unit tests, and local fixtures."""
-from __future__ import absolute_import, division, print_function, unicode_literals
-
-from builtins import (  # noqa: F401
-    ascii,
-    bytes,
-    chr,
-    dict,
-    filter,
-    hex,
-    input,
-    int,
-    list,
-    map,
-    next,
-    object,
-    oct,
-    open,
-    pow,
-    range,
-    round,
-    str,
-    super,
-    zip,
-)
 from datetime import datetime
 import os
 import sys
 
-from future import standard_library
 import pytest
 import semver
 from tokendito.settings import okta_status_dict
 
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-standard_library.install_aliases()
 
 
 @pytest.fixture
@@ -53,7 +27,6 @@ def valid_settings():
         "__name__",
         "__package__",
         "__spec__",
-        "absolute_import",
         "ascii",
         "bytes",
         "chr",
@@ -75,7 +48,6 @@ def valid_settings():
         "range",
         "role_arn",
         "round",
-        "standard_library",
         "str",
         "super",
         "sys",
@@ -158,20 +130,11 @@ def test__version__var_names():
         assert item.endswith("__")
 
 
-@pytest.mark.parametrize("string", [r"raw_string", "unicode_string", r"byte_string"])
-def test_to_unicode(string):
-    """Test whether to_unicode returns unicode strings."""
-    from tokendito import helpers
-
-    new_str = helpers.to_unicode(string)
-    assert isinstance(new_str, str)
-
-
-def test_set_okta_username(monkeypatch):
+def test_set_okta_username(mocker):
     """Test whether data sent is the same as data returned."""
     from tokendito import helpers, settings
 
-    monkeypatch.setattr("tokendito.helpers.input", lambda _: "pytest_patched")
+    mocker.patch("tokendito.helpers.input", return_value="pytest_patched")
     val = helpers.set_okta_username()
 
     assert val == "pytest_patched"
@@ -258,20 +221,20 @@ def test_validate_input(mocker, test, limit, expected):
     assert helpers.validate_input(test, limit) is expected
 
 
-def test_get_input(monkeypatch):
+def test_get_input(mocker):
     """Check if provided input is return unmodified."""
     from tokendito import helpers
 
-    monkeypatch.setattr("tokendito.helpers.input", lambda _: "pytest_patched")
+    mocker.patch("tokendito.helpers.input", return_value="pytest_patched")
     assert helpers.get_input() == "pytest_patched"
 
 
 @pytest.mark.parametrize("value,expected", [("00", 0), ("01", 1), ("5", 5)])
-def test_collect_integer(monkeypatch, value, expected):
+def test_collect_integer(mocker, value, expected):
     """Check if a given digit or series of digits are properly casted to int."""
     from tokendito import helpers
 
-    monkeypatch.setattr("tokendito.helpers.input", lambda _: value)
+    mocker.patch("tokendito.helpers.input", return_value=value)
     assert helpers.collect_integer(10) == expected
 
 
@@ -301,11 +264,11 @@ def test_prepare_payload():
     ) == {"pytest_key1": "pytest_val1", "pytest_key2": "pytest_val2"}
 
 
-def test_set_passcode(monkeypatch):
+def test_set_passcode(mocker):
     """Check if numerical passcode can handle leading zero values."""
     from tokendito import duo_helpers
 
-    monkeypatch.setattr("tokendito.helpers.input", lambda _: "0123456")
+    mocker.patch("tokendito.helpers.input", return_value="0123456")
     assert duo_helpers.set_passcode({"factor": "passcode"}) == "0123456"
 
 
@@ -317,9 +280,7 @@ def test_process_environment(monkeypatch, valid_settings, invalid_settings):
     valid_keys = {key.upper(): val for (key, val) in valid_settings.items()}
     invalid_keys = {key.upper(): val for (key, val) in invalid_settings.items()}
 
-    # Python 2.7 does not support {**dict1, **dict2} for concatenation
-    env_keys = valid_keys.copy()
-    env_keys.update(invalid_keys)
+    env_keys = {**valid_keys.copy(), **invalid_keys}
 
     monkeypatch.setattr(os, "environ", env_keys)
     helpers.process_environment()
@@ -336,9 +297,8 @@ def test_process_arguments(valid_settings, invalid_settings):
     from tokendito import helpers, settings
     from argparse import Namespace
 
-    # Python 2.7 does not support {**dict1, **dict2} for concatenation
-    args = valid_settings.copy()
-    args.update(invalid_settings)
+    args = {**valid_settings.copy(), **invalid_settings}
+    args.update()
 
     helpers.process_arguments(Namespace(**args))
 
@@ -359,14 +319,10 @@ def test_process_ini_file(tmpdir, valid_settings, invalid_settings, mocker):
 
     # Create a mock config file
     data = "[default]\nokta_username = pytest\n\n[pytest]\n"
-    data += "".join("{} = {}\n".format(key, val) for key, val in valid_settings.items())
-    data += "".join(
-        "{} = {}\n".format(key, val) for key, val in invalid_settings.items()
-    )
+    data += "".join(f"{key} = {val}\n" for key, val in valid_settings.items())
+    data += "".join(f"{key} = {val}\n" for key, val in invalid_settings.items())
     data += "\n[pytest_end]\n"
-    data += "".join(
-        "{} = {}\n".format(key, val) for key, val in invalid_settings.items()
-    )
+    data += "".join(f"{key} = {val}\n" for key, val in invalid_settings.items())
 
     # Python 3.7 supports patching builtins.open(), which gives us the ability
     # to bypass file creation with:
@@ -527,9 +483,7 @@ def test_login_error_code_parser(mocker):
             == "Okta auth failed: " + value
         )
     unexpected_key = "UNEXPECTED_KEY"
-    value = "Okta auth failed: {}. Please verify your settings and try again.".format(
-        unexpected_key
-    )
+    value = f"Okta auth failed: {unexpected_key}. Please verify your settings and try again."
     assert login_error_code_parser(unexpected_key, okta_status_dict) == value
 
 
@@ -612,8 +566,8 @@ def test_select_preferred_mfa_index_output(email, capsys, mocker, sample_json_re
     correct_output = (
         "\nSelect your preferred MFA method and press Enter:\n"
         "[0]  OKTA    push                Redmi 6 Pro         Id: opfrar9yi4bKJNH2WEWQ0x8\n"
-        "[1]  GOOGLE  token:software:totp {0} Id: FfdskljfdsS1ljUT0r8\n"
-        "[2]  OKTA    token:software:totp {0} Id: fdsfsd6ewREr8\n".format(email)
+        f"[1]  GOOGLE  token:software:totp {email} Id: FfdskljfdsS1ljUT0r8\n"
+        f"[2]  OKTA    token:software:totp {email} Id: fdsfsd6ewREr8\n"
     )
 
     mocker.patch("tokendito.helpers.collect_integer", return_value=1)

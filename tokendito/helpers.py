@@ -1,31 +1,7 @@
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
 """Helper module for AWS and Okta configuration, management and data flow."""
-from __future__ import absolute_import, division, print_function, unicode_literals
-
 import argparse
-from builtins import (  # noqa: F401
-    ascii,
-    bytes,
-    chr,
-    dict,
-    filter,
-    hex,
-    input,
-    int,
-    list,
-    map,
-    next,
-    object,
-    oct,
-    open,
-    pow,
-    range,
-    round,
-    str,
-    super,
-    zip,
-)
 import codecs
 import configparser
 import getpass
@@ -40,15 +16,11 @@ from urllib.parse import urlparse
 from botocore import __version__ as __botocore_version__
 from bs4 import __version__ as __bs4_version__
 from bs4 import BeautifulSoup
-from future import standard_library
 import pytz
 import requests
 from tokendito import settings
 from tokendito.__version__ import __version__
 from tzlocal import get_localzone
-
-
-standard_library.install_aliases()
 
 
 def setup(args):
@@ -71,7 +43,6 @@ def setup(args):
     parser.add_argument(
         "--username",
         "-u",
-        type=to_unicode,
         dest="okta_username",
         help="username to login to Okta. You can "
         "also use the OKTA_USERNAME environment variable.",
@@ -79,7 +50,6 @@ def setup(args):
     parser.add_argument(
         "--password",
         "-p",
-        type=to_unicode,
         dest="okta_password",
         help="password to login to Okta. You "
         "can also user the OKTA_PASSWORD environment variable.",
@@ -87,51 +57,39 @@ def setup(args):
     parser.add_argument(
         "--config-file",
         "-C",
-        type=to_unicode,
         default=settings.config_file,
         help="Use an alternative configuration file",
     )
-    parser.add_argument(
-        "--okta-aws-app-url", "-ou", type=to_unicode, help="Okta App URL to use."
-    )
+    parser.add_argument("--okta-aws-app-url", "-ou", help="Okta App URL to use.")
     parser.add_argument(
         "--okta-profile",
         "-op",
-        type=to_unicode,
         default=settings.okta_profile,
         help="Okta configuration profile to use.",
     )
     parser.add_argument(
         "--aws-region",
         "-r",
-        type=to_unicode,
         help="Sets the AWS region for the profile",
     )
     parser.add_argument(
         "--aws-output",
         "-ao",
-        type=to_unicode,
         help="Sets the AWS output type for the profile",
     )
     parser.add_argument(
         "--aws-profile",
         "-ap",
-        type=to_unicode,
         help="Override AWS profile to save as in the credentials file.",
     )
-    parser.add_argument(
-        "--mfa-method", "-mm", type=to_unicode, help="Sets the MFA method"
-    )
+    parser.add_argument("--mfa-method", "-mm", help="Sets the MFA method")
     parser.add_argument(
         "--mfa-response",
         "-mr",
-        type=to_unicode,
         help="Sets the MFA response to a challenge",
     )
-    parser.add_argument("--role-arn", "-R", type=to_unicode, help="Sets the IAM role")
-    parser.add_argument(
-        "--output-file", "-o", type=to_unicode, help="Log output to filename"
-    )
+    parser.add_argument("--role-arn", "-R", help="Sets the IAM role")
+    parser.add_argument("--output-file", "-o", help="Log output to filename")
     parser.add_argument(
         "--loglevel",
         "-l",
@@ -144,7 +102,7 @@ def setup(args):
 
     parsed_args = parser.parse_args(args)
     set_logging(parsed_args)
-    logging.debug("Parse command line arguments [{}]".format(parsed_args))
+    logging.debug(f"Parse command line arguments [{parsed_args}]")
 
     return parsed_args
 
@@ -161,26 +119,6 @@ def utc_to_local(utc_dt):
     return local_time
 
 
-def to_unicode(bytestring):
-    """Convert a string into a Unicode compliant object.
-
-    The `unicode()` method is only available in Python 2. Python 3
-    generates a `NameError`, and the same string is returned unmodified.
-
-    :param bytestring:
-    :return: unicode-compliant string
-    """
-    if type(bytestring) == bytes:
-        bytestring = bytestring.decode(settings.encoding)
-    unicode_string = bytestring
-    try:
-        unicode_string = unicode(bytestring, settings.encoding)
-    except (NameError, TypeError):
-        # If a TypeError is raised, we are in Python 3, this is a no-op.
-        pass
-    return unicode_string
-
-
 def create_directory(dir_name):
     """Create directories on the local machine."""
     if os.path.isdir(dir_name) is False:
@@ -188,9 +126,7 @@ def create_directory(dir_name):
             os.mkdir(dir_name)
         except OSError as error:
             logging.error(
-                "Cannot continue creating directory '{}': {}".format(
-                    settings.config_dir, error.strerror
-                )
+                f"Cannot continue creating directory '{settings.config_dir}': {error.strerror}"
             )
             sys.exit(1)
 
@@ -205,8 +141,7 @@ def set_okta_username():
 
     if settings.okta_username == "":
         okta_username = input("Username: ")
-        setattr(settings, "okta_username", to_unicode(okta_username))
-        logging.debug("username set to {} interactively".format(settings.okta_username))
+        setattr(settings, "okta_username", okta_username)
 
     return settings.okta_username
 
@@ -222,7 +157,7 @@ def set_okta_password():
 
     while settings.okta_password == "":
         okta_password = getpass.getpass()
-        setattr(settings, "okta_password", to_unicode(okta_password))
+        setattr(settings, "okta_password", okta_password)
 
     logging.debug("password set interactively")
     return settings.okta_password
@@ -267,7 +202,7 @@ def select_role_arn(role_arns, saml_xml, saml_response_string):
     :return: User input index selected by the user, the arn of selected role
 
     """
-    logging.debug("Select the role user wants to pick [{}]".format(role_arns))
+    logging.debug(f"Select the role user wants to pick [{role_arns}]")
 
     role_names = dict((role.split("/")[-1], role) for role in role_arns)
     roles = [role.split("/")[-1] for role in role_arns]
@@ -281,20 +216,16 @@ def select_role_arn(role_arns, saml_xml, saml_response_string):
 
     if settings.aws_profile in role_names.keys():
         selected_role = role_names[settings.aws_profile]
-        logging.debug(
-            "Using aws_profile env var for role: [{}]".format(settings.aws_profile)
-        )
+        logging.debug(f"Using aws_profile env var for role: [{settings.aws_profile}]")
     elif settings.role_arn is None:
         selected_role = prompt_role_choices(role_arns, saml_xml, saml_response_string)
     elif settings.role_arn in role_arns:
         selected_role = settings.role_arn
     else:
-        logging.error(
-            "User provided rolename does not exist [{}]".format(settings.role_arn)
-        )
+        logging.error(f"User provided rolename does not exist [{settings.role_arn}]")
         sys.exit(2)
 
-    logging.debug("Selected role: [{}]".format(selected_role))
+    logging.debug(f"Selected role: [{selected_role}]")
 
     return selected_role
 
@@ -334,7 +265,7 @@ def mfa_option_info(mfa_option):
     :return: pre-formatted string with MFA factor info if available, None
              otherwise.
     """
-    logging.debug("Building info for: {}".format(json.dumps(mfa_option)))
+    logging.debug(f"Building info for: {json.dumps(mfa_option)}")
 
     if "factorType" in mfa_option:
         factor_type = mfa_option["factorType"]
@@ -368,17 +299,9 @@ def select_preferred_mfa_index(
         mfa_method = mfa_option.get(subfactor_key, "Not presented")
         provider = mfa_option.get(factor_key, "Not presented")
         print(
-            "[{: >{}}]  {: <{}}  {: <{}} {: <{}} Id: {}".format(
-                i,
-                longest_index,
-                provider,
-                longest_factor_name,
-                mfa_method,
-                longest_subfactor_name,
-                factor_info,
-                factor_info_indent,
-                factor_id,
-            ),
+            f"[{i: >{longest_index}}]  {provider: <{longest_factor_name}}  "
+            f"{mfa_method: <{longest_subfactor_name}} "
+            f"{factor_info: <{factor_info_indent}} Id: {factor_id}"
         )
 
     user_input = collect_integer(len(mfa_options))
@@ -408,15 +331,10 @@ def prompt_role_choices(role_arns, saml_xml, saml_response_string):
     for (i, arn) in enumerate(sorted_role_arns):
         padding_index = longest_index - len(str(i))
         account_alias = alias_table[arn.split(":")[4]]
-        print(
-            "[{}] {}{: <{}}    {}".format(
-                i, padding_index * " ", account_alias, longest_alias, arn
-            )
-        )
 
     user_input = collect_integer(len(role_arns))
     selected_role = sorted_role_arns[user_input]
-    logging.debug("Selected role [{}]".format(user_input))
+    logging.debug(f"Selected role [{user_input}]")
 
     return selected_role
 
@@ -431,19 +349,12 @@ def print_selected_role(profile_name, expiration_time):
     """
     expiration_time_local = utc_to_local(expiration_time)
     msg = (
-        "\nGenerated profile '{}' in {}.\n"
+        f"\nGenerated profile '{profile_name}' in {settings.aws_shared_credentials_file}.\n"
         "\nUse profile to authenticate to AWS:\n\t"
-        "aws --profile '{}' sts get-caller-identity"
+        f"aws --profile '{profile_name}' sts get-caller-identity"
         "\nOR\n\t"
-        "export AWS_PROFILE='{}'\n\n"
-        "Credentials are valid until {} ({})."
-    ).format(
-        profile_name,
-        settings.aws_shared_credentials_file,
-        profile_name,
-        profile_name,
-        expiration_time,
-        expiration_time_local,
+        f"export AWS_PROFILE='{profile_name}'\n\n"
+        f"Credentials are valid until {expiration_time} ({expiration_time_local})."
     )
 
     return print(msg)
@@ -466,7 +377,7 @@ def extract_arns(saml):
 
     roles_and_providers = {i.split(",")[1]: i.split(",")[0] for i in arns}
 
-    logging.debug("Collected ARNs: {}".format(json.dumps(roles_and_providers)))
+    logging.debug(f"Collected ARNs: {json.dumps(roles_and_providers)}")
 
     return roles_and_providers
 
@@ -497,7 +408,7 @@ def validate_okta_aws_app_url(input_url=None):
     :param input_url: string
     :return: bool. True if valid, False otherwise
     """
-    logging.debug("Will try to match '{}' to a valid URL".format(input_url))
+    logging.debug(f"Will try to match '{input_url}' to a valid URL")
 
     url = urlparse(input_url)
     # Here, we could also check url.netloc against r'.*\.okta(preview)?\.com$'
@@ -508,7 +419,7 @@ def validate_okta_aws_app_url(input_url=None):
     ):
         return True
 
-    logging.debug("{} does not look like a valid match.".format(url))
+    logging.debug(f"{url} does not look like a valid match.")
     return False
 
 
@@ -528,9 +439,7 @@ def get_account_aliases(saml_xml, saml_response_string):
         aws_response = requests.Session().post(url, data={"SAMLResponse": encoded_xml})
     except Exception as request_error:
         logging.error(
-            "There was an error retrieving the AWS SAML page: \n{}".format(
-                request_error
-            )
+            f"There was an error retrieving the AWS SAML page: \n{request_error}"
         )
         logging.debug(json.dumps(aws_response))
         sys.exit(1)
@@ -554,15 +463,8 @@ def display_version():
     python_version = platform.python_version()
     (system, _, release, _, _, _) = platform.uname()
     print(
-        "tokendito/{} Python/{} {}/{} botocore/{} bs4/{} requests/{}".format(
-            __version__,
-            python_version,
-            system,
-            release,
-            __botocore_version__,
-            __bs4_version__,
-            requests.__version__,
-        )
+        f"tokendito/{__version__} Python/{python_version} {system}/{release} "
+        f"botocore/{__botocore_version__} bs4/{__bs4_version__} requests/{requests.__version__}"
     )
 
 
@@ -580,10 +482,10 @@ def process_ini_file(file, profile):
     try:
         for (key, val) in config.items(profile):
             if hasattr(settings, key):
-                logging.debug("Set option {}={} from ini file".format(key, val))
+                logging.debug(f"Set option {key}={val} from ini file")
                 setattr(settings, key, val)
     except configparser.Error as err:
-        logging.error("Could not load profile '{}': {}".format(profile, str(err)))
+        logging.error(f"Could not load profile '{profile}': {str(err)}")
         sys.exit(2)
 
 
@@ -595,7 +497,7 @@ def process_arguments(args):
     """
     for (key, val) in vars(args).items():
         if hasattr(settings, key) and val is not None:
-            logging.debug("Set option {}={} from command line".format(key, val))
+            logging.debug(f"Set option {key}={val} from command line")
             setattr(settings, key, val)
 
 
@@ -607,7 +509,7 @@ def process_environment():
     for (key, val) in os.environ.items():
         key = key.lower()
         if hasattr(settings, key):
-            logging.debug("Set option {}={} from environment".format(key, val))
+            logging.debug(f"Set option {key}={val} from environment")
             setattr(settings, key, os.getenv(key.upper()))
 
 
@@ -625,8 +527,8 @@ def process_okta_aws_app_url():
         sys.exit(2)
 
     url = urlparse(settings.okta_aws_app_url)
-    okta_org = "{}://{}".format(url.scheme, url.netloc)
-    okta_aws_app_url = "{}{}".format(okta_org, url.path)
+    okta_org = f"{url.scheme}://{url.netloc}"
+    okta_aws_app_url = f"{okta_org}{url.path}"
     setattr(settings, "okta_org", okta_org)
     setattr(settings, "okta_aws_app_url", okta_aws_app_url)
 
@@ -647,7 +549,7 @@ def user_configuration_input():
     }
 
     while url == "":
-        user_data = to_unicode(input(message["app_url"]))
+        user_data = input(message["app_url"])
         user_data = user_data.strip()
         if validate_okta_aws_app_url(user_data):
             url = user_data
@@ -656,7 +558,7 @@ def user_configuration_input():
     config_details.append(url)
 
     while username == "":
-        user_data = to_unicode(input(message["username"]))
+        user_data = input(message["username"])
         user_data = user_data.strip()
         if user_data != "":
             username = user_data
@@ -681,26 +583,26 @@ def update_configuration(okta_file, profile):
     create_directory(settings.config_dir)
 
     if os.path.isfile(okta_file):
-        logging.debug("Read Okta config [{} {}]".format(okta_file, profile))
+        logging.debug(f"Read Okta config [{okta_file} {profile}]")
         config.read(okta_file, encoding=settings.encoding)
     if not config.has_section(profile):
         config.add_section(profile)
-        logging.debug("Add section to Okta config [{}]".format(profile))
+        logging.debug(f"Add section to Okta config [{profile}]")
 
     (app_url, username) = user_configuration_input()
 
     url = urlparse(app_url.strip())
     okta_username = username.strip()
 
-    okta_aws_app_url = "{}://{}{}".format(url.scheme, url.netloc, url.path)
+    okta_aws_app_url = f"{url.scheme}://{url.netloc}{url.path}"
 
     config.set(profile, "okta_aws_app_url", okta_aws_app_url)
     config.set(profile, "okta_username", okta_username)
-    logging.debug("Config Okta [{}]".format(config))
+    logging.debug(f"Config Okta [{config}]")
 
     with open(okta_file, "w+", encoding=settings.encoding) as file:
         config.write(file)
-        logging.debug("Write new section Okta config [{} {}]".format(okta_file, config))
+        logging.debug(f"Write new section Okta config [{okta_file} {config}]")
 
 
 def set_local_credentials(assume_role_response, role_name, aws_region, aws_output):
@@ -735,7 +637,7 @@ def update_aws_credentials(profile, aws_access_key, aws_secret_key, aws_session_
     """
     cred_file = settings.aws_shared_credentials_file
     cred_dir = os.path.dirname(cred_file)
-    logging.debug("Update AWS credentials in: [{}]".format(cred_file))
+    logging.debug(f"Update AWS credentials in: [{cred_file}]")
 
     create_directory(cred_dir)
 
@@ -762,12 +664,12 @@ def update_aws_config(profile, output, region):
     """
     config_file = settings.aws_config_file
     config_dir = os.path.dirname(config_file)
-    logging.debug("Update AWS config to file: [{}]".format(config_file))
+    logging.debug(f"Update AWS config to file: [{config_file}]")
 
     create_directory(config_dir)
 
     # Prepend the word profile the the profile name
-    profile = "profile {}".format(profile)
+    profile = f"profile {profile}"
     config = configparser.RawConfigParser()
     if os.path.isfile(config_file):
         config.read(config_file, encoding=settings.encoding)
@@ -791,7 +693,7 @@ def check_within_range(user_input, valid_range):
     if int(user_input) in range(0, valid_range):
         range_validation = True
     else:
-        logging.debug("Valid range is {}".format(valid_range))
+        logging.debug(f"Valid range is {valid_range}")
         logging.error("Value is not in within the selection range.")
     return range_validation
 
@@ -828,8 +730,8 @@ def get_input(prompt="-> "):
 
     :return user_input: raw from user.
     """
-    user_input = to_unicode(input(prompt))
-    logging.debug("User input [{}]".format(user_input))
+    user_input = input(prompt)
+    logging.debug(f"User input [{user_input}]")
 
     return user_input
 
@@ -846,7 +748,7 @@ def collect_integer(valid_range):
     while True:
         user_input = get_input()
         valid_input = validate_input(user_input, valid_range)
-        logging.debug("User input validation status is {}".format(valid_input))
+        logging.debug(f"User input validation status is {valid_input}")
         if valid_input:
             user_input = int(user_input)
             break
@@ -865,9 +767,6 @@ def prepare_payload(**kwargs):
     if kwargs is not None:
         for key, value in list(kwargs.items()):
             payload_dict[key] = value
-
-            if key != "password":
-                logging.debug("Prepare payload [{} {}]".format(key, value))
 
     return payload_dict
 
