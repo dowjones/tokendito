@@ -440,18 +440,23 @@ def test_bad_user_session_token(sample_json_response, sample_headers, mocker):
     [("duo", 123, 123), ("okta", 345, 345), ("google", 456, 456)],
 )
 def test_mfa_provider_type(
-    mfa_provider, session_token, expected, mocker, sample_headers
+    mfa_provider,
+    session_token,
+    expected,
+    mocker,
+    sample_headers,
 ):
     """Test whether function return key on specific MFA provider."""
     from tokendito.okta_helpers import mfa_provider_type
 
     payload = {"x": "y", "t": "z"}
     callback_url = "https://www.acme.org"
-    mfa_verify = {"sessionToken": session_token}
     selected_mfa_option = 1
     mfa_challenge_url = 1
     primary_auth = 1
     selected_factor = 1
+
+    mfa_verify = {"sessionToken": session_token}
     mocker.patch(
         "tokendito.duo_helpers.authenticate_duo",
         return_value=(payload, sample_headers, callback_url),
@@ -480,11 +485,12 @@ def test_bad_mfa_provider_type(mocker, sample_headers):
 
     payload = {"x": "y", "t": "z"}
     callback_url = "https://www.acme.org"
-    mfa_verify = {"sessionToken": "123"}
     selected_mfa_option = 1
     mfa_challenge_url = 1
     primary_auth = 1
     selected_factor = 1
+
+    mfa_verify = {"sessionToken": "123"}
     mfa_bad_provider = "bad_provider"
     mocker.patch(
         "tokendito.duo_helpers.authenticate_duo",
@@ -626,3 +632,79 @@ def test_bad_with_no_mfa_methods_user_mfa_challenge(
 
     with pytest.raises(SystemExit) as error:
         assert user_mfa_challenge(sample_headers, primary_auth) == error
+
+
+@pytest.mark.parametrize(
+    "aws_profile, role_arn, selected_role",
+    [
+        ("token", None, "arn:aws:iam::123456789012:role/token"),
+        (
+            "dito",
+            None,
+            "arn:aws:iam::124356789012:role/dito",
+        ),
+        (
+            None,
+            "arn:aws:iam::124356789012:role/dito",
+            "arn:aws:iam::124356789012:role/dito",
+        ),
+        (
+            None,
+            "arn:aws:iam::123456789012:role/token",
+            "arn:aws:iam::123456789012:role/token",
+        ),
+    ],
+)
+def test_good_select_role_arn(
+    mocker, monkeypatch, aws_profile, role_arn, selected_role
+):
+    """Test which role does the user has chosen."""
+    from tokendito.helpers import select_role_arn
+
+    saml_xml = "x"
+    saml_response_string = "y"
+
+    role_arns = [
+        "arn:aws:iam::123456789012:role/token",
+        "arn:aws:iam::124356789012:role/dito",
+    ]
+    monkeypatch.setattr("tokendito.settings.aws_profile", aws_profile)
+    mocker.patch("tokendito.helpers.prompt_role_choices", return_value=selected_role)
+    assert select_role_arn(role_arns, saml_xml, saml_response_string) == selected_role
+
+
+def test_repeated_line_select_role_arn(monkeypatch):
+    """Test behaviour repeated role."""
+    from tokendito.helpers import select_role_arn
+
+    saml_xml = "x"
+    saml_response_string = "y"
+
+    role_arns = [
+        "arn:aws:iam::123456789012:role/token",
+        "arn:aws:iam::123456789012:role/token",
+    ]
+    monkeypatch.setattr("tokendito.settings.aws_profile", "token")
+
+    with pytest.raises(SystemExit) as error:
+        assert select_role_arn(role_arns, saml_xml, saml_response_string) == error
+
+
+def test_bad_select_role_arn(monkeypatch):
+    """Test behaviour wrong aws_profile and role_arn."""
+    from tokendito.helpers import select_role_arn
+
+    saml_xml = "x"
+    saml_response_string = "y"
+
+    role_arns = [
+        "arn:aws:iam::123456789012:role/token",
+        "arn:aws:iam::124356789012:role/dito",
+    ]
+    monkeypatch.setattr("tokendito.settings.aws_profile", "wrong_response")
+    monkeypatch.setattr(
+        "tokendito.settings.role_arn",
+        "arn:aws:iam::123456789012:role/wrong_response",
+    )
+    with pytest.raises(SystemExit) as error:
+        assert select_role_arn(role_arns, saml_xml, saml_response_string) == error
