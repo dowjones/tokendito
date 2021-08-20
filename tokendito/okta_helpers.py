@@ -7,22 +7,16 @@ This module handles the all Okta operations.
 2. Update Okta Config File
 
 """
-from __future__ import absolute_import, division, print_function, unicode_literals
-
 import json
 import logging
 import sys
 import time
 
 
-from future import standard_library
 import requests
 from tokendito import duo_helpers
 from tokendito import helpers
 from tokendito import settings
-
-
-standard_library.install_aliases()
 
 
 def okta_verify_api_method(mfa_challenge_url, payload, headers=None):
@@ -41,24 +35,18 @@ def okta_verify_api_method(mfa_challenge_url, payload, headers=None):
         else:
             response = requests.request("POST", mfa_challenge_url, data=payload)
     except Exception as request_error:
-        logging.error(
-            "There was an error connecting to Okta: \n{}".format(request_error)
-        )
+        logging.error(f"There was an error connecting to Okta: \n{request_error}")
         sys.exit(1)
 
-    logging.debug("Okta authentication response: \n{}".format(response))
-    ret = dict()
+    logging.debug(f"Okta authentication response: \n{response}")
+
     try:
-        ret = response.json()
+        response = response.json()
     except ValueError:
-        logging.error("Received type of response: {}".format(type(response.text)))
-        sys.exit(1)
+        logging.debug(f"Received type of response: {type(response.text)}")
+        response = response.text
 
-    if "errorCode" in ret:
-        login_error_code_parser(ret["errorCode"], settings.okta_status_dict)
-        sys.exit(1)
-
-    return ret
+    return response
 
 
 def login_error_code_parser(status=None, status_dict=settings.okta_status_dict):
@@ -68,15 +56,13 @@ def login_error_code_parser(status=None, status_dict=settings.okta_status_dict):
     return message: status message
     """
     if status in status_dict.keys():
-        message = "Okta auth failed: {}".format(status_dict[status])
+        message = f"Okta auth failed: {status_dict[status]}"
     else:
         message = (
-            "Okta auth failed: {}. Please verify your settings and try again.".format(
-                status
-            )
+            f"Okta auth failed: {status}. Please verify your settings and try again."
         )
     logging.error(message)
-    logging.debug("Parsing error [{}] ".format(message))
+    logging.debug(f"Parsing error [{message}] ")
     return message
 
 
@@ -98,7 +84,7 @@ def user_session_token(primary_auth, headers):
     elif status == "MFA_REQUIRED":
         session_token = user_mfa_challenge(headers, primary_auth)
     elif status is None:
-        logging.debug("Error parsing response: {}".format(json.dumps(primary_auth)))
+        logging.debug(f"Error parsing response: {json.dumps(primary_auth)}")
         logging.error("Okta auth failed: unknown status")
         sys.exit(1)
     else:
@@ -114,20 +100,12 @@ def authenticate_user(okta_url, okta_username, okta_password):
     :param okta_username: okta username
     :param okta_password: okta password
     :return: MFA session options
-
     """
-    logging.debug(
-        "Authenticate user with okta credential [{} user {}]".format(
-            okta_url, okta_username
-        )
-    )
     headers = {"content-type": "application/json", "accept": "application/json"}
     payload = helpers.prepare_payload(username=okta_username, password=okta_password)
 
-    primary_auth = okta_verify_api_method(
-        "{}/api/v1/authn".format(okta_url), payload, headers
-    )
-    logging.debug("Authenticate Okta header [{}] ".format(headers))
+    primary_auth = okta_verify_api_method(f"{okta_url}/api/v1/authn", payload, headers)
+    logging.debug(f"Authenticate Okta header [{headers}] ")
 
     session_token = user_session_token(primary_auth, headers)
     logging.info("User has been succesfully authenticated.")
@@ -164,8 +142,8 @@ def mfa_provider_type(
         )
     else:
         logging.error(
-            "Sorry, the MFA provider '{}' is not yet supported."
-            " Please retry with another option.".format(mfa_provider)
+            f"Sorry, the MFA provider '{mfa_provider}' is not yet supported."
+            " Please retry with another option."
         )
         exit(1)
     return mfa_verify["sessionToken"]
@@ -198,7 +176,7 @@ def user_mfa_challenge(headers, primary_auth):
     try:
         mfa_options = primary_auth["_embedded"]["factors"]
     except KeyError as error:
-        logging.error("There was a wrong response structure: \n{}".format(error))
+        logging.error(f"There was a wrong response structure: \n{error}")
         sys.exit(1)
 
     preset_mfa = settings.mfa_method
@@ -212,17 +190,17 @@ def user_mfa_challenge(headers, primary_auth):
         mfa_id = mfa_options[mfa_index]["id"]
 
         logging.warning(
-            "\n\nMore than one method found with {}.\n"
-            "Defaulting to {} - {} - Id: {}.\n"
+            f"\n\nMore than one method found with {mfa_method}.\n"
+            f"Defaulting to {provider} - {mfa_method} - Id: {mfa_id}.\n"
             "This functionality will be deprecated in"
-            "the next major release.\n".format(mfa_method, provider, mfa_method, mfa_id)
+            "the next major release.\n"
         )
 
     mfa_index = user_mfa_index(preset_mfa, available_mfas, mfa_options)
 
     # time to challenge the mfa option
     selected_mfa_option = mfa_options[mfa_index]
-    logging.debug("Selected MFA is [{}]".format(selected_mfa_option))
+    logging.debug(f"Selected MFA is [{selected_mfa_option}]")
 
     mfa_challenge_url = selected_mfa_option["_links"]["verify"]["href"]
 
@@ -235,9 +213,7 @@ def user_mfa_challenge(headers, primary_auth):
     selected_factor = okta_verify_api_method(mfa_challenge_url, payload, headers)
 
     mfa_provider = selected_factor["_embedded"]["factor"]["provider"].lower()
-    logging.debug(
-        "MFA Challenge URL: [{}] headers: {}".format(mfa_challenge_url, headers)
-    )
+    logging.debug(f"MFA Challenge URL: [{mfa_challenge_url}] headers: {headers}")
     mfa_session_token = mfa_provider_type(
         mfa_provider,
         selected_factor,
@@ -266,9 +242,7 @@ def user_mfa_options(
     """
     logging.debug("Handle user MFA options")
 
-    logging.debug(
-        "User MFA options selected: [{}]".format(selected_mfa_option["factorType"])
-    )
+    logging.debug(f"User MFA options selected: [{selected_mfa_option['factorType']}]")
     if selected_mfa_option["factorType"] == "push":
         return push_approval(headers, mfa_challenge_url, payload)
 
@@ -282,7 +256,7 @@ def user_mfa_options(
         stateToken=primary_auth["stateToken"], passCode=settings.mfa_response
     )
     mfa_verify = okta_verify_api_method(mfa_challenge_url, payload, headers)
-    logging.debug("mfa_verify [{}]".format(json.dumps(mfa_verify)))
+    logging.debug(f"mfa_verify [{json.dumps(mfa_verify)}]")
 
     return mfa_verify
 
@@ -297,9 +271,7 @@ def push_approval(headers, mfa_challenge_url, payload):
 
     """
     logging.debug(
-        "Handle push approval from the user [{}] [{}]".format(
-            headers, mfa_challenge_url
-        )
+        f"Handle push approval from the user [{headers}] [{mfa_challenge_url}]"
     )
 
     print("Waiting for an approval from device...")
@@ -308,7 +280,7 @@ def push_approval(headers, mfa_challenge_url, payload):
     while mfa_status == "WAITING":
         mfa_verify = okta_verify_api_method(mfa_challenge_url, payload, headers)
 
-        logging.debug("MFA Response:\n{}".format(json.dumps(mfa_verify)))
+        logging.debug(f"MFA Response:\n{json.dumps(mfa_verify)}")
 
         if "factorResult" in mfa_verify:
             mfa_status = mfa_verify["factorResult"]
@@ -318,7 +290,7 @@ def push_approval(headers, mfa_challenge_url, payload):
             logging.error("There was an error getting your MFA status.")
             logging.debug(mfa_verify)
             if "status" in mfa_verify:
-                logging.error("Exiting due to error: {}".format(mfa_verify["status"]))
+                logging.error(f"Exiting due to error: {mfa_verify['status']}")
             sys.exit(1)
 
         if mfa_status == "REJECTED":
