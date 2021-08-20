@@ -2,13 +2,7 @@
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
 """tokendito cli entry point."""
-from __future__ import absolute_import, division, print_function, unicode_literals
-
 import sys
-
-from future import standard_library
-
-standard_library.install_aliases()
 
 
 def main(args=None):  # needed for console script

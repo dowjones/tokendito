@@ -1,30 +1,6 @@
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
 """Functional tests, and local fixtures."""
-from __future__ import absolute_import, division, print_function, unicode_literals
-
-from builtins import (  # noqa: F401
-    ascii,
-    bytes,
-    chr,
-    dict,
-    filter,
-    hex,
-    input,
-    int,
-    list,
-    map,
-    next,
-    object,
-    oct,
-    open,
-    pow,
-    range,
-    round,
-    str,
-    super,
-    zip,
-)
 import datetime
 from os import environ, path
 import re
@@ -32,11 +8,9 @@ import subprocess
 import sys
 import time
 
-from future import standard_library
 import pytest
 
 sys.path.insert(0, path.dirname(path.dirname(path.abspath(__file__))))
-standard_library.install_aliases()
 
 
 def string_decode(bytestring):
@@ -155,10 +129,6 @@ def test_version(package_version, package_regex, runnable):
     assert package_version == local_version
 
 
-@pytest.mark.skipif(
-    sys.version_info[:2] < (3, 5),
-    reason="PyOTP Not supported in Python 2.x",
-)
 @pytest.mark.run("second-to-last")
 def test_generate_credentials(custom_args):
     """Run the tool and generate credentials."""
@@ -202,17 +172,17 @@ def test_generate_credentials(custom_args):
     # Rebuild argument list
     args = [
         "--role-arn",
-        "{}".format(settings.role_arn),
+        f"{settings.role_arn}",
         "--okta-aws-app-url",
-        "{}".format(settings.okta_aws_app_url),
+        f"{settings.okta_aws_app_url}",
         "--mfa-method",
-        "{}".format(settings.mfa_method),
+        f"{settings.mfa_method}",
         "--mfa-response",
-        "{}".format(settings.mfa_response),
+        f"{settings.mfa_response}",
         "--username",
-        "{}".format(settings.okta_username),
+        f"{settings.okta_username}",
         "--password",
-        "{}".format(settings.okta_password),
+        f"{settings.okta_password}",
     ]
     # run as a local module, as we can't guarantee that the binary is installed.
     executable = [sys.executable, "-m", "tokendito"]
