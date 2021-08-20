@@ -10,6 +10,7 @@ on:
     branches:
       - master
       - main
+      - feature/2.0.0
 
 jobs:
   testpypipublish:
@@ -28,7 +29,7 @@ jobs:
         pip install setuptools wheel twine
     - name: Build
       run: |
-        python setup.py sdist bdist_wheel --universal
+        python setup.py sdist bdist_wheel
         twine check dist/*
       env:
         DEVBUILD: 1
@@ -55,7 +56,7 @@ jobs:
         pip install setuptools wheel twine
     - name: Build
       run: |
-        python setup.py sdist bdist_wheel --universal
+        python setup.py sdist bdist_wheel
         twine check dist/*
     - name: Publish distribution package to PyPI
       if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')

@@ -1,14 +1,8 @@
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
 """This module is responsible for initialisation of global variables."""
-from __future__ import absolute_import, division, print_function, unicode_literals
-
 from os.path import expanduser
 import sys
-
-from future import standard_library
-
-standard_library.install_aliases()
 
 
 config_dir = expanduser("~") + "/.aws"

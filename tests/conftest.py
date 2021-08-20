@@ -1,11 +1,6 @@
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
 """pytest configuration, hooks, and global fixtures."""
-from __future__ import absolute_import, division, print_function, unicode_literals
-
-from future import standard_library
-
-standard_library.install_aliases()
 
 
 def pytest_addoption(parser):
