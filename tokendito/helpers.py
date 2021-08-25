@@ -4,6 +4,7 @@
 import argparse
 import codecs
 import configparser
+from datetime import timezone
 import getpass
 import json
 import logging
@@ -16,11 +17,9 @@ from urllib.parse import urlparse
 from botocore import __version__ as __botocore_version__
 from bs4 import __version__ as __bs4_version__
 from bs4 import BeautifulSoup
-import pytz
 import requests
 from tokendito import settings
 from tokendito.__version__ import __version__
-from tzlocal import get_localzone
 
 
 def setup(args):
@@ -113,7 +112,7 @@ def utc_to_local(utc_dt):
     :param:utc_str:datetime
     :return:local_time:string
     """
-    local_time = utc_dt.replace(tzinfo=pytz.utc).astimezone(tz=get_localzone())
+    local_time = utc_dt.replace(tzinfo=timezone.utc).astimezone(tz=None)
     local_time = local_time.strftime("%Y-%m-%d %H:%M:%S %Z")
 
     return local_time
@@ -369,7 +368,7 @@ def extract_arns(saml):
     """
     logging.debug("Decode response string as a SAML decoded value.")
 
-    soup = BeautifulSoup(saml, "xml")
+    soup = BeautifulSoup(saml, "html.parser")
     arns = soup.find_all(text=re.compile("arn:aws:iam::"))
     if len(arns) == 0:
         logging.error("No IAM roles found in SAML response.")
