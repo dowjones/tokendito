@@ -241,12 +241,11 @@ def test_collect_integer(mocker, value, expected):
 
 def test_utc_to_local():
     """Check if passed utc datestamp becomes local one."""
-    import pytz
     from tokendito import helpers
-    from tzlocal import get_localzone
+    from datetime import timezone
 
-    utc = datetime.now(pytz.utc)
-    local_time = utc.replace(tzinfo=pytz.utc).astimezone(tz=get_localzone())
+    utc = datetime.utcnow()
+    local_time = utc.replace(tzinfo=timezone.utc).astimezone(tz=None)
     local_time = local_time.strftime("%Y-%m-%d %H:%M:%S %Z")
 
     assert helpers.utc_to_local(utc) == local_time
