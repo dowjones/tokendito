@@ -12,10 +12,10 @@ import codecs
 import logging
 import sys
 
-import boto3
 from botocore import UNSIGNED
 from botocore.client import Config
 from botocore.exceptions import ClientError
+import botocore.session
 import requests
 from tokendito import helpers
 
@@ -108,8 +108,9 @@ def handle_assume_role(role_arn, provider_arn, encoded_xml, duration, default_er
     :return: AssumeRoleWithSaml API responses
     """
     logging.debug(f"Attempting session time [{duration}]")
-    client = boto3.client("sts", config=Config(signature_version=UNSIGNED))
     try:
+        session = botocore.session.get_session()
+        client = session.create_client("sts", config=Config(signature_version=UNSIGNED))
         assume_role_response = client.assume_role_with_saml(
             RoleArn=role_arn,
             PrincipalArn=provider_arn,
@@ -155,7 +156,9 @@ def ensure_keys_work(assume_role_response):
     aws_session_token = assume_role_response["Credentials"]["SessionToken"]
 
     try:
-        client = boto3.client(
+        session = botocore.session.get_session()
+
+        client = session.create_client(
             "sts",
             aws_access_key_id=aws_access_key,
             aws_secret_access_key=aws_secret_key,
