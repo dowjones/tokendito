@@ -9,18 +9,21 @@ from tokendito import okta_helpers
 from tokendito import settings
 
 
+logger = logging.getLogger(__name__)
+
+
 def cli(args):
     """Tokendito retrieves AWS credentials after authenticating with Okta."""
     # Set some required initial values
     args = helpers.setup(args)
 
-    logging.debug("tokendito retrieves AWS credentials after authenticating with Okta.")
+    logger.debug("tokendito retrieves AWS credentials after authenticating with Okta.")
 
     # Collect and organize user specific information
     helpers.process_options(args)
 
     # Authenticate okta and AWS also use assumerole to assign the role
-    logging.debug("Authenticate user with Okta and AWS.")
+    logger.debug("Authenticate user with Okta and AWS.")
 
     secret_session_token = okta_helpers.authenticate_user(
         settings.okta_org, settings.okta_username, settings.okta_password
