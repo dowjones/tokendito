@@ -19,6 +19,9 @@ from tokendito import helpers
 from tokendito import settings
 
 
+logger = logging.getLogger(__name__)
+
+
 def okta_verify_api_method(mfa_challenge_url, payload, headers=None):
     """Okta MFA authentication.
 
@@ -35,15 +38,15 @@ def okta_verify_api_method(mfa_challenge_url, payload, headers=None):
         else:
             response = requests.request("POST", mfa_challenge_url, data=payload)
     except Exception as request_error:
-        logging.error(f"There was an error connecting to Okta: \n{request_error}")
+        logger.error(f"There was an error connecting to Okta: \n{request_error}")
         sys.exit(1)
 
-    logging.debug(f"Okta authentication response: \n{response}")
+    logger.debug(f"Okta authentication response: \n{response}")
 
     try:
         response = response.json()
     except ValueError:
-        logging.debug(f"Received type of response: {type(response.text)}")
+        logger.debug(f"Received type of response: {type(response.text)}")
         response = response.text
 
     return response
@@ -61,8 +64,8 @@ def login_error_code_parser(status=None, status_dict=settings.okta_status_dict):
         message = (
             f"Okta auth failed: {status}. Please verify your settings and try again."
         )
-    logging.error(message)
-    logging.debug(f"Parsing error [{message}] ")
+    logger.error(message)
+    logger.debug(f"Parsing error [{message}] ")
     return message
 
 
@@ -84,8 +87,8 @@ def user_session_token(primary_auth, headers):
     elif status == "MFA_REQUIRED":
         session_token = user_mfa_challenge(headers, primary_auth)
     elif status is None:
-        logging.debug(f"Error parsing response: {json.dumps(primary_auth)}")
-        logging.error("Okta auth failed: unknown status")
+        logger.debug(f"Error parsing response: {json.dumps(primary_auth)}")
+        logger.error("Okta auth failed: unknown status")
         sys.exit(1)
     else:
         login_error_code_parser(status, settings.okta_status_dict)
@@ -105,10 +108,10 @@ def authenticate_user(okta_url, okta_username, okta_password):
     payload = helpers.prepare_payload(username=okta_username, password=okta_password)
 
     primary_auth = okta_verify_api_method(f"{okta_url}/api/v1/authn", payload, headers)
-    logging.debug(f"Authenticate Okta header [{headers}] ")
+    logger.debug(f"Authenticate Okta header [{headers}] ")
 
     session_token = user_session_token(primary_auth, headers)
-    logging.info("User has been succesfully authenticated.")
+    logger.info("User has been succesfully authenticated.")
     return session_token
 
 
@@ -141,7 +144,7 @@ def mfa_provider_type(
             selected_mfa_option, headers, mfa_challenge_url, payload, primary_auth
         )
     else:
-        logging.error(
+        logger.error(
             f"Sorry, the MFA provider '{mfa_provider}' is not yet supported."
             " Please retry with another option."
         )
@@ -156,7 +159,7 @@ def user_mfa_index(preset_mfa, available_mfas, mfa_options):
     :param available_mfas: available mfa method ids
     :param mfa_options: available mfa methods
     """
-    logging.debug("Get mfa method index in request.")
+    logger.debug("Get mfa method index in request.")
     if preset_mfa is not None and preset_mfa in available_mfas:
         mfa_index = available_mfas.index(preset_mfa)
     else:
@@ -172,11 +175,11 @@ def user_mfa_challenge(headers, primary_auth):
     :param primary_auth: primary authentication
     :return: Okta MFA Session token after the successful entry of the code
     """
-    logging.debug("Handle user MFA challenges")
+    logger.debug("Handle user MFA challenges")
     try:
         mfa_options = primary_auth["_embedded"]["factors"]
     except KeyError as error:
-        logging.error(f"There was a wrong response structure: \n{error}")
+        logger.error(f"There was a wrong response structure: \n{error}")
         sys.exit(1)
 
     preset_mfa = settings.mfa_method
@@ -189,7 +192,7 @@ def user_mfa_challenge(headers, primary_auth):
         provider = mfa_options[mfa_index]["provider"]
         mfa_id = mfa_options[mfa_index]["id"]
 
-        logging.warning(
+        logger.warning(
             f"\n\nMore than one method found with {mfa_method}.\n"
             f"Defaulting to {provider} - {mfa_method} - Id: {mfa_id}.\n"
             "This functionality will be deprecated in"
@@ -200,7 +203,7 @@ def user_mfa_challenge(headers, primary_auth):
 
     # time to challenge the mfa option
     selected_mfa_option = mfa_options[mfa_index]
-    logging.debug(f"Selected MFA is [{selected_mfa_option}]")
+    logger.debug(f"Selected MFA is [{selected_mfa_option}]")
 
     mfa_challenge_url = selected_mfa_option["_links"]["verify"]["href"]
 
@@ -213,7 +216,7 @@ def user_mfa_challenge(headers, primary_auth):
     selected_factor = okta_verify_api_method(mfa_challenge_url, payload, headers)
 
     mfa_provider = selected_factor["_embedded"]["factor"]["provider"].lower()
-    logging.debug(f"MFA Challenge URL: [{mfa_challenge_url}] headers: {headers}")
+    logger.debug(f"MFA Challenge URL: [{mfa_challenge_url}] headers: {headers}")
     mfa_session_token = mfa_provider_type(
         mfa_provider,
         selected_factor,
@@ -240,14 +243,14 @@ def user_mfa_options(
     :return: payload data
 
     """
-    logging.debug("Handle user MFA options")
+    logger.debug("Handle user MFA options")
 
-    logging.debug(f"User MFA options selected: [{selected_mfa_option['factorType']}]")
+    logger.debug(f"User MFA options selected: [{selected_mfa_option['factorType']}]")
     if selected_mfa_option["factorType"] == "push":
         return push_approval(headers, mfa_challenge_url, payload)
 
     if settings.mfa_response is None:
-        logging.debug("Getting verification code from user.")
+        logger.debug("Getting verification code from user.")
         print("Type verification code and press Enter")
         settings.mfa_response = helpers.get_input()
 
@@ -256,7 +259,7 @@ def user_mfa_options(
         stateToken=primary_auth["stateToken"], passCode=settings.mfa_response
     )
     mfa_verify = okta_verify_api_method(mfa_challenge_url, payload, headers)
-    logging.debug(f"mfa_verify [{json.dumps(mfa_verify)}]")
+    logger.debug(f"mfa_verify [{json.dumps(mfa_verify)}]")
 
     return mfa_verify
 
@@ -270,7 +273,7 @@ def push_approval(headers, mfa_challenge_url, payload):
     :return: Session Token if succeeded or terminates if user wait goes 5 min
 
     """
-    logging.debug(
+    logger.debug(
         f"Handle push approval from the user [{headers}] [{mfa_challenge_url}]"
     )
 
@@ -280,24 +283,24 @@ def push_approval(headers, mfa_challenge_url, payload):
     while mfa_status == "WAITING":
         mfa_verify = okta_verify_api_method(mfa_challenge_url, payload, headers)
 
-        logging.debug(f"MFA Response:\n{json.dumps(mfa_verify)}")
+        logger.debug(f"MFA Response:\n{json.dumps(mfa_verify)}")
 
         if "factorResult" in mfa_verify:
             mfa_status = mfa_verify["factorResult"]
         elif mfa_verify["status"] == "SUCCESS":
             break
         else:
-            logging.error("There was an error getting your MFA status.")
-            logging.debug(mfa_verify)
+            logger.error("There was an error getting your MFA status.")
+            logger.debug(mfa_verify)
             if "status" in mfa_verify:
-                logging.error(f"Exiting due to error: {mfa_verify['status']}")
+                logger.error(f"Exiting due to error: {mfa_verify['status']}")
             sys.exit(1)
 
         if mfa_status == "REJECTED":
-            logging.error("The Okta Verify push has been denied. Please retry later.")
+            logger.error("The Okta Verify push has been denied. Please retry later.")
             sys.exit(2)
         elif mfa_status == "TIMEOUT":
-            logging.error("Device approval window has expired.")
+            logger.error("Device approval window has expired.")
             sys.exit(2)
 
         time.sleep(2)

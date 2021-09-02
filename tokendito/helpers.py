@@ -22,6 +22,9 @@ from tokendito import settings
 from tokendito.__version__ import __version__
 
 
+logger = logging.getLogger(__name__)
+
+
 def setup(args):
     """Parse command line arguments.
 
@@ -100,8 +103,8 @@ def setup(args):
     )
 
     parsed_args = parser.parse_args(args)
-    set_logging(parsed_args)
-    logging.debug(f"Parse command line arguments [{parsed_args}]")
+    setup_logging(parsed_args)
+    logger.debug(f"Parse command line arguments [{parsed_args}]")
 
     return parsed_args
 
@@ -124,7 +127,7 @@ def create_directory(dir_name):
         try:
             os.mkdir(dir_name)
         except OSError as error:
-            logging.error(
+            logger.error(
                 f"Cannot continue creating directory '{settings.config_dir}': {error.strerror}"
             )
             sys.exit(1)
@@ -136,7 +139,7 @@ def set_okta_username():
     :return: okta_username
 
     """
-    logging.debug("Set okta username in a constant settings variable.")
+    logger.debug("Set okta username in a constant settings variable.")
 
     if settings.okta_username == "":
         okta_username = input("Username: ")
@@ -152,44 +155,33 @@ def set_okta_password():
     :return: okta_password
 
     """
-    logging.debug("Set okta password in a constant settings variable.")
+    logger.debug("Set okta password in a constant settings variable.")
 
     while settings.okta_password == "":
         okta_password = getpass.getpass()
         setattr(settings, "okta_password", okta_password)
 
-    logging.debug("password set interactively")
+    logger.debug("password set interactively")
     return settings.okta_password
 
 
-def set_logging(args):
+def setup_logging(args):
     """Set logging level.
 
     :param args: Arguments provided by a user
-    :return:
+    :return: None
 
     """
-    logger = logging.getLogger()
-    logger.setLevel(args.loglevel)
-    log_level_int = getattr(logging, args.loglevel)
-
-    # increment boto logs to not print api keys
-    logging.getLogger("botocore").setLevel(log_level_int + 10)
-
-    log_format = (
-        "%(levelname)s " "[%(filename)s:%(funcName)s():%(lineno)i]: %(message)s"
+    formatter = logging.Formatter(
+        fmt="%(asctime)s %(name)s [%(funcName)s():%(lineno)i] - %(levelname)s - %(message)s"
     )
-    date_format = "%m/%d/%Y %I:%M:%S %p"
-
-    formatter = logging.Formatter(log_format, date_format)
-
+    handler = logging.StreamHandler()
     if args.output_file:
         handler = logging.FileHandler(args.output_file)
-    else:
-        handler = logging.StreamHandler()
 
     handler.setFormatter(formatter)
     logger.addHandler(handler)
+    logger.setLevel(args.loglevel)
 
 
 def select_role_arn(role_arns, saml_xml, saml_response_string):
@@ -201,13 +193,13 @@ def select_role_arn(role_arns, saml_xml, saml_response_string):
     :return: User input index selected by the user, the arn of selected role
 
     """
-    logging.debug(f"Select the role user wants to pick [{role_arns}]")
+    logger.debug(f"Select the role user wants to pick [{role_arns}]")
 
     role_names = dict((role.split("/")[-1], role) for role in role_arns)
     roles = [role.split("/")[-1] for role in role_arns]
 
     if roles.count(settings.aws_profile) > 1:
-        logging.error(
+        logger.error(
             "There are multiple matches for the profile selected, "
             "please use the --role-arn option to select one"
         )
@@ -215,16 +207,16 @@ def select_role_arn(role_arns, saml_xml, saml_response_string):
 
     if settings.aws_profile in role_names.keys():
         selected_role = role_names[settings.aws_profile]
-        logging.debug(f"Using aws_profile env var for role: [{settings.aws_profile}]")
+        logger.debug(f"Using aws_profile env var for role: [{settings.aws_profile}]")
     elif settings.role_arn is None:
         selected_role = prompt_role_choices(role_arns, saml_xml, saml_response_string)
     elif settings.role_arn in role_arns:
         selected_role = settings.role_arn
     else:
-        logging.error(f"User provided rolename does not exist [{settings.role_arn}]")
+        logger.error(f"User provided rolename does not exist [{settings.role_arn}]")
         sys.exit(2)
 
-    logging.debug(f"Selected role: [{selected_role}]")
+    logger.debug(f"Selected role: [{selected_role}]")
 
     return selected_role
 
@@ -236,7 +228,7 @@ def factor_type_info(factor_type, mfa_option):
     :param mfa_option: mfa_option
     :return: info about mfa_method
     """
-    logging.debug("Choose factor info depending on factor type.")
+    logger.debug("Choose factor info depending on factor type.")
     factor_info = "Not Presented"
 
     if factor_type in ["token", "token:software:totp", "token:hardware"]:
@@ -264,7 +256,7 @@ def mfa_option_info(mfa_option):
     :return: pre-formatted string with MFA factor info if available, None
              otherwise.
     """
-    logging.debug(f"Building info for: {json.dumps(mfa_option)}")
+    logger.debug(f"Building info for: {json.dumps(mfa_option)}")
 
     if "factorType" in mfa_option:
         factor_type = mfa_option["factorType"]
@@ -283,8 +275,8 @@ def select_preferred_mfa_index(
     :param mfa_options: List of available MFA options
     :return: MFA option selected index by the user from the output
     """
-    logging.debug("Show all the MFA options to the users.")
-    logging.debug(json.dumps(mfa_options))
+    logger.debug("Show all the MFA options to the users.")
+    logger.debug(json.dumps(mfa_options))
     print("\nSelect your preferred MFA method and press Enter:")
 
     longest_index = len(str(len(mfa_options)))
@@ -320,7 +312,7 @@ def prompt_role_choices(role_arns, saml_xml, saml_response_string):
     else:
         alias_table = get_account_aliases(saml_xml, saml_response_string)
 
-    logging.debug("Ask user to select role")
+    logger.debug("Ask user to select role")
     print("Please select one of the following:\n")
 
     longest_alias = max([len(d) for d in alias_table.values()])
@@ -334,7 +326,7 @@ def prompt_role_choices(role_arns, saml_xml, saml_response_string):
 
     user_input = collect_integer(len(role_arns))
     selected_role = sorted_role_arns[user_input]
-    logging.debug(f"Selected role [{user_input}]")
+    logger.debug(f"Selected role [{user_input}]")
 
     return selected_role
 
@@ -366,18 +358,18 @@ def extract_arns(saml):
     :param saml: results saml decoded
     :return: Principle ARNs, Role ARNs
     """
-    logging.debug("Decode response string as a SAML decoded value.")
+    logger.debug("Decode response string as a SAML decoded value.")
 
     soup = BeautifulSoup(saml, "html.parser")
     arns = soup.find_all(text=re.compile("arn:aws:iam::"))
     if len(arns) == 0:
-        logging.error("No IAM roles found in SAML response.")
-        logging.debug(arns)
+        logger.error("No IAM roles found in SAML response.")
+        logger.debug(arns)
         sys.exit(2)
 
     roles_and_providers = {i.split(",")[1]: i.split(",")[0] for i in arns}
 
-    logging.debug(f"Collected ARNs: {json.dumps(roles_and_providers)}")
+    logger.debug(f"Collected ARNs: {json.dumps(roles_and_providers)}")
 
     return roles_and_providers
 
@@ -392,11 +384,11 @@ def validate_saml_response(html):
         xml = codecs.decode(saml_base64.encode("ascii"), "base64").decode("utf-8")
 
     if xml is None:
-        logging.error(
+        logger.error(
             "Invalid data detected in SAML response."
             " View the response with the DEBUG loglevel."
         )
-        logging.debug(html)
+        logger.debug(html)
         sys.exit(1)
 
     return xml
@@ -408,7 +400,7 @@ def validate_okta_aws_app_url(input_url=None):
     :param input_url: string
     :return: bool. True if valid, False otherwise
     """
-    logging.debug(f"Will try to match '{input_url}' to a valid URL")
+    logger.debug(f"Will try to match '{input_url}' to a valid URL")
 
     url = urlparse(input_url)
     # Here, we could also check url.netloc against r'.*\.okta(preview)?\.com$'
@@ -419,7 +411,7 @@ def validate_okta_aws_app_url(input_url=None):
     ):
         return True
 
-    logging.debug(f"{url} does not look like a valid match.")
+    logger.debug(f"{url} does not look like a valid match.")
     return False
 
 
@@ -438,15 +430,15 @@ def get_account_aliases(saml_xml, saml_response_string):
     try:
         aws_response = requests.Session().post(url, data={"SAMLResponse": encoded_xml})
     except Exception as request_error:
-        logging.error(
+        logger.error(
             f"There was an error retrieving the AWS SAML page: \n{request_error}"
         )
-        logging.debug(json.dumps(aws_response))
+        logger.debug(json.dumps(aws_response))
         sys.exit(1)
 
     if "Account: " not in aws_response.text:
-        logging.error("There were no accounts returned in the AWS SAML page.")
-        logging.debug(json.dumps(aws_response.text))
+        logger.error("There were no accounts returned in the AWS SAML page.")
+        logger.debug(json.dumps(aws_response.text))
         sys.exit(2)
 
     soup = BeautifulSoup(aws_response.text, "html.parser")
@@ -482,10 +474,10 @@ def process_ini_file(file, profile):
     try:
         for (key, val) in config.items(profile):
             if hasattr(settings, key):
-                logging.debug(f"Set option {key}={val} from ini file")
+                logger.debug(f"Set option {key}={val} from ini file")
                 setattr(settings, key, val)
     except configparser.Error as err:
-        logging.error(f"Could not load profile '{profile}': {str(err)}")
+        logger.error(f"Could not load profile '{profile}': {str(err)}")
         sys.exit(2)
 
 
@@ -497,7 +489,7 @@ def process_arguments(args):
     """
     for (key, val) in vars(args).items():
         if hasattr(settings, key) and val is not None:
-            logging.debug(f"Set option {key}={val} from command line")
+            logger.debug(f"Set option {key}={val} from command line")
             setattr(settings, key, val)
 
 
@@ -509,7 +501,7 @@ def process_environment():
     for (key, val) in os.environ.items():
         key = key.lower()
         if hasattr(settings, key):
-            logging.debug(f"Set option {key}={val} from environment")
+            logger.debug(f"Set option {key}={val} from environment")
             setattr(settings, key, os.getenv(key.upper()))
 
 
@@ -520,7 +512,7 @@ def process_okta_aws_app_url():
     :return: None.
     """
     if not validate_okta_aws_app_url(settings.okta_aws_app_url):
-        logging.error(
+        logger.error(
             "Okta Application URL not found, or invalid. Please check "
             "your configuration and try again."
         )
@@ -538,7 +530,7 @@ def user_configuration_input():
 
     :return: (okta app url, organization username)
     """
-    logging.debug("Obtain user input for the user.")
+    logger.debug("Obtain user input for the user.")
     url = ""
     username = ""
     config_details = []
@@ -576,18 +568,18 @@ def update_configuration(okta_file, profile):
     :param profile: profile of the okta user
     :return:
     """
-    logging.debug("Update okta configuration file on local system.")
+    logger.debug("Update okta configuration file on local system.")
 
     config = configparser.RawConfigParser()
 
     create_directory(settings.config_dir)
 
     if os.path.isfile(okta_file):
-        logging.debug(f"Read Okta config [{okta_file} {profile}]")
+        logger.debug(f"Read Okta config [{okta_file} {profile}]")
         config.read(okta_file, encoding=settings.encoding)
     if not config.has_section(profile):
         config.add_section(profile)
-        logging.debug(f"Add section to Okta config [{profile}]")
+        logger.debug(f"Add section to Okta config [{profile}]")
 
     (app_url, username) = user_configuration_input()
 
@@ -598,11 +590,11 @@ def update_configuration(okta_file, profile):
 
     config.set(profile, "okta_aws_app_url", okta_aws_app_url)
     config.set(profile, "okta_username", okta_username)
-    logging.debug(f"Config Okta [{config}]")
+    logger.debug(f"Config Okta [{config}]")
 
     with open(okta_file, "w+", encoding=settings.encoding) as file:
         config.write(file)
-        logging.debug(f"Write new section Okta config [{okta_file} {config}]")
+        logger.debug(f"Write new section Okta config [{okta_file} {config}]")
 
 
 def set_local_credentials(assume_role_response, role_name, aws_region, aws_output):
@@ -637,7 +629,7 @@ def update_aws_credentials(profile, aws_access_key, aws_secret_key, aws_session_
     """
     cred_file = settings.aws_shared_credentials_file
     cred_dir = os.path.dirname(cred_file)
-    logging.debug(f"Update AWS credentials in: [{cred_file}]")
+    logger.debug(f"Update AWS credentials in: [{cred_file}]")
 
     create_directory(cred_dir)
 
@@ -664,7 +656,7 @@ def update_aws_config(profile, output, region):
     """
     config_file = settings.aws_config_file
     config_dir = os.path.dirname(config_file)
-    logging.debug(f"Update AWS config to file: [{config_file}]")
+    logger.debug(f"Update AWS config to file: [{config_file}]")
 
     create_directory(config_dir)
 
@@ -693,8 +685,8 @@ def check_within_range(user_input, valid_range):
     if int(user_input) in range(0, valid_range):
         range_validation = True
     else:
-        logging.debug(f"Valid range is {valid_range}")
-        logging.error("Value is not in within the selection range.")
+        logger.debug(f"Valid range is {valid_range}")
+        logger.error("Value is not in within the selection range.")
     return range_validation
 
 
@@ -708,7 +700,7 @@ def check_integer(value):
     if str(value).isdigit():
         integer_validation = True
     else:
-        logging.error("Please enter a valid integer.")
+        logger.error("Please enter a valid integer.")
 
     return integer_validation
 
@@ -731,7 +723,7 @@ def get_input(prompt="-> "):
     :return user_input: raw from user.
     """
     user_input = input(prompt)
-    logging.debug(f"User input [{user_input}]")
+    logger.debug(f"User input [{user_input}]")
 
     return user_input
 
@@ -748,7 +740,7 @@ def collect_integer(valid_range):
     while True:
         user_input = get_input()
         valid_input = validate_input(user_input, valid_range)
-        logging.debug(f"User input validation status is {valid_input}")
+        logger.debug(f"User input validation status is {valid_input}")
         if valid_input:
             user_input = int(user_input)
             break
@@ -761,7 +753,7 @@ def prepare_payload(**kwargs):
     :param kwargs: parameters to get together
     :return: payload for the http header
     """
-    logging.debug("Prepare payload")
+    logger.debug("Prepare payload")
 
     payload_dict = {}
     if kwargs is not None:
@@ -790,6 +782,6 @@ def process_options(args):
 
     process_okta_aws_app_url()
     # Set username and password for Okta Authentication
-    logging.debug("Set Okta credentials.")
+    logger.debug("Set Okta credentials.")
     set_okta_username()
     set_okta_password()
