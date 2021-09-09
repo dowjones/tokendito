@@ -723,9 +723,7 @@ def test_get_duo_sid(mocker):
     duo_api_response = Mock()
     duo_api_response.url = test_url
 
-    mocker.patch(
-        "tokendito.duo_helpers.duo_api_post", return_value=duo_api_response
-    )
+    mocker.patch("tokendito.duo_helpers.duo_api_post", return_value=duo_api_response)
 
     duo_sid_info, duo_auth_response = get_duo_sid(test_duo_info)
 
