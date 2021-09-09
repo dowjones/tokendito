@@ -18,8 +18,8 @@ from botocore import __version__ as __botocore_version__
 from bs4 import __version__ as __bs4_version__
 from bs4 import BeautifulSoup
 import requests
+from tokendito import __version__
 from tokendito import settings
-from tokendito.__version__ import __version__
 
 
 logger = logging.getLogger(__name__)

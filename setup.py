@@ -20,7 +20,7 @@ with open("requirements.txt") as f:
     required = f.read().splitlines()
 
 about = {}
-with open(os.path.join(here, "tokendito", "__version__.py"), "r") as f:
+with open(os.path.join(here, "tokendito", "__init__.py"), "r") as f:
     exec(f.read(), about)
 
 if "DEVBUILD" in os.environ:
@@ -58,5 +58,4 @@ setup(
     entry_points={
         "console_scripts": ["tokendito=tokendito.__main__:main"],
     },
-    # $ pip install -e . [dev,test]
 )
