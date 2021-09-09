@@ -60,7 +60,7 @@ def package_regex():
 @pytest.fixture
 def package_version():
     """Run test with access to the Tokendito package."""
-    from tokendito.__version__ import __version__ as tokendito_version
+    from tokendito import __version__ as tokendito_version
 
     return tokendito_version
 
