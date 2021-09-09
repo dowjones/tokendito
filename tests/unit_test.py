@@ -115,15 +115,6 @@ def test_semver_version():
     assert semver.VersionInfo.parse(version)
 
 
-#  def test__version__var_names():
-#      """Ensure variables follow the __varname__ convention."""
-#      import tokendito
-#  
-#      for item in vars(tokendito):
-#          assert item.startswith("__")
-#          assert item.endswith("__")
-
-
 def test_set_okta_username(mocker):
     """Test whether data sent is the same as data returned."""
     from tokendito import helpers, settings
