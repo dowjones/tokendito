@@ -67,13 +67,13 @@ def duo_api_post(url, params={}, headers={}, payload={}):
         logger.debug(f"Non-json response from Duo API: \n{response}")
 
     if response.status_code != 200:
-        logger.critical(
+        logger.error(
             f"Your Duo authentication has failed with status {response.status_code}."
         )
         if json_message and json_message["stat"].lower() != "ok":
-            logger.critical(f"\n{response.status_code}, {json_message['message']}")
+            logger.error(f"\n{response.status_code}, {json_message['message']}")
         else:
-            logger.critical(
+            logger.error(
                 "Please re-run the program with parameter"
                 ' "--loglevel debug" to see more information.'
             )
@@ -106,6 +106,7 @@ def get_duo_sid(duo_info):
         logger.error(
             f"There was an error getting your SID. Please try again. \n{sid_error}"
         )
+        sys.exit(2)
 
     return duo_info, duo_auth_response
 
@@ -267,7 +268,7 @@ def duo_mfa_verify(duo_info, txid):
             logger.debug("Successful MFA challenge received")
             break
         elif challenge_result == "failure":
-            logger.critical(
+            logger.error(
                 "MFA challenge has failed:" f" {challenge_reason}. Please try again."
             )
             sys.exit(2)
@@ -305,6 +306,7 @@ def duo_factor_callback(duo_info, verify_mfa):
             "There was an error getting your application signature "
             f"from Duo: \n{json.dumps(sig_error)}"
         )
+        sys.exit(2)
 
     logger.debug("Completed factor callback.")
     return sig_response
