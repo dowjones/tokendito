@@ -148,3 +148,13 @@ Design & Limitations
 * This tool does not cache and reuse Okta session IDs
 
 `Pull requests welcome <CONTRIBUTING.rst>`_!
+
+
+Configuration settings and precedence
+-------------------------------------
+
+The TOKENDITO uses credentials and configuration settings located in multiple places, such as the system or user environment variables, local configuration files, or explicitly declared on the command line as a parameter. Certain locations take precedence over others. The AWS CLI credentials and configuration settings take precedence in the following order:
+
+1) Command line options – Overrides settings in any other location. You can specify --username, --role-arn, --okta-aws-app-url, and --mfa-method as parameters on the command line.
+2) Environment variables – You can store values in your system's environment variables.
+3) CLI credentials file – The credentials and config file are updated when you run the command tokendito --configure. The credentials file is located at ~/.aws/okta_auth on Linux or macOS, or at C:/Users/USERNAME/.aws/okta_auth on Windows. This file can contain the credential details for the default profile and any named profiles.

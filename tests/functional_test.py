@@ -2,11 +2,13 @@
 # -*- coding: utf-8 -*-
 """Functional tests, and local fixtures."""
 import datetime
+import os
 from os import environ, path
 import re
 import subprocess
 import sys
 import time
+
 
 import pytest
 
@@ -137,9 +139,9 @@ def test_generate_credentials(custom_args):
 
     # Emulate helpers.process_options() bypassing interactive portions.
     tool_args = helpers.setup(custom_args)
+    helpers.process_environment()
     helpers.process_ini_file(tool_args.config_file, "default")
     helpers.process_arguments(tool_args)
-    helpers.process_environment()
 
     if (
         settings.role_arn is None
@@ -211,3 +213,63 @@ def test_aws_credentials(custom_args):
     proc = run_process(runnable)
     assert not proc["stderr"]
     assert proc["exit_status"] == 0
+
+
+def test_good_args_collect(monkeypatch, tmpdir):
+    """Test if order of operation influence using parameters."""
+    from argparse import Namespace
+    from tokendito import helpers, settings
+
+    data = (
+        "[default]\nokta_username = pytest_ini\nokta_org = User1234_ini\n\n[pytest]\n"
+    )
+    path = tmpdir.mkdir("pytest").join("pytest_tokendito1.ini")
+    path.write(data)
+    helpers.process_ini_file(path, "default")
+
+    envs = {
+        "OKTA_ORG": "User1234_env",
+        "okta_aws_app_url": "http://www.tokendito.com_env",
+    }
+    monkeypatch.setattr(os, "environ", envs)
+    helpers.process_environment()
+
+    args = {
+        "okta_username": "pytest_arg",
+        "okta_aws_app_url": "http://www.tokendito.com_arg",
+    }
+    helpers.process_arguments(Namespace(**args))
+
+    assert getattr(settings, "okta_username") == "pytest_arg"
+    assert getattr(settings, "okta_org") == "User1234_env"
+    assert getattr(settings, "okta_aws_app_url") == "http://www.tokendito.com_arg"
+
+
+def test_bad_args_collect(monkeypatch, tmpdir):
+    """Test if wrong order of operation influence using parameters."""
+    from argparse import Namespace
+    from tokendito import helpers, settings
+
+    envs = {
+        "OKTA_ORG": "User1234_env",
+        "okta_aws_app_url": "http://www.tokendito.com_env",
+    }
+    monkeypatch.setattr(os, "environ", envs)
+    helpers.process_environment()
+
+    args = {
+        "okta_username": "pytest_arg",
+        "okta_aws_app_url": "http://www.tokendito.com_arg",
+    }
+    helpers.process_arguments(Namespace(**args))
+
+    data = (
+        "[default]\nokta_username = pytest_ini\nokta_org = User1234_ini\n\n[pytest]\n"
+    )
+    path = tmpdir.mkdir("pytest").join("pytest_tokendito1.ini")
+    path.write(data)
+    helpers.process_ini_file(path, "default")
+
+    assert getattr(settings, "okta_username") != "pytest_arg"
+    assert getattr(settings, "okta_org") != "User1234_env"
+    assert getattr(settings, "okta_aws_app_url") == "http://www.tokendito.com_arg"
