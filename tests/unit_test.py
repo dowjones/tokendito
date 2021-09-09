@@ -29,32 +29,25 @@ def valid_settings():
         "__name__",
         "__package__",
         "__spec__",
-        "ascii",
-        "bytes",
-        "chr",
-        "dict",
-        "division",
+        "aws_config_file",
+        "aws_output",
+        "aws_profile",
+        "aws_region",
+        "aws_shared_credentials_file",
+        "config_dir",
+        "config_file",
         "encoding",
-        "filter",
-        "hex",
-        "input",
-        "int",
-        "list",
-        "map",
-        "next",
-        "object",
-        "oct",
-        "open",
-        "pow",
-        "print_function",
-        "range",
+        "expanduser",
+        "mfa_method",
+        "mfa_response",
+        "okta_aws_app_url",
+        "okta_org",
+        "okta_password",
+        "okta_profile",
+        "okta_status_dict",
+        "okta_username",
         "role_arn",
-        "round",
-        "str",
-        "super",
         "sys",
-        "unicode_literals",
-        "zip",
     ]
 
     settings_keys = dir(settings)
@@ -118,18 +111,9 @@ def test_import_location():
 
 def test_semver_version():
     """Ensure the package version is semver compliant."""
-    from tokendito.__version__ import __version__ as version
+    from tokendito import __version__ as version
 
     assert semver.VersionInfo.parse(version)
-
-
-def test__version__var_names():
-    """Ensure variables follow the __varname__ convention."""
-    from tokendito import __version__
-
-    for item in vars(__version__):
-        assert item.startswith("__")
-        assert item.endswith("__")
 
 
 def test_set_okta_username(mocker):
