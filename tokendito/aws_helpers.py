@@ -38,24 +38,24 @@ def authenticate_to_roles(secret_session_token, url):
         saml_response_string = response.text
         if response.status_code == 400 or response.status_code == 401:
             errmsg = "Invalid Credentials."
-            logger.critical(f"{errmsg}\nExiting with code:{response.status_code}")
+            logger.error(f"{errmsg}\nExiting with code:{response.status_code}")
             sys.exit(2)
         elif response.status_code == 404:
             errmsg = "Invalid Okta application URL. Please verify your configuration."
-            logger.critical(f"{errmsg}")
+            logger.error(f"{errmsg}")
             sys.exit(2)
         elif response.status_code >= 500 and response.status_code < 504:
             errmsg = "Unable to establish connection with Okta. Verify Okta Org URL and try again."
-            logger.critical(f"{errmsg}\nExiting with code:{response.status_code}")
+            logger.error(f"{errmsg}\nExiting with code:{response.status_code}")
             sys.exit(2)
         elif response.status_code != 200:
-            logger.critical(f"Exiting with code:{response.status_code}")
+            logger.error(f"Exiting with code:{response.status_code}")
             logger.debug(saml_response_string)
             sys.exit(2)
 
     except Exception as error:
         errmsg = f"Okta auth failed:\n{error}"
-        logger.critical(errmsg)
+        logger.error(errmsg)
         sys.exit(1)
 
     saml_xml = helpers.validate_saml_response(saml_response_string)
@@ -85,7 +85,7 @@ def assume_role(role_arn, provider_arn, saml):
     session_times = [43200, 28800, 21600, 14400, 7200, 3600, 1800, 900, "exit"]
     for duration in session_times:
         if duration == "exit":
-            logger.critical(
+            logger.error(
                 default_error.format(
                     role_arn,
                     f"IAM role session time is not within set: {session_times[:-1]}",
@@ -130,14 +130,14 @@ def handle_assume_role(role_arn, provider_arn, encoded_xml, duration, default_er
             assume_role_response = "continue"
         elif error.response["Error"]["Code"] == "AccessDenied":
             errmsg = f"Error assuming intermediate {provider_arn} SAML role"
-            logger.critical(errmsg)
+            logger.error(errmsg)
             sys.exit(2)
         else:
-            logger.critical(default_error.format(role_arn, str(error)))
+            logger.error(default_error.format(role_arn, str(error)))
             sys.exit(1)
         # Service Exceptions
     except Exception as error:
-        logger.critical(default_error.format(role_arn, str(error)))
+        logger.error(default_error.format(role_arn, str(error)))
         sys.exit(1)
 
     return assume_role_response
@@ -169,7 +169,7 @@ def ensure_keys_work(assume_role_response):
         )
         client.get_caller_identity()
     except Exception as auth_error:
-        logger.critical(
+        logger.error(
             f"There was an error authenticating your keys with AWS: {auth_error}"
         )
         sys.exit(1)

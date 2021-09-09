@@ -706,7 +706,7 @@ def test_get_duo_sid(mocker):
     from tokendito import settings
     from tokendito.duo_helpers import get_duo_sid
 
-    expected_duo_info = {
+    test_duo_info = {
         "okta_factor": "okta_factor",
         "factor_id": 1234,
         "state_token": 12345,
@@ -718,13 +718,17 @@ def test_get_duo_sid(mocker):
         "sid": "",
         "version": "3.6",
     }
-    expected_output = (expected_duo_info, "http://test.token.dito")
 
-    mocker.patch(
-        "tokendito.duo_helpers.duo_api_post", return_value="http://test.token.dito"
-    )
+    test_url = "http://test.token.dito?sid=testval"
+    duo_api_response = Mock()
+    duo_api_response.url = test_url
 
-    assert get_duo_sid(expected_duo_info) == expected_output
+    mocker.patch("tokendito.duo_helpers.duo_api_post", return_value=duo_api_response)
+
+    duo_sid_info, duo_auth_response = get_duo_sid(test_duo_info)
+
+    assert duo_sid_info["sid"] == "testval"
+    assert duo_auth_response.url == test_url
 
 
 @pytest.mark.parametrize("status_code", [(400), (401), (404), (500), (503)])
