@@ -7,7 +7,7 @@ with_mfa = {
     "_embedded": {
         "user": {
             "profile": {
-                "login": "Token.Dito@acme.org",
+                "login": "First.Last@acme.org",
             },
         },
         "factors": [
@@ -21,13 +21,13 @@ with_mfa = {
                 "id": "FfdskljfdsS1ljUT0r8",
                 "factorType": "token:software:totp",
                 "provider": "GOOGLE",
-                "profile": {"credentialId": "Token.Dito@acme.org"},
+                "profile": {"credentialId": "First.Last@acme.org"},
             },
             {
                 "id": "fdsfsd6ewREr8",
                 "factorType": "token:software:totp",
                 "provider": "OKTA",
-                "profile": {"credentialId": "Token.Dito@acme.org"},
+                "profile": {"credentialId": "First.Last@acme.org"},
             },
         ],
     },

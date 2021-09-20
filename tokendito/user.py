@@ -9,6 +9,8 @@ import getpass
 import json
 import logging
 import os
+from pathlib import Path
+from pkgutil import iter_modules
 import platform
 import re
 import sys
@@ -19,8 +21,8 @@ from bs4 import __version__ as __bs4_version__
 from bs4 import BeautifulSoup
 import requests
 from tokendito import __version__
-from tokendito import settings
-
+from tokendito import Config
+from tokendito import config as config
 
 logger = logging.getLogger(__name__)
 
@@ -31,67 +33,38 @@ def setup(args):
     :return: args parse object
     """
     parser = argparse.ArgumentParser(
-        prog="tokendito", description="Gets a STS token to use with the AWS CLI"
+        prog="tokendito", description="Gets a STS token to use with the AWS CLI and SDK."
     )
-    parser.add_argument(
-        "--version", "-v", action="store_true", help="Displays version and exit"
-    )
+    parser.add_argument("--version", action="store_true", help="Displays version and exit")
     parser.add_argument(
         "--configure",
-        "-c",
         action="store_true",
-        help="Prompt user for " "configuration parameters",
+        help="Prompt user for configuration parameters",
     )
     parser.add_argument(
         "--username",
-        "-u",
         dest="okta_username",
         help="username to login to Okta. You can "
         "also use the OKTA_USERNAME environment variable.",
     )
     parser.add_argument(
         "--password",
-        "-p",
         dest="okta_password",
         help="password to login to Okta. You "
         "can also user the OKTA_PASSWORD environment variable.",
     )
     parser.add_argument(
+        "--profile",
+        dest="user_config_profile",
+        default=config.user["config_profile"],
+        help="Tokendito configuration profile to use.",
+    )
+    parser.add_argument(
         "--config-file",
-        "-C",
-        default=settings.config_file,
+        dest="user_config_file",
+        default=config.user["config_file"],
         help="Use an alternative configuration file",
     )
-    parser.add_argument("--okta-aws-app-url", "-ou", help="Okta App URL to use.")
-    parser.add_argument(
-        "--okta-profile",
-        "-op",
-        default=settings.okta_profile,
-        help="Okta configuration profile to use.",
-    )
-    parser.add_argument(
-        "--aws-region",
-        "-r",
-        help="Sets the AWS region for the profile",
-    )
-    parser.add_argument(
-        "--aws-output",
-        "-ao",
-        help="Sets the AWS output type for the profile",
-    )
-    parser.add_argument(
-        "--aws-profile",
-        "-ap",
-        help="Override AWS profile to save as in the credentials file.",
-    )
-    parser.add_argument("--mfa-method", "-mm", help="Sets the MFA method")
-    parser.add_argument(
-        "--mfa-response",
-        "-mr",
-        help="Sets the MFA response to a challenge",
-    )
-    parser.add_argument("--role-arn", "-R", help="Sets the IAM role")
-    parser.add_argument("--output-file", "-o", help="Log output to filename")
     parser.add_argument(
         "--loglevel",
         "-l",
@@ -99,7 +72,33 @@ def setup(args):
         default="WARNING",
         choices=["DEBUG", "INFO", "WARN", "ERROR"],
         help="[DEBUG|INFO|WARN|ERROR], default loglevel is WARNING."
-        " Note: DEBUG level may display credentials",
+        " Note: DEBUG level will display credentials",
+    )
+    parser.add_argument("--log-output-file", help="Optional file to log output to.")
+    parser.add_argument("--aws-config-file", help="AWS Configuration file to write to.")
+    parser.add_argument(
+        "--aws-output",
+        help="Sets the output type for the AWS profile.",
+    )
+    parser.add_argument(
+        "--aws-profile",
+        help="AWS profile to save as in the credentials file.",
+    )
+    parser.add_argument(
+        "--aws-region",
+        help="Sets the region for the AWS profile.",
+    )
+    parser.add_argument("--aws-role-arn", help="Sets the IAM role.")
+    parser.add_argument("--aws-shared-credentials-file", help="AWS credentials file to write to.")
+
+    parser.add_argument(
+        "--okta-app-url",
+        help="Okta App URL to use.",
+    )
+    parser.add_argument("--okta-mfa-method", help="Sets the MFA method")
+    parser.add_argument(
+        "--okta-mfa-response",
+        help="Sets the MFA response to a challenge",
     )
 
     parsed_args = parser.parse_args(args)
@@ -128,7 +127,7 @@ def create_directory(dir_name):
             os.mkdir(dir_name)
         except OSError as error:
             logger.error(
-                f"Cannot continue creating directory '{settings.config_dir}': {error.strerror}"
+                f"Cannot continue creating directory: {config.user['config_dir']}: {error.strerror}"
             )
             sys.exit(1)
 
@@ -139,13 +138,13 @@ def set_okta_username():
     :return: okta_username
 
     """
-    logger.debug("Set okta username in a constant settings variable.")
+    logger.debug("Set username.")
 
-    if settings.okta_username == "":
-        okta_username = input("Username: ")
-        setattr(settings, "okta_username", okta_username)
-
-    return settings.okta_username
+    if config.okta["username"] == "":
+        username = input("Username: ")
+        config.okta["username"] = username
+        logger.debug("username set interactively.")
+    return config.okta["username"]
 
 
 def set_okta_password():
@@ -155,14 +154,31 @@ def set_okta_password():
     :return: okta_password
 
     """
-    logger.debug("Set okta password in a constant settings variable.")
+    logger.debug("Set password.")
 
-    while settings.okta_password == "":
-        okta_password = getpass.getpass()
-        setattr(settings, "okta_password", okta_password)
-
+    while config.okta["password"] == "":
+        password = getpass.getpass()
+        config.okta["password"] = password
     logger.debug("password set interactively")
-    return settings.okta_password
+
+    return config.okta["password"]
+
+
+def get_submodule_names(location=__file__):
+    """Inspect the current module and find any submodules.
+
+    :return: List of submodule names
+
+    """
+    submodules = []
+
+    try:
+        package = Path(location).resolve()
+        submodules = [x.name for x in iter_modules([str(package.parent)])]
+    except Exception as err:
+        logger.warning(f"Could not resolve modules: {str(err)}")
+        pass
+    return submodules
 
 
 def setup_logging(args):
@@ -172,16 +188,24 @@ def setup_logging(args):
     :return: None
 
     """
+    root_logger = logging.getLogger()
     formatter = logging.Formatter(
         fmt="%(asctime)s %(name)s [%(funcName)s():%(lineno)i] - %(levelname)s - %(message)s"
     )
     handler = logging.StreamHandler()
-    if args.output_file:
-        handler = logging.FileHandler(args.output_file)
-
+    if args.log_output_file:
+        handler = logging.FileHandler(args.log_output_file)
     handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    logger.setLevel(args.loglevel)
+
+    # Set a reasonable default logging format.
+    root_logger.addHandler(handler)
+
+    # Pre-create a log handler for each submodule
+    # with the same format and level. Settings are
+    # inherited from the root logger.
+    for submodule in get_submodule_names():
+        submodule_logger = logging.getLogger(f"tokendito.{submodule}")
+        submodule_logger.setLevel(args.loglevel)
 
 
 def select_role_arn(role_arns, saml_xml, saml_response_string):
@@ -198,22 +222,22 @@ def select_role_arn(role_arns, saml_xml, saml_response_string):
     role_names = dict((role.split("/")[-1], role) for role in role_arns)
     roles = [role.split("/")[-1] for role in role_arns]
 
-    if roles.count(settings.aws_profile) > 1:
+    if roles.count(config.aws["profile"]) > 1:
         logger.error(
             "There are multiple matches for the profile selected, "
             "please use the --role-arn option to select one"
         )
         sys.exit(2)
 
-    if settings.aws_profile in role_names.keys():
-        selected_role = role_names[settings.aws_profile]
-        logger.debug(f"Using aws_profile env var for role: [{settings.aws_profile}]")
-    elif settings.role_arn is None:
+    if config.aws["profile"] in role_names.keys():
+        selected_role = role_names[config.aws["profile"]]
+        logger.debug(f"Using aws_profile env var for role: [{config.aws['profile']}]")
+    elif config.aws["role_arn"] is None:
         selected_role = prompt_role_choices(role_arns, saml_xml, saml_response_string)
-    elif settings.role_arn in role_arns:
-        selected_role = settings.role_arn
+    elif config.aws["role_arn"] in role_arns:
+        selected_role = config.aws["role_arn"]
     else:
-        logger.error(f"User provided rolename does not exist [{settings.role_arn}]")
+        logger.error(f"User provided rolename does not exist [{config.aws['role_arn']}]")
         sys.exit(2)
 
     logger.debug(f"Selected role: [{selected_role}]")
@@ -257,7 +281,7 @@ def mfa_option_info(mfa_option):
              otherwise.
     """
     logger.debug(f"Building info for: {json.dumps(mfa_option)}")
-
+    factor_info = None
     if "factorType" in mfa_option:
         factor_type = mfa_option["factorType"]
         factor_info = factor_type_info(factor_type, mfa_option)
@@ -267,9 +291,7 @@ def mfa_option_info(mfa_option):
     return factor_info
 
 
-def select_preferred_mfa_index(
-    mfa_options, factor_key="provider", subfactor_key="factorType"
-):
+def select_preferred_mfa_index(mfa_options, factor_key="provider", subfactor_key="factorType"):
     """Show all the MFA options to the users.
 
     :param mfa_options: List of available MFA options
@@ -341,7 +363,7 @@ def print_selected_role(profile_name, expiration_time):
     """
     expiration_time_local = utc_to_local(expiration_time)
     msg = (
-        f"\nGenerated profile '{profile_name}' in {settings.aws_shared_credentials_file}.\n"
+        f"\nGenerated profile '{profile_name}' in {config.aws['shared_credentials_file']}.\n"
         "\nUse profile to authenticate to AWS:\n\t"
         f"aws --profile '{profile_name}' sts get-caller-identity"
         "\nOR\n\t"
@@ -385,8 +407,7 @@ def validate_saml_response(html):
 
     if xml is None:
         logger.error(
-            "Invalid data detected in SAML response."
-            " View the response with the DEBUG loglevel."
+            "Invalid data detected in SAML response. View the response with the DEBUG loglevel."
         )
         logger.debug(html)
         sys.exit(1)
@@ -394,7 +415,7 @@ def validate_saml_response(html):
     return xml
 
 
-def validate_okta_aws_app_url(input_url=None):
+def validate_okta_app_url(input_url=None):
     """Validate whether a given URL is a valid AWS app URL in Okta.
 
     :param input_url: string
@@ -405,10 +426,7 @@ def validate_okta_aws_app_url(input_url=None):
     url = urlparse(input_url)
     # Here, we could also check url.netloc against r'.*\.okta(preview)?\.com$'
     # but Okta allows the usage of custome URLs such as login.acme.com
-    if (
-        url.scheme == "https"
-        and re.match(r"^/home/amazon_aws/\w{20}/\d{3}$", url.path) is not None
-    ):
+    if url.scheme == "https" and re.match(r"^/home/amazon_aws/\w{20}/\d{3}$", url.path) is not None:
         return True
 
     logger.debug(f"{url} does not look like a valid match.")
@@ -430,9 +448,7 @@ def get_account_aliases(saml_xml, saml_response_string):
     try:
         aws_response = requests.Session().post(url, data={"SAMLResponse": encoded_xml})
     except Exception as request_error:
-        logger.error(
-            f"There was an error retrieving the AWS SAML page: \n{request_error}"
-        )
+        logger.error(f"There was an error retrieving the AWS SAML page: \n{request_error}")
         logger.debug(json.dumps(aws_response))
         sys.exit(1)
 
@@ -443,9 +459,7 @@ def get_account_aliases(saml_xml, saml_response_string):
 
     soup = BeautifulSoup(aws_response.text, "html.parser")
     account_names = soup.find_all(text=re.compile("Account:"))
-    alias_table = {
-        str(i.split(" ")[-1]).strip("()"): i.split(" ")[1] for i in account_names
-    }
+    alias_table = {str(i.split(" ")[-1]).strip("()"): i.split(" ")[1] for i in account_names}
 
     return alias_table
 
@@ -465,70 +479,126 @@ def process_ini_file(file, profile):
 
     :param file: filename
     :param profile: profile to read
-    :return: None
+    :return: Config object with configuration values
     """
-    config = configparser.ConfigParser(default_section=settings.okta_profile)
-    if config.read(file) == []:
-        return
+    res = dict()
+    pattern = re.compile(r"^(.*?)_(.*)")
 
+    logger.debug(f"Reading ini file '{file}', profile '{config.user['config_profile']}'")
+    ini = configparser.ConfigParser(default_section=config.user["config_profile"])
+    # Here, group(1) is the dictionary key, and group(2) the configuration element
     try:
-        for (key, val) in config.items(profile):
-            if hasattr(settings, key):
-                logger.debug(f"Set option {key}={val} from ini file")
-                setattr(settings, key, val)
+        ini.read(file)
+        for (key, val) in ini.items(profile):
+            match = re.search(pattern, key.lower())
+            if match:
+                if match.group(1) not in res:
+                    res[match.group(1)] = dict()
+                res[match.group(1)][match.group(2)] = val
+                logger.debug(f"Set {match.group(1)}['{match.group(2)}']={val} from ini file")
     except configparser.Error as err:
         logger.error(f"Could not load profile '{profile}': {str(err)}")
         sys.exit(2)
+
+    try:
+        config_ini = Config(**res)
+        logger.debug(f"configuration from {file} is: {config_ini}")
+    except (AttributeError, KeyError, ValueError) as err:
+        logger.error(
+            f"The configuration file {file} in [{profile}] is incorrect: {err}"
+            ". Please check your settings and try again."
+        )
+        sys.exit(1)
+    return config_ini
 
 
 def process_arguments(args):
     """Process command-line arguments.
 
     :param args: argparse object
-    :return: None
+    :return: Config object with configuration values
     """
+    res = dict()
+    pattern = re.compile(r"^(.*?)_(.*)")
+    logger.debug("Processing command-line arguments")
     for (key, val) in vars(args).items():
-        if hasattr(settings, key) and val is not None:
-            logger.debug(f"Set option {key}={val} from command line")
-            setattr(settings, key, val)
+        match = re.search(pattern, key.lower())
+        if match:
+            if match.group(1) not in get_submodule_names():
+                continue
+            if match.group(1) not in res:
+                res[match.group(1)] = dict()
+            if val:
+                res[match.group(1)][match.group(2)] = val
+                logger.debug(f"Set {match.group(1)}['{match.group(2)}']={val} from the CLI")
+
+    try:
+        config_args = Config(**res)
+        logger.debug(f"configuration from arguments is: {config_args}")
+    except (AttributeError, KeyError, ValueError) as err:
+        logger.critical(
+            f"Command line arguments not correct: {err}"
+            ". This should not happen, please contact the package maintainers."
+        )
+        sys.exit(1)
+    return config_args
 
 
-def process_environment():
+def process_environment(prefix="tokendito"):
     """Process environment variables.
 
-    :return: None
+    :return: Config object with configuration values.
     """
+    res = dict()
+    pattern = re.compile(fr"^({prefix})_(.*?)_(.*)")
+    logger.debug("Processing environment variables")
+    # Here, group(1) is the prefix variable, group(2) is the dictionary key,
+    # and group(3) the configuration element.
     for (key, val) in os.environ.items():
-        key = key.lower()
-        if hasattr(settings, key):
-            logger.debug(f"Set option {key}={val} from environment")
-            setattr(settings, key, os.getenv(key.upper()))
+        match = re.search(pattern, key.lower())
+        if match:
+            if match.group(2) not in res:
+                res[match.group(2)] = dict()
+            res[match.group(2)][match.group(3)] = val
+            logger.debug(f"set option {match.group(2)}['{match.group(3)}']={val} from environment")
+
+    try:
+        config_env = Config(**res)
+        logger.debug(f"configuration from the environment is: {config_env}")
+
+    except (AttributeError, KeyError, ValueError) as err:
+        logger.error(
+            f"The environment variables are incorrectly set: {err}"
+            ". Please check your settings and try again."
+        )
+        sys.exit(1)
+    return config_env
 
 
-def process_okta_aws_app_url():
+def process_okta_app_url():
     """Process Okta app url.
 
     :param app_url: string with okta tile URL.
     :return: None.
     """
-    if not validate_okta_aws_app_url(settings.okta_aws_app_url):
+    if not validate_okta_app_url(config.okta["app_url"]):
         logger.error(
             "Okta Application URL not found, or invalid. Please check "
             "your configuration and try again."
         )
         sys.exit(2)
 
-    url = urlparse(settings.okta_aws_app_url)
+    url = urlparse(config.okta["app_url"])
     okta_org = f"{url.scheme}://{url.netloc}"
     okta_aws_app_url = f"{okta_org}{url.path}"
-    setattr(settings, "okta_org", okta_org)
-    setattr(settings, "okta_aws_app_url", okta_aws_app_url)
+    config.okta["org"] = okta_org
+    config.okta["app_url"] = okta_aws_app_url
 
 
 def user_configuration_input():
     """Obtain user input for the user.
 
-    :return: (okta app url, organization username)
+    :return: tuple with (okta_app_url, username)
     """
     logger.debug("Obtain user input for the user.")
     url = ""
@@ -537,13 +607,13 @@ def user_configuration_input():
     message = {
         "app_url": "\nOkta App URL. E.g https://acme.okta.com/home/"
         "amazon_aws/b07384d113edec49eaa6/123\n[none]: ",
-        "username": "\nOrganization username. E.g jane.doe@acme.com" "\n[none]: ",
+        "username": "\nOrganization username. E.g jane.doe@acme.com\n[none]: ",
     }
 
     while url == "":
         user_data = input(message["app_url"])
         user_data = user_data.strip()
-        if validate_okta_aws_app_url(user_data):
+        if validate_okta_app_url(user_data):
             url = user_data
         else:
             print("Invalid input, try again.")
@@ -561,40 +631,40 @@ def user_configuration_input():
     return (config_details[0], config_details[1])
 
 
-def update_configuration(okta_file, profile):
-    """Update okta configuration file on local system.
+def update_configuration(ini_file, profile):
+    """Update configuration file on local system.
 
-    :param okta_file: Default configuration system file
-    :param profile: profile of the okta user
-    :return:
+    :param ini_file: Configuration file
+    :param profile: profile in which to write.
+    :return: None
     """
-    logger.debug("Update okta configuration file on local system.")
+    logger.debug("Update configuration file on local system.")
 
-    config = configparser.RawConfigParser()
+    ini = configparser.RawConfigParser()
 
-    create_directory(settings.config_dir)
+    create_directory(config.user["config_dir"])
 
-    if os.path.isfile(okta_file):
-        logger.debug(f"Read Okta config [{okta_file} {profile}]")
-        config.read(okta_file, encoding=settings.encoding)
-    if not config.has_section(profile):
-        config.add_section(profile)
-        logger.debug(f"Add section to Okta config [{profile}]")
+    if os.path.isfile(ini_file):
+        logger.debug(f"Read config [{ini_file} {profile}]")
+        ini.read(ini_file, encoding=config.user["encoding"])
+    if not ini.has_section(profile):
+        ini.add_section(profile)
+        logger.debug(f"Added section {profile} to configuration")
 
     (app_url, username) = user_configuration_input()
 
     url = urlparse(app_url.strip())
     okta_username = username.strip()
 
-    okta_aws_app_url = f"{url.scheme}://{url.netloc}{url.path}"
+    okta_app_url = f"{url.scheme}://{url.netloc}{url.path}"
 
-    config.set(profile, "okta_aws_app_url", okta_aws_app_url)
-    config.set(profile, "okta_username", okta_username)
-    logger.debug(f"Config Okta [{config}]")
+    ini.set(profile, "okta_app_url", okta_app_url)
+    ini.set(profile, "okta_username", okta_username)
+    logger.debug(f"Final configuration: [{ini}]")
 
-    with open(okta_file, "w+", encoding=settings.encoding) as file:
-        config.write(file)
-        logger.debug(f"Write new section Okta config [{okta_file} {config}]")
+    with open(ini_file, "w+", encoding=config.user["encoding"]) as file:
+        ini.write(file)
+        logger.debug(f"Write new config [{ini_file} {config}]")
 
 
 def set_local_credentials(assume_role_response, role_name, aws_region, aws_output):
@@ -610,8 +680,8 @@ def set_local_credentials(assume_role_response, role_name, aws_region, aws_outpu
     aws_secret_key = assume_role_response["Credentials"]["SecretAccessKey"]
     aws_session_token = assume_role_response["Credentials"]["SessionToken"]
 
-    if settings.aws_profile is not None:
-        role_name = settings.aws_profile
+    if config.aws["profile"] is not None:
+        role_name = config.aws["profile"]
 
     update_aws_credentials(role_name, aws_access_key, aws_secret_key, aws_session_token)
     update_aws_config(role_name, aws_output, aws_region)
@@ -627,22 +697,22 @@ def update_aws_credentials(profile, aws_access_key, aws_secret_key, aws_session_
     :param aws_secret_key: AWS secret access key
     :param aws_session_token: Session token
     """
-    cred_file = settings.aws_shared_credentials_file
+    cred_file = config.aws["shared_credentials_file"]
     cred_dir = os.path.dirname(cred_file)
     logger.debug(f"Update AWS credentials in: [{cred_file}]")
 
     create_directory(cred_dir)
 
-    config = configparser.RawConfigParser()
+    ini = configparser.RawConfigParser()
     if os.path.isfile(cred_file):
-        config.read(cred_file, encoding=settings.encoding)
-    if not config.has_section(profile):
-        config.add_section(profile)
-    config.set(profile, "aws_access_key_id", aws_access_key)
-    config.set(profile, "aws_secret_access_key", aws_secret_key)
-    config.set(profile, "aws_session_token", aws_session_token)
-    with open(cred_file, "w+", encoding=settings.encoding) as file:
-        config.write(file)
+        ini.read(cred_file, encoding=config.user["encoding"])
+    if not ini.has_section(profile):
+        ini.add_section(profile)
+    ini.set(profile, "aws_access_key_id", aws_access_key)
+    ini.set(profile, "aws_secret_access_key", aws_secret_key)
+    ini.set(profile, "aws_session_token", aws_session_token)
+    with open(cred_file, "w+", encoding=config.user["encoding"]) as file:
+        ini.write(file)
 
 
 def update_aws_config(profile, output, region):
@@ -654,7 +724,7 @@ def update_aws_config(profile, output, region):
     :return:
 
     """
-    config_file = settings.aws_config_file
+    config_file = config.aws["config_file"]
     config_dir = os.path.dirname(config_file)
     logger.debug(f"Update AWS config to file: [{config_file}]")
 
@@ -662,16 +732,16 @@ def update_aws_config(profile, output, region):
 
     # Prepend the word profile the the profile name
     profile = f"profile {profile}"
-    config = configparser.RawConfigParser()
+    ini = configparser.RawConfigParser()
     if os.path.isfile(config_file):
-        config.read(config_file, encoding=settings.encoding)
-    if not config.has_section(profile):
-        config.add_section(profile)
-    config.set(profile, "output", output)
-    config.set(profile, "region", region)
+        ini.read(config_file, encoding=config.user["encoding"])
+    if not ini.has_section(profile):
+        ini.add_section(profile)
+    ini.set(profile, "output", output)
+    ini.set(profile, "region", region)
 
-    with open(config_file, "w+", encoding=settings.encoding) as file:
-        config.write(file)
+    with open(config_file, "w+", encoding=config.user["encoding"]) as file:
+        ini.write(file)
 
 
 def check_within_range(user_input, valid_range):
@@ -770,17 +840,24 @@ def process_options(args):
         sys.exit(0)
 
     if args.configure:
-        update_configuration(args.config_file, args.okta_profile)
+        update_configuration(args.user_config_file, args.user_config_profile)
         sys.exit(0)
 
     # 1: read ini file (if it exists)
-    process_ini_file(args.config_file, args.okta_profile)
-    # 2: override with ENV
-    process_environment()
-    # 3: override with args
-    process_arguments(args)
+    config_ini = process_ini_file(args.user_config_file, args.user_config_profile)
 
-    process_okta_aws_app_url()
+    # 2: override with ENV
+    config_env = process_environment()
+
+    # 3: override with args
+    config_args = process_arguments(args)
+
+    config.update(config_ini)
+    config.update(config_env)
+    config.update(config_args)
+    logger.debug(f"Final configuration is {config}")
+
+    process_okta_app_url()
     # Set username and password for Okta Authentication
     logger.debug("Set Okta credentials.")
     set_okta_username()
