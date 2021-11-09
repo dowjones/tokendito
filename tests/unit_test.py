@@ -7,66 +7,10 @@ import sys
 from unittest.mock import Mock
 
 import pytest
-import requests_mock
 import semver
-from tokendito.settings import okta_status_dict
 
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-
-@pytest.fixture
-def valid_settings():
-    """Return a dict with valid settings for the tokendito.settings module."""
-    from tokendito import settings
-
-    builtins_and_methods = [
-        "__builtins__",
-        "__cached__",
-        "__doc__",
-        "__file__",
-        "__loader__",
-        "__name__",
-        "__package__",
-        "__spec__",
-        "aws_config_file",
-        "aws_output",
-        "aws_profile",
-        "aws_region",
-        "aws_shared_credentials_file",
-        "config_dir",
-        "config_file",
-        "encoding",
-        "expanduser",
-        "mfa_method",
-        "mfa_response",
-        "okta_aws_app_url",
-        "okta_org",
-        "okta_password",
-        "okta_profile",
-        "okta_status_dict",
-        "okta_username",
-        "role_arn",
-        "sys",
-    ]
-
-    settings_keys = dir(settings)
-    unmatched_keys = list(set(settings_keys) - set(builtins_and_methods))
-
-    valid_keys = {str(key): key + "_pytest_patched" for key in unmatched_keys}
-    return valid_keys
-
-
-@pytest.fixture
-def invalid_settings():
-    """Return a dict with invalid settings for the tokendito.settings module."""
-    invalid_keys = {
-        "okta": "okta_pytest_patched",
-        "okta_deadbeef": "okta_deadbeef_pytest_patched",
-        "aws_deadbeef": "aws_deadbeef_pytest_patched",
-        "pytest_bad_value": "pytest_bad_value_pytest_patched",
-    }
-    return invalid_keys
 
 
 @pytest.fixture
@@ -102,8 +46,7 @@ def test_import_location():
     import tokendito
 
     local_path = os.path.realpath(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        + "/tokendito/__init__.py"
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/tokendito/__init__.py"
     )
     imported_path = os.path.realpath(tokendito.__file__)
     assert imported_path.startswith(local_path)
@@ -118,25 +61,24 @@ def test_semver_version():
 
 def test_set_okta_username(mocker):
     """Test whether data sent is the same as data returned."""
-    from tokendito import helpers, settings
+    from tokendito import user, config
 
-    mocker.patch("tokendito.helpers.input", return_value="pytest_patched")
-    val = helpers.set_okta_username()
+    mocker.patch("tokendito.user.input", return_value="pytest_patched")
+    val = user.set_okta_username()
 
     assert val == "pytest_patched"
-    assert settings.okta_username == "pytest_patched"
+    assert config.okta["username"] == "pytest_patched"
 
 
-def test_set_okta_password(monkeypatch):
+def test_set_okta_password(mocker):
     """Test whether data sent is the same as data returned."""
-    from tokendito import helpers, settings
-    import getpass
+    from tokendito import user, config
 
-    monkeypatch.setattr(getpass, "getpass", lambda: "pytest_patched")
-    val = helpers.set_okta_password()
+    mocker.patch("getpass.getpass", return_value="pytest_patched")
+    val = user.set_okta_password()
 
     assert val == "pytest_patched"
-    assert settings.okta_password == "pytest_patched"
+    assert config.okta["password"] == "pytest_patched"
 
 
 @pytest.mark.parametrize(
@@ -153,23 +95,22 @@ def test_set_okta_password(monkeypatch):
         ),
     ],
 )
-def test_validate_okta_aws_app_url(url, expected):
+def test_validate_app_url(url, expected):
     """Test whether the Okta URL is parsed correctly."""
-    from tokendito import helpers
+    from tokendito import user
 
-    assert helpers.validate_okta_aws_app_url(input_url=url) is expected
+    assert user.validate_okta_app_url(input_url=url) is expected
 
 
 @pytest.mark.parametrize(
     "test,limit,expected",
     [(0, 10, True), (5, 10, True), (10, 10, False), (-1, 10, False), (1, 0, False)],
 )
-def test_check_within_range(mocker, test, limit, expected):
+def test_check_within_range(test, limit, expected):
     """Test whether a given number is in the range 0 >= num < limit."""
-    from tokendito import helpers
+    from tokendito import user
 
-    mocker.patch("logging.error")
-    assert helpers.check_within_range(test, limit) is expected
+    assert user.check_within_range(test, limit) is expected
 
 
 @pytest.mark.parametrize(
@@ -188,65 +129,59 @@ def test_check_within_range(mocker, test, limit, expected):
         (None, False),
     ],
 )
-def test_check_integer(value, expected, mocker):
+def test_check_integer(value, expected):
     """Test whether the integer testing function works within boundaries."""
-    from tokendito import helpers
+    from tokendito import user
 
-    mocker.patch("logging.error")
-    assert helpers.check_integer(value) is expected
+    assert user.check_integer(value) is expected
 
 
 @pytest.mark.parametrize(
     "test,limit,expected", [(1, 10, True), (-1, 10, False), ("pytest", 10, False)]
 )
-def test_validate_input(mocker, test, limit, expected):
+def test_validate_input(test, limit, expected):
     """Check if a given input is within the 0 >= num < limit range."""
-    from tokendito import helpers
+    from tokendito import user
 
-    mocker.patch("logging.error")
-    assert helpers.validate_input(test, limit) is expected
+    assert user.validate_input(test, limit) is expected
 
 
 def test_get_input(mocker):
     """Check if provided input is return unmodified."""
-    from tokendito import helpers
+    from tokendito import user
 
-    mocker.patch("tokendito.helpers.input", return_value="pytest_patched")
-    assert helpers.get_input() == "pytest_patched"
+    mocker.patch("tokendito.user.input", return_value="pytest_patched")
+    assert user.get_input() == "pytest_patched"
 
 
 @pytest.mark.parametrize("value,expected", [("00", 0), ("01", 1), ("5", 5)])
 def test_collect_integer(mocker, value, expected):
     """Check if a given digit or series of digits are properly casted to int."""
-    from tokendito import helpers
+    from tokendito import user
 
-    mocker.patch("tokendito.helpers.input", return_value=value)
-    assert helpers.collect_integer(10) == expected
+    mocker.patch("tokendito.user.input", return_value=value)
+    assert user.collect_integer(10) == expected
 
 
 def test_utc_to_local():
     """Check if passed utc datestamp becomes local one."""
-    from tokendito import helpers
+    from tokendito import user
     from datetime import timezone
 
     utc = datetime.utcnow()
     local_time = utc.replace(tzinfo=timezone.utc).astimezone(tz=None)
     local_time = local_time.strftime("%Y-%m-%d %H:%M:%S %Z")
 
-    assert helpers.utc_to_local(utc) == local_time
+    assert user.utc_to_local(utc) == local_time
 
 
 def test_prepare_payload():
     """Check if values passed return in a dictionary."""
-    from tokendito import helpers
+    from tokendito import user
 
-    assert helpers.prepare_payload(pytest_key="pytest_val") == {
-        "pytest_key": "pytest_val"
-    }
-    assert helpers.prepare_payload(pytest_key=None) == {"pytest_key": None}
-    assert helpers.prepare_payload(
-        pytest_key1="pytest_val1", pytest_key2="pytest_val2"
-    ) == {
+    assert user.prepare_payload(pytest_key="pytest_val") == {"pytest_key": "pytest_val"}
+    assert user.prepare_payload(pytest_key=None) == {"pytest_key": None}
+    assert user.prepare_payload(pytest_key1="pytest_val1", pytest_key2="pytest_val2") == {
         "pytest_key1": "pytest_val1",
         "pytest_key2": "pytest_val2",
     }
@@ -254,58 +189,64 @@ def test_prepare_payload():
 
 def test_set_passcode(mocker):
     """Check if numerical passcode can handle leading zero values."""
-    from tokendito import duo_helpers
+    from tokendito import duo
 
-    mocker.patch("tokendito.helpers.input", return_value="0123456")
-    assert duo_helpers.set_passcode({"factor": "passcode"}) == "0123456"
-
-
-def test_process_environment(monkeypatch, valid_settings, invalid_settings):
-    """Test whether environment variables are set in settings.*."""
-    from tokendito import helpers, settings
-
-    # ENV standard is uppercase
-    valid_keys = {key.upper(): val for (key, val) in valid_settings.items()}
-    invalid_keys = {key.upper(): val for (key, val) in invalid_settings.items()}
-
-    env_keys = {**valid_keys.copy(), **invalid_keys}
-
-    monkeypatch.setattr(os, "environ", env_keys)
-    helpers.process_environment()
-
-    for key in valid_settings:
-        assert getattr(settings, key) == valid_settings[key]
-
-    for key in invalid_settings:
-        assert getattr(settings, key, "not_found") == "not_found"
+    mocker.patch("tokendito.user.input", return_value="0123456")
+    assert duo.set_passcode({"factor": "passcode"}) == "0123456"
 
 
-def test_process_arguments(valid_settings, invalid_settings):
-    """Test whether arguments are correctly set in settings.*."""
-    from tokendito import helpers, settings
+def test_process_environment(monkeypatch):
+    """Test whether environment variables are interpreted correctly."""
+    from tokendito import user
+
+    valid_keys = dict(
+        TOKENDITO_USER_CONFIG_PROFILE="pytest",
+        TOKENDITO_OKTA_USERNAME="pytest",
+        TOKENDITO_AWS_PROFILE="pytest",
+    )
+    invalid_keys = dict(TOKENDITO_USER_PYTEST_EXPECTED_FAILURE="pytest_expected_failure")
+
+    monkeypatch.setattr(os, "environ", valid_keys)
+    ret = user.process_environment()
+    assert (ret.okta["username"] == "pytest") is True
+
+    with pytest.raises(SystemExit) as err:
+        monkeypatch.setattr(os, "environ", invalid_keys)
+        ret = user.process_environment()
+        assert err.value.code == 2
+
+
+def test_process_arguments():
+    """Test whether arguments are set correctly."""
+    from tokendito import user
     from argparse import Namespace
 
-    args = {**valid_settings.copy(), **invalid_settings}
-    args.update()
+    valid_settings = dict(okta_username="pytest", okta_password="pytest")
+    invalid_settings = dict(pytest_expected_failure="pytest_failure")
+    args = {**valid_settings, **invalid_settings}
+    ret = user.process_arguments(Namespace(**args))
 
-    helpers.process_arguments(Namespace(**args))
-
-    for key_name in valid_settings:
-        assert getattr(settings, key_name) == valid_settings[key_name]
-
-    for key_name in invalid_settings:
-        assert getattr(settings, key_name, "not_found") == "not_found"
+    # Make sure that the arguments we passed are interpreted
+    assert ret.okta["username"] == "pytest"
+    assert ret.okta["password"] == "pytest"
+    # Make sure that incorrect arguments are not passed down to the Config object.
+    assert "pytest" not in ret.__dict__
 
 
-def test_process_ini_file(tmpdir, valid_settings, invalid_settings, mocker):
-    """Test whether ini config elements are correctly set in settings.*."""
-    from tokendito import helpers, settings
+def test_process_ini_file(tmpdir):
+    """Test whether ini config elements are set correctly."""
+    from tokendito import user
+
+    valid_settings = dict(
+        okta_password="pytest",
+        okta_username="pytest",
+    )
+    invalid_settings = dict(user_pytest_expected_failure="pytest")
 
     # Create a mock config file
     data = "[default]\nokta_username = pytest\n\n[pytest]\n"
     data += "".join(f"{key} = {val}\n" for key, val in valid_settings.items())
-    data += "".join(f"{key} = {val}\n" for key, val in invalid_settings.items())
-    data += "\n[pytest_end]\n"
+    data += "\n[pytest_expected_element_failure]\n"
     data += "".join(f"{key} = {val}\n" for key, val in invalid_settings.items())
 
     # Python 3.7 supports patching builtins.open(), which gives us the ability
@@ -318,18 +259,16 @@ def test_process_ini_file(tmpdir, valid_settings, invalid_settings, mocker):
 
     # Ensure we fail if the section is not found
     with pytest.raises(SystemExit) as err:
-        mocker.patch("logging.error")
-        helpers.process_ini_file(path, "pytest_expected_failure")
-        # assert err.type == SystemExit
+        user.process_ini_file(path, "pytest_expected_failure")
         assert err.value.code == 2
 
-    helpers.process_ini_file(path, "pytest")
-    # Test that correct options are set
-    for key_name in valid_settings:
-        assert getattr(settings, key_name) == valid_settings[key_name]
-    # Test that incorrect options aren't set
-    for key_name in invalid_settings:
-        assert getattr(settings, key_name, "not_found") == "not_found"
+    ret = user.process_ini_file(path, "pytest")
+    assert ret.okta["username"] == "pytest"
+    assert ret.okta["password"] == "pytest"
+
+    with pytest.raises(SystemExit) as err:
+        user.process_ini_file(path, "pytest_expected_element_failure")
+        assert err.value.code == 2
 
 
 @pytest.mark.parametrize(
@@ -350,21 +289,19 @@ def test_user_session_token(
     mfa_availability,
 ):
     """Test whether function return key on specific status."""
-    from tokendito.okta_helpers import user_session_token
+    from tokendito.okta import user_session_token
 
     primary_auth = sample_json_response[mfa_availability]
 
-    mocker.patch(
-        "tokendito.okta_helpers.user_mfa_challenge", return_value=session_token
-    )
+    mocker.patch("tokendito.okta.user_mfa_challenge", return_value=session_token)
     assert user_session_token(primary_auth, sample_headers) == expected
 
 
-def test_bad_user_session_token(sample_json_response, sample_headers, mocker):
+def test_bad_user_session_token(mocker, sample_json_response, sample_headers):
     """Test whether function behave accordingly."""
-    from tokendito.okta_helpers import user_session_token
+    from tokendito.okta import user_session_token
 
-    mocker.patch("tokendito.okta_helpers.login_error_code_parser", return_value=None)
+    mocker.patch("tokendito.okta.login_error_code_parser", return_value=None)
     okta_response_statuses = ["okta_response_error", "okta_response_empty"]
 
     for response in okta_response_statuses:
@@ -387,7 +324,7 @@ def test_mfa_provider_type(
     sample_headers,
 ):
     """Test whether function return key on specific MFA provider."""
-    from tokendito.okta_helpers import mfa_provider_type
+    from tokendito.okta import mfa_provider_type
 
     payload = {"x": "y", "t": "z"}
     callback_url = "https://www.acme.org"
@@ -398,13 +335,11 @@ def test_mfa_provider_type(
 
     mfa_verify = {"sessionToken": session_token}
     mocker.patch(
-        "tokendito.duo_helpers.authenticate_duo",
+        "tokendito.duo.authenticate_duo",
         return_value=(payload, sample_headers, callback_url),
     )
-    mocker.patch(
-        "tokendito.okta_helpers.okta_verify_api_method", return_value=mfa_verify
-    )
-    mocker.patch("tokendito.okta_helpers.user_mfa_options", return_value=mfa_verify)
+    mocker.patch("tokendito.okta.okta_verify_api_method", return_value=mfa_verify)
+    mocker.patch("tokendito.okta.user_mfa_options", return_value=mfa_verify)
     assert (
         mfa_provider_type(
             mfa_provider,
@@ -415,13 +350,13 @@ def test_mfa_provider_type(
             sample_headers,
             payload,
         )
-        == session_token
+        == expected
     )
 
 
 def test_bad_mfa_provider_type(mocker, sample_headers):
     """Test whether function return key on specific MFA provider."""
-    from tokendito.okta_helpers import mfa_provider_type
+    from tokendito.okta import mfa_provider_type
 
     payload = {"x": "y", "t": "z"}
     callback_url = "https://www.acme.org"
@@ -433,13 +368,11 @@ def test_bad_mfa_provider_type(mocker, sample_headers):
     mfa_verify = {"sessionToken": "123"}
     mfa_bad_provider = "bad_provider"
     mocker.patch(
-        "tokendito.duo_helpers.authenticate_duo",
+        "tokendito.duo.authenticate_duo",
         return_value=(payload, sample_headers, callback_url),
     )
-    mocker.patch(
-        "tokendito.okta_helpers.okta_verify_api_method", return_value=mfa_verify
-    )
-    mocker.patch("tokendito.okta_helpers.user_mfa_options", return_value=mfa_verify)
+    mocker.patch("tokendito.okta.okta_verify_api_method", return_value=mfa_verify)
+    mocker.patch("tokendito.okta.user_mfa_options", return_value=mfa_verify)
 
     with pytest.raises(SystemExit) as error:
         assert (
@@ -456,40 +389,17 @@ def test_bad_mfa_provider_type(mocker, sample_headers):
         )
 
 
-def test_okta_verify_api_method():
-    """Test whether verify_api_method returns the correct data."""
-    from tokendito.okta_helpers import okta_verify_api_method
-
-    url = "https://acme.org"
-    with requests_mock.Mocker() as m:
-        data = {"response": "ok"}
-        m.post(url, json=data, status_code=200)
-        assert okta_verify_api_method(url, data) == data
-
-    with pytest.raises(SystemExit) as error, requests_mock.Mocker() as m:
-        data = "pytest_bad_datatype"
-        m.post(url, text=data, status_code=403)
-        assert okta_verify_api_method(url, data) == error
-
-    with pytest.raises(SystemExit) as error, requests_mock.Mocker() as m:
-        data = {"response": "incorrect", "errorCode": "0xdeadbeef"}
-        m.post(url, json=data, status_code=403)
-        assert okta_verify_api_method("http://acme.org", data) == error
-
-
-def test_login_error_code_parser(mocker):
+def test_login_error_code_parser():
     """Test whether message on specific status equal."""
-    from tokendito.okta_helpers import login_error_code_parser
+    from tokendito.okta import login_error_code_parser, _status_dict
 
-    mocker.patch("logging.error")
-    for key, value in okta_status_dict.items():
-        assert (
-            login_error_code_parser(key, okta_status_dict)
-            == "Okta auth failed: " + value
-        )
+    okta_status_dict = _status_dict
+
+    for (key, value) in okta_status_dict.items():
+        assert login_error_code_parser(key) == "Okta auth failed: " + value
     unexpected_key = "UNEXPECTED_KEY"
     value = f"Okta auth failed: {unexpected_key}. Please verify your settings and try again."
-    assert login_error_code_parser(unexpected_key, okta_status_dict) == value
+    assert login_error_code_parser(unexpected_key) == value
 
 
 @pytest.mark.parametrize(
@@ -513,7 +423,7 @@ def test_login_error_code_parser(mocker):
 )
 def test_mfa_option_info(factor_type, output):
     """Test whether the function returns the correct answer to a specific input."""
-    from tokendito.helpers import mfa_option_info
+    from tokendito.user import mfa_option_info
 
     mfa_option = {
         "factorType": factor_type,
@@ -533,37 +443,37 @@ def test_mfa_option_info(factor_type, output):
 @pytest.mark.parametrize("preset_mfa, output", [("push", 0), (None, 1)])
 def test_user_mfa_index(preset_mfa, output, mocker, sample_json_response):
     """Test whether the function returns correct mfa method index."""
-    from tokendito.okta_helpers import user_mfa_index
+    from tokendito.okta import user_mfa_index
 
     primary_auth = sample_json_response["okta_response_mfa"]
 
     mfa_options = primary_auth["_embedded"]["factors"]
     available_mfas = [d["factorType"] for d in mfa_options]
-    mocker.patch("tokendito.helpers.select_preferred_mfa_index", return_value=1)
+    mocker.patch("tokendito.user.select_preferred_mfa_index", return_value=1)
 
     assert user_mfa_index(preset_mfa, available_mfas, mfa_options) == output
 
 
 def test_select_preferred_mfa_index(mocker, sample_json_response):
     """Test whether the function returns index entered by user."""
-    from tokendito.helpers import select_preferred_mfa_index
+    from tokendito.user import select_preferred_mfa_index
 
     primary_auth = sample_json_response
     mfa_options = primary_auth["okta_response_mfa"]["_embedded"]["factors"]
     for output in mfa_options:
-        mocker.patch("tokendito.helpers.collect_integer", return_value=output)
+        mocker.patch("tokendito.user.collect_integer", return_value=output)
         assert select_preferred_mfa_index(mfa_options) == output
 
 
 @pytest.mark.parametrize(
     "email",
     [
-        ("Token.Dito@acme.org"),
+        ("First.Last@acme.org"),
     ],
 )
 def test_select_preferred_mfa_index_output(email, capsys, mocker, sample_json_response):
     """Test whether the function gives correct output."""
-    from tokendito.helpers import select_preferred_mfa_index
+    from tokendito.user import select_preferred_mfa_index
 
     primary_auth = sample_json_response
     mfa_options = primary_auth["okta_response_mfa"]["_embedded"]["factors"]
@@ -575,17 +485,15 @@ def test_select_preferred_mfa_index_output(email, capsys, mocker, sample_json_re
         f"[2]  OKTA    token:software:totp {email} Id: fdsfsd6ewREr8\n"
     )
 
-    mocker.patch("tokendito.helpers.collect_integer", return_value=1)
+    mocker.patch("tokendito.user.collect_integer", return_value=1)
     select_preferred_mfa_index(mfa_options)
     captured = capsys.readouterr()
     assert captured.out == correct_output
 
 
-def test_bad_with_no_mfa_methods_user_mfa_challenge(
-    sample_headers, sample_json_response
-):
+def test_user_mfa_challenge_with_no_mfa_methods(sample_headers, sample_json_response):
     """Test whether okta response has mfa methods."""
-    from tokendito.okta_helpers import user_mfa_challenge
+    from tokendito.okta import user_mfa_challenge
 
     primary_auth = sample_json_response["okta_response_no_auth_methods"]
 
@@ -594,85 +502,68 @@ def test_bad_with_no_mfa_methods_user_mfa_challenge(
 
 
 @pytest.mark.parametrize(
-    "aws_profile, role_arn, selected_role",
+    "selected_role",
     [
-        ("token", None, "arn:aws:iam::123456789012:role/token"),
-        (
-            "dito",
-            None,
-            "arn:aws:iam::124356789012:role/dito",
-        ),
-        (
-            None,
-            "arn:aws:iam::124356789012:role/dito",
-            "arn:aws:iam::124356789012:role/dito",
-        ),
-        (
-            None,
-            "arn:aws:iam::123456789012:role/token",
-            "arn:aws:iam::123456789012:role/token",
-        ),
+        "arn:aws:iam::123456789012:role/pytest_role_1",
+        "arn:aws:iam::124356789012:role/pytest_role_2",
     ],
 )
-def test_good_select_role_arn(
-    mocker, monkeypatch, aws_profile, role_arn, selected_role
-):
+def test_correct_role_selection(mocker, selected_role):
     """Test which role does the user has chosen."""
-    from tokendito.helpers import select_role_arn
+    from tokendito.user import select_role_arn
 
     saml_xml = "x"
     saml_response_string = "y"
 
     role_arns = [
-        "arn:aws:iam::123456789012:role/token",
-        "arn:aws:iam::124356789012:role/dito",
+        "arn:aws:iam::123456789012:role/pytest",
+        "arn:aws:iam::124356789012:role/pytest",
     ]
-    monkeypatch.setattr("tokendito.settings.aws_profile", aws_profile)
-    mocker.patch("tokendito.helpers.prompt_role_choices", return_value=selected_role)
+    mocker.patch("tokendito.user.prompt_role_choices", return_value=selected_role)
     assert select_role_arn(role_arns, saml_xml, saml_response_string) == selected_role
 
 
-def test_repeated_line_select_role_arn(monkeypatch):
-    """Test behaviour repeated role."""
-    from tokendito.helpers import select_role_arn
+def test_repeated_line_select_role_arn():
+    """Ensure that duplicate roles trigger an error."""
+    import tokendito
+    from tokendito.user import select_role_arn
 
     saml_xml = "x"
     saml_response_string = "y"
+    tokendito.config.aws["profile"] = "pytest"
 
     role_arns = [
-        "arn:aws:iam::123456789012:role/token",
-        "arn:aws:iam::123456789012:role/token",
+        "arn:aws:iam::123456789012:role/pytest",
+        "arn:aws:iam::123456789012:role/pytest",
     ]
-    monkeypatch.setattr("tokendito.settings.aws_profile", "token")
 
     with pytest.raises(SystemExit) as error:
         assert select_role_arn(role_arns, saml_xml, saml_response_string) == error
 
 
-def test_bad_select_role_arn(monkeypatch):
-    """Test behaviour wrong aws_profile and role_arn."""
-    from tokendito.helpers import select_role_arn
+def test_incorrect_role_arn():
+    """Ensure that incorrectly selected options trigger an error."""
+    import tokendito
+    from tokendito.user import select_role_arn
 
     saml_xml = "x"
     saml_response_string = "y"
+    tokendito.config.aws["profile"] = "pytest_failure"
+    tokendito.config.aws["role_arn"] = "pytest_failure"
 
     role_arns = [
-        "arn:aws:iam::123456789012:role/token",
-        "arn:aws:iam::124356789012:role/dito",
+        "arn:aws:iam::123456789012:role/pytest",
+        "arn:aws:iam::124356789012:role/pytest",
     ]
-    monkeypatch.setattr("tokendito.settings.aws_profile", "wrong_response")
-    monkeypatch.setattr(
-        "tokendito.settings.role_arn",
-        "arn:aws:iam::123456789012:role/wrong_response",
-    )
+
     with pytest.raises(SystemExit) as error:
         assert select_role_arn(role_arns, saml_xml, saml_response_string) == error
 
 
 def test_prepare_duo_info():
     """Test behaviour empty return duo info."""
-    from tokendito.duo_helpers import prepare_duo_info
-    from tokendito import settings
+    from tokendito.duo import prepare_duo_info
+    from tokendito import config
 
     selected_okta_factor = {
         "_embedded": {
@@ -692,9 +583,7 @@ def test_prepare_duo_info():
         },
         "stateToken": 12345,
     }
-    okta_factor = selected_okta_factor["_embedded"]["factor"]["_embedded"][
-        "verification"
-    ]
+    okta_factor = selected_okta_factor["_embedded"]["factor"]["_embedded"]["verification"]
     expected_duo_info = {
         "okta_factor": okta_factor,
         "factor_id": 1234,
@@ -702,7 +591,7 @@ def test_prepare_duo_info():
         "okta_callback_url": "http://test.okta.href",
         "tx": "fdsafdsa",
         "app_sig": "fdsfdfds",
-        "parent": f"{settings.okta_org}/signin/verify/duo/web",
+        "parent": f"{config.okta['org']}/signin/verify/duo/web",
         "host": "test_host",
         "sid": "",
         "version": "3.6",
@@ -712,8 +601,8 @@ def test_prepare_duo_info():
 
 def test_get_duo_sid(mocker):
     """Check if got sid correct."""
-    from tokendito import settings
-    from tokendito.duo_helpers import get_duo_sid
+    from tokendito import config
+    from tokendito.duo import get_duo_sid
 
     test_duo_info = {
         "okta_factor": "okta_factor",
@@ -722,7 +611,7 @@ def test_get_duo_sid(mocker):
         "okta_callback_url": "http://test.okta.href",
         "tx": "fdsafdsa",
         "app_sig": "fdsfdfds",
-        "parent": f"{settings.okta_org}/signin/verify/duo/web",
+        "parent": f"{config.okta['org']}/signin/verify/duo/web",
         "host": "test_host",
         "sid": "",
         "version": "3.6",
@@ -732,7 +621,7 @@ def test_get_duo_sid(mocker):
     duo_api_response = Mock()
     duo_api_response.url = test_url
 
-    mocker.patch("tokendito.duo_helpers.duo_api_post", return_value=duo_api_response)
+    mocker.patch("tokendito.duo.duo_api_post", return_value=duo_api_response)
 
     duo_sid_info, duo_auth_response = get_duo_sid(test_duo_info)
 
@@ -743,23 +632,67 @@ def test_get_duo_sid(mocker):
 @pytest.mark.parametrize("status_code", [(400), (401), (404), (500), (503)])
 def test_authenticate_to_roles(status_code, monkeypatch):
     """Test if function return correct response."""
-    from tokendito.aws_helpers import authenticate_to_roles
+    from tokendito.aws import authenticate_to_roles
     import requests
 
     mock_get = {"status_code": status_code, "text": "response"}
     monkeypatch.setattr(requests, "get", mock_get)
     with pytest.raises(SystemExit) as error:
-        assert (
-            authenticate_to_roles("secret_session_token", "http://test.url.com")
-            == error
-        )
+        assert authenticate_to_roles("secret_session_token", "http://test.url.com") == error
 
 
 def test_get_mfa_response():
     """Test if mfa verify correctly."""
-    from tokendito.duo_helpers import get_mfa_response
+    from tokendito.duo import get_mfa_response
 
     mfa_result = Mock()
     mfa_result.json = Mock(return_value={"response": "test_response"})
 
     assert get_mfa_response(mfa_result) == "test_response"
+
+
+def test_config_object():
+    """Test proper initialization of the Config object."""
+    import json
+    from tokendito import Config
+
+    # Test for invalid assignments to the object
+    with pytest.raises(AttributeError):
+        pytest_config = Config(pytest_attribute={})
+
+    with pytest.raises(KeyError):
+        pytest_config = Config(aws="pytest")
+
+    with pytest.raises(ValueError):
+        pytest_config = Config(aws={"pytest": "pytest"})
+
+    # Test whether repr can be reused to create an object
+    pytest_config = Config()
+    args = json.loads(repr(pytest_config))
+    pytest_config_2 = Config(**args)
+    assert (pytest_config == pytest_config_2) is True
+
+    # Test if passing arguments results in an object with new values
+    pytest_config_aws = Config(aws={"profile": "pytest_aws"})
+    pytest_config_okta = Config(okta={"username": "pytest_username"})
+    pytest_config_mixed = Config(
+        user={"config_profile": "pytest_user"}, okta={"password": "pytest_password"}
+    )
+    assert (pytest_config == pytest_config_aws) is False
+
+    # Check that an update copies the values correctly
+    pytest_config.update(pytest_config_aws)
+    assert pytest_config.aws["profile"] == "pytest_aws"
+
+    # Check that an update does not overwrite all values
+    pytest_config.update(pytest_config_okta)
+    assert pytest_config.aws["profile"] == "pytest_aws"
+
+    # Check that an update overwrites matching values only
+    pytest_config.update(pytest_config_mixed)
+    assert pytest_config.okta["username"] == "pytest_username"
+    assert pytest_config.okta["password"] == "pytest_password"
+    assert pytest_config.user["config_profile"] == "pytest_user"
+
+    # Check that default values from the original object are kept
+    assert pytest_config.aws["region"] == "us-east-1"
