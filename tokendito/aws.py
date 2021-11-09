@@ -17,7 +17,7 @@ from botocore.client import Config
 from botocore.exceptions import ClientError
 import botocore.session
 import requests
-from tokendito import helpers
+from tokendito import user
 
 
 logger = logging.getLogger(__name__)
@@ -58,7 +58,7 @@ def authenticate_to_roles(secret_session_token, url):
         logger.error(errmsg)
         sys.exit(1)
 
-    saml_xml = helpers.validate_saml_response(saml_response_string)
+    saml_xml = user.validate_saml_response(saml_response_string)
 
     return saml_response_string, saml_xml
 
@@ -73,9 +73,7 @@ def assume_role(role_arn, provider_arn, saml):
 
     """
     default_error = (
-        "\nUnable to assume role with the following details:\n"
-        "- Role ARN: {}\n"
-        "- Error: {}\n"
+        "\nUnable to assume role with the following details:\n- Role ARN: {}\n- Error: {}\n"
     )
 
     encoded_xml = codecs.encode(saml.encode("utf-8"), "base64")
@@ -169,9 +167,7 @@ def ensure_keys_work(assume_role_response):
         )
         client.get_caller_identity()
     except Exception as auth_error:
-        logger.error(
-            f"There was an error authenticating your keys with AWS: {auth_error}"
-        )
+        logger.error(f"There was an error authenticating your keys with AWS: {auth_error}")
         sys.exit(1)
 
 
@@ -182,10 +178,8 @@ def select_assumeable_role(saml_response_string, saml):
     :param saml decoded saml response from Okta:
     :return AWS AssumeRoleWithSaml response, role name:
     """
-    roles_and_providers = helpers.extract_arns(saml)
-    role_arn = helpers.select_role_arn(
-        list(roles_and_providers.keys()), saml, saml_response_string
-    )
+    roles_and_providers = user.extract_arns(saml)
+    role_arn = user.select_role_arn(list(roles_and_providers.keys()), saml, saml_response_string)
     role_name = role_arn.split("/")[-1]
 
     assume_role_response = assume_role(role_arn, roles_and_providers[role_arn], saml)
