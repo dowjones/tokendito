@@ -33,9 +33,9 @@ Example 2
   py.test -v -rA -k 'functional' -s tests \
     --username=jane.doe@mycompany.com \
     --password=mysecretpass \
-    --mfa-method=push \
-    --okta-aws-app-url='https://acme.oktapreview.com/home/amazon_aws/b07384d113edec49eaa6/123' \
-    --role-arn=arn:aws:iam::123456789000:role/dowjones-hammer-engineer
+    --okta-mfa-method=push \
+    --okta-app-url='https://acme.oktapreview.com/home/amazon_aws/b07384d113edec49eaa6/123' \
+    --aws-role-arn=arn:aws:iam::123456789000:role/dowjones-hammer-engineer
 
 This triggers the tests ``test_generate_credentials`` and ``test_aws_credentials`` that are
 normally skipped.
@@ -45,7 +45,7 @@ Example 3
 
 .. code-block:: sh
 
-  MFA_METHOD=push py.test -v -rA -k 'functional' -s tests --username=...
+  TOKENDITO_OKTA_MFA_METHOD=push py.test -v -rA -k 'functional' -s tests --username=...
 
 This shows how to mix environment variables with ``py.test`` and arguments.
 
@@ -54,6 +54,6 @@ Example 4
 
 .. code-block:: sh
 
-   OKTA_PASSWORD='mysecretpass' tox -e auth -- --okta-username='jane.doe@mycompany.com'
+   TOKENDITO_OKTA_PASSWORD='mysecretpass' tox -e auth -- --username='jane.doe@mycompany.com'
 
 This shows how to pass credentials through Tox.
