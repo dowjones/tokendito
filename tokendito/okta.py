@@ -280,7 +280,7 @@ def push_approval(headers, mfa_challenge_url, payload):
 
     print("Waiting for an approval from device...")
     mfa_status = "WAITING"
-
+    mfa_verify = None
     while mfa_status == "WAITING":
         mfa_verify = okta_verify_api_method(mfa_challenge_url, payload, headers)
 
