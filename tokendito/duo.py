@@ -124,6 +124,7 @@ def get_duo_devices(duo_auth):
 
     factor_options = []
     for device in devices:
+        factors = None
         options = soup.find("fieldset", {"data-device-index": device.split(" - ")[0]})
         factors = options.findAll("input", {"name": "factor"})
         for factor in factors:

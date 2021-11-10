@@ -29,34 +29,32 @@ _status_dict = dict(
 )
 
 
-def okta_verify_api_method(mfa_challenge_url, payload, headers=None):
+def okta_verify_api_method(url, payload, headers=None):
     """Okta MFA authentication.
 
     :param mfa_challenge_url: MFA challenge url
     :param payload: JSON Payload
     :param headers: Headers of the request
-    :return: Okta authentication response
+    :return: Dictionary with authentication response
     """
     try:
         if headers:
-            response = requests.request(
-                "POST", mfa_challenge_url, data=json.dumps(payload), headers=headers
-            )
+            response = requests.request("POST", url, data=json.dumps(payload), headers=headers)
         else:
-            response = requests.request("POST", mfa_challenge_url, data=payload)
+            response = requests.request("POST", url, data=payload)
     except Exception as request_error:
-        logger.error(f"There was an error connecting to Okta: \n{request_error}")
+        logger.error(f"There was an error connecting to {url}: {request_error}")
         sys.exit(1)
 
-    logger.debug(f"Okta authentication response: \n{response}")
-
+    logger.debug(f"Authentication response is {response}")
+    ret = dict()
     try:
-        response = response.json()
+        ret = response.json()
     except ValueError:
-        logger.debug(f"Received type of response: {type(response.text)}")
-        response = response.text
+        logger.error(f"Received invalid type of response {type(response.text)} from {url}")
+        sys.exit(1)
 
-    return response
+    return ret
 
 
 def login_error_code_parser(status=None):
@@ -139,6 +137,7 @@ def mfa_provider_type(
     :return: session_key
 
     """
+    mfa_verify = dict()
     if mfa_provider == "duo":
         payload, headers, callback_url = duo.authenticate_duo(selected_factor)
         okta_verify_api_method(callback_url, payload)
@@ -280,7 +279,7 @@ def push_approval(headers, mfa_challenge_url, payload):
 
     print("Waiting for an approval from device...")
     mfa_status = "WAITING"
-
+    mfa_verify = None
     while mfa_status == "WAITING":
         mfa_verify = okta_verify_api_method(mfa_challenge_url, payload, headers)
 
