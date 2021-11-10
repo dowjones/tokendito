@@ -9,7 +9,7 @@ on:
     branches:
       - master
       - main
-      - feature/2.0.0
+      - development/2.0.0
 
 jobs:
   lint:
@@ -36,7 +36,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: [3.6, 3.7, 3.8]
+        python-version: ['3.6', '3.7', '3.8', '3.9', '3.10']
     steps:
     - name: Checkout
       uses: actions/checkout@v2
@@ -51,10 +51,10 @@ jobs:
     - name: Test with tox
       run: tox
     - name: Convert coverage to LCOV format
-      if: matrix.python-version == '3.8'
+      if: matrix.python-version == '3.10'
       run: tox -e coverage
     - name: Upload coverage in Parallel
-      if: matrix.python-version == '3.8'
+      if: matrix.python-version == '3.10'
       uses: coverallsapp/github-action@master
       with:
         github-token: ${{ secrets.github_token }}
