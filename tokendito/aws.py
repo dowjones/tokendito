@@ -77,7 +77,7 @@ def assume_role(role_arn, provider_arn, saml):
     )
 
     encoded_xml = codecs.encode(saml.encode("utf-8"), "base64")
-
+    assume_role_response = None
     # Attempt to assume a role with the following durations:
     # 12h, 8h, 6h, 4h, 2h, 1h, 30m, 15m
     session_times = [43200, 28800, 21600, 14400, 7200, 3600, 1800, 900, "exit"]
