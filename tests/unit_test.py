@@ -31,6 +31,7 @@ import sys
 
 from future import standard_library
 import pytest
+import requests_mock
 import semver
 from tokendito.settings import okta_status_dict
 
@@ -298,7 +299,10 @@ def test_prepare_payload():
     assert helpers.prepare_payload(pytest_key=None) == {"pytest_key": None}
     assert helpers.prepare_payload(
         pytest_key1="pytest_val1", pytest_key2="pytest_val2"
-    ) == {"pytest_key1": "pytest_val1", "pytest_key2": "pytest_val2"}
+    ) == {
+        "pytest_key1": "pytest_val1",
+        "pytest_key2": "pytest_val2",
+    }
 
 
 def test_set_passcode(monkeypatch):
@@ -514,6 +518,27 @@ def test_bad_mfa_provider_type(mocker, sample_headers):
             )
             == error
         )
+
+
+def test_okta_verify_api_method():
+    """Test whether verify_api_method returns the correct data."""
+    from tokendito.okta_helpers import okta_verify_api_method
+
+    url = "https://acme.org"
+    with requests_mock.Mocker() as m:
+        data = {"response": "ok"}
+        m.post(url, json=data, status_code=200)
+        assert okta_verify_api_method(url, data) == data
+
+    with pytest.raises(SystemExit) as error, requests_mock.Mocker() as m:
+        data = "pytest_bad_datatype"
+        m.post(url, text=data, status_code=403)
+        assert okta_verify_api_method(url, data) == error
+
+    with pytest.raises(SystemExit) as error, requests_mock.Mocker() as m:
+        data = {"response": "incorrect", "errorCode": "0xdeadbeef"}
+        m.post(url, json=data, status_code=403)
+        assert okta_verify_api_method("http://acme.org", data) == error
 
 
 def test_login_error_code_parser(mocker):

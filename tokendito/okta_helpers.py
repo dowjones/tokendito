@@ -47,14 +47,18 @@ def okta_verify_api_method(mfa_challenge_url, payload, headers=None):
         sys.exit(1)
 
     logging.debug("Okta authentication response: \n{}".format(response))
-
+    ret = dict()
     try:
-        response = response.json()
+        ret = response.json()
     except ValueError:
-        logging.debug("Received type of response: {}".format(type(response.text)))
-        response = response.text
+        logging.error("Received type of response: {}".format(type(response.text)))
+        sys.exit(1)
 
-    return response
+    if "errorCode" in ret:
+        login_error_code_parser(ret["errorCode"], settings.okta_status_dict)
+        sys.exit(1)
+
+    return ret
 
 
 def login_error_code_parser(status=None, status_dict=settings.okta_status_dict):
