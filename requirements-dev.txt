@@ -18,5 +18,6 @@ pytest-cov
 pytest-env
 pytest-mock
 pytest-ordering
+requests-mock
 semver
 tox
