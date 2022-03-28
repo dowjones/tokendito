@@ -54,6 +54,10 @@ def okta_verify_api_method(url, payload, headers=None):
         logger.error(f"Received invalid type of response {type(response.text)} from {url}")
         sys.exit(1)
 
+    if "errorCode" in ret:
+        login_error_code_parser(ret["errorCode"])
+        sys.exit(1)
+
     return ret
 
 
