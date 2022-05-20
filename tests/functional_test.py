@@ -172,7 +172,7 @@ def test_generate_credentials(custom_args):
     import pyotp
 
     # Emulate helpers.process_options() bypassing interactive portions.
-    tool_args = user.setup(custom_args)
+    tool_args = user.parse_cli_args(custom_args)
     config_ini = user.process_ini_file(tool_args.user_config_file, "default")
     config_env = user.process_environment()
     config_arg = user.process_arguments(tool_args)
@@ -237,7 +237,7 @@ def test_aws_credentials(custom_args):
     from tokendito import user, config
 
     # Emulate helpers.process_options() bypassing interactive portions.
-    tool_args = user.setup(custom_args)
+    tool_args = user.parse_cli_args(custom_args)
     config_ini = user.process_ini_file(tool_args.user_config_file, "default")
     config_env = user.process_environment()
     config_arg = user.process_arguments(tool_args)
