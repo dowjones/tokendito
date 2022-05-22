@@ -377,18 +377,22 @@ def print_selected_role(profile_name, expiration_time):
 def extract_arns(saml):
     """Extract arns from SAML decoded xml.
 
-    :param saml: results saml decoded
-    :return: Principle ARNs, Role ARNs
+    :param saml: results saml decoded. 
+    :return: Dict of Role and Provider ARNs
     """
     logger.debug("Decode response string as a SAML decoded value.")
 
-    soup = BeautifulSoup(saml, "xml")
-    arns = soup.find_all(text=re.compile("arn:aws:iam::"))
+    arn_regex = ">(arn:aws:iam::.*?,arn:aws:iam::.*?)<"
+    
+    # find all provider and role pairs
+    arns = re.findall(arn_regex, saml)
+
     if len(arns) == 0:
         logger.error("No IAM roles found in SAML response.")
         logger.debug(arns)
         sys.exit(2)
 
+    # stuff into dict, role is dict key.
     roles_and_providers = {i.split(",")[1]: i.split(",")[0] for i in arns}
 
     logger.debug(f"Collected ARNs: {json.dumps(roles_and_providers)}")
