@@ -382,7 +382,7 @@ def extract_arns(saml):
     """
     logger.debug("Decode response string as a SAML decoded value.")
 
-    soup = BeautifulSoup(saml, "html.parser")
+    soup = BeautifulSoup(saml, "xml")
     arns = soup.find_all(text=re.compile("arn:aws:iam::"))
     if len(arns) == 0:
         logger.error("No IAM roles found in SAML response.")
