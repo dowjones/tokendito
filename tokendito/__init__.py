@@ -26,6 +26,8 @@ class Config(object):
             config_file=f"{expanduser('~')}/.aws/okta_auth",
             config_profile="default",
             encoding=sys.stdin.encoding,
+            loglevel="WARNING",
+            log_output_file="",
         ),
         aws=dict(
             config_file=f"{expanduser('~')}/.aws/config",

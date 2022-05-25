@@ -27,7 +27,7 @@ from tokendito import config as config
 logger = logging.getLogger(__name__)
 
 
-def setup(args):
+def parse_cli_args(args):
     """Parse command line arguments.
 
     :return: args parse object
@@ -69,12 +69,16 @@ def setup(args):
         "--loglevel",
         "-l",
         type=lambda s: s.upper(),
-        default="WARNING",
+        dest="user_loglevel",
         choices=["DEBUG", "INFO", "WARN", "ERROR"],
         help="[DEBUG|INFO|WARN|ERROR], default loglevel is WARNING."
         " Note: DEBUG level will display credentials",
     )
-    parser.add_argument("--log-output-file", help="Optional file to log output to.")
+    parser.add_argument(
+        "--log-output-file",
+        dest="user_log_output_file",
+        help="Optional file to log output to.",
+    )
     parser.add_argument("--aws-config-file", help="AWS Configuration file to write to.")
     parser.add_argument(
         "--aws-output",
@@ -102,8 +106,6 @@ def setup(args):
     )
 
     parsed_args = parser.parse_args(args)
-    setup_logging(parsed_args)
-    logger.debug(f"Parse command line arguments [{parsed_args}]")
 
     return parsed_args
 
@@ -177,14 +179,14 @@ def get_submodule_names(location=__file__):
         submodules = [x.name for x in iter_modules([str(package.parent)])]
     except Exception as err:
         logger.warning(f"Could not resolve modules: {str(err)}")
-        pass
+
     return submodules
 
 
-def setup_logging(args):
+def setup_logging(conf):
     """Set logging level.
 
-    :param args: Arguments provided by a user
+    :param conf: User config
     :return: None
 
     """
@@ -193,8 +195,8 @@ def setup_logging(args):
         fmt="%(asctime)s %(name)s [%(funcName)s():%(lineno)i] - %(levelname)s - %(message)s"
     )
     handler = logging.StreamHandler()
-    if args.log_output_file:
-        handler = logging.FileHandler(args.log_output_file)
+    if conf["log_output_file"]:
+        handler = logging.FileHandler(conf["log_output_file"])
     handler.setFormatter(formatter)
 
     # Set a reasonable default logging format.
@@ -205,7 +207,7 @@ def setup_logging(args):
     # inherited from the root logger.
     for submodule in get_submodule_names():
         submodule_logger = logging.getLogger(f"tokendito.{submodule}")
-        submodule_logger.setLevel(args.loglevel)
+        submodule_logger.setLevel(conf["loglevel"])
 
 
 def select_role_arn(role_arns, saml_xml, saml_response_string):
@@ -484,7 +486,6 @@ def process_ini_file(file, profile):
     res = dict()
     pattern = re.compile(r"^(.*?)_(.*)")
 
-    logger.debug(f"Reading ini file '{file}', profile '{config.user['config_profile']}'")
     ini = configparser.ConfigParser(default_section=config.user["config_profile"])
     # Here, group(1) is the dictionary key, and group(2) the configuration element
     try:
@@ -495,14 +496,13 @@ def process_ini_file(file, profile):
                 if match.group(1) not in res:
                     res[match.group(1)] = dict()
                 res[match.group(1)][match.group(2)] = val
-                logger.debug(f"Set {match.group(1)}['{match.group(2)}']={val} from ini file")
     except configparser.Error as err:
         logger.error(f"Could not load profile '{profile}': {str(err)}")
         sys.exit(2)
 
     try:
         config_ini = Config(**res)
-        logger.debug(f"configuration from {file} is: {config_ini}")
+
     except (AttributeError, KeyError, ValueError) as err:
         logger.error(
             f"The configuration file {file} in [{profile}] is incorrect: {err}"
@@ -520,7 +520,7 @@ def process_arguments(args):
     """
     res = dict()
     pattern = re.compile(r"^(.*?)_(.*)")
-    logger.debug("Processing command-line arguments")
+
     for (key, val) in vars(args).items():
         match = re.search(pattern, key.lower())
         if match:
@@ -530,11 +530,10 @@ def process_arguments(args):
                 res[match.group(1)] = dict()
             if val:
                 res[match.group(1)][match.group(2)] = val
-                logger.debug(f"Set {match.group(1)}['{match.group(2)}']={val} from the CLI")
 
     try:
         config_args = Config(**res)
-        logger.debug(f"configuration from arguments is: {config_args}")
+
     except (AttributeError, KeyError, ValueError) as err:
         logger.critical(
             f"Command line arguments not correct: {err}"
@@ -551,7 +550,6 @@ def process_environment(prefix="tokendito"):
     """
     res = dict()
     pattern = re.compile(fr"^({prefix})_(.*?)_(.*)")
-    logger.debug("Processing environment variables")
     # Here, group(1) is the prefix variable, group(2) is the dictionary key,
     # and group(3) the configuration element.
     for (key, val) in os.environ.items():
@@ -560,11 +558,9 @@ def process_environment(prefix="tokendito"):
             if match.group(2) not in res:
                 res[match.group(2)] = dict()
             res[match.group(2)][match.group(3)] = val
-            logger.debug(f"set option {match.group(2)}['{match.group(3)}']={val} from environment")
 
     try:
         config_env = Config(**res)
-        logger.debug(f"configuration from the environment is: {config_env}")
 
     except (AttributeError, KeyError, ValueError) as err:
         logger.error(
@@ -835,6 +831,8 @@ def prepare_payload(**kwargs):
 
 def process_options(args):
     """Collect all user-specific credentials and config params."""
+    args = parse_cli_args(args)
+
     if args.version:
         display_version()
         sys.exit(0)
@@ -855,10 +853,3 @@ def process_options(args):
     config.update(config_ini)
     config.update(config_env)
     config.update(config_args)
-    logger.debug(f"Final configuration is {config}")
-
-    process_okta_app_url()
-    # Set username and password for Okta Authentication
-    logger.debug("Set Okta credentials.")
-    set_okta_username()
-    set_okta_password()
