@@ -718,3 +718,35 @@ def test_config_object():
 
     # Check that default values from the original object are kept
     assert pytest_config.aws["region"] == "us-east-1"
+
+
+def test_default_loglevel():
+    """Check default loglevel."""
+    import tokendito
+
+    default_loglevel = "WARNING"
+
+    assert tokendito.Config().user["loglevel"] == default_loglevel
+
+
+def test_loglevel_collected_from_env(monkeypatch, tmpdir):
+    """Ensure that the loglevel collected from env vars."""
+    from argparse import Namespace
+    from tokendito import user, config, Config
+
+    args = {
+        "okta_username": "pytest_arg",
+        "okta_app_url": "https://acme.okta.org/_arg",
+        "version": None,
+        "configure": False,
+        "user_config_file": None,
+        "user_config_profile": None,
+    }
+
+    monkeypatch.setenv("TOKENDITO_USER_LOGLEVEL", "DEBUG")
+    monkeypatch.setattr(user, "parse_cli_args", lambda *x: Namespace(**args))
+    monkeypatch.setattr(user, "process_ini_file", lambda *x: Config())
+
+    user.process_options(None)
+
+    assert config.user["loglevel"] == "DEBUG"
