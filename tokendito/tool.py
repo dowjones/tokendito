@@ -15,12 +15,15 @@ logger = logging.getLogger(__name__)
 def cli(args):
     """Tokendito retrieves AWS credentials after authenticating with Okta."""
     # Set some required initial values
-    args = user.setup(args)
-
-    logger.debug("tokendito retrieves AWS credentials after authenticating with Okta.")
-
-    # Collect and organize user specific information
     user.process_options(args)
+    user.setup_logging(config.user)
+    logger.debug(f"Final configuration is {config}")
+
+    user.process_okta_app_url()
+
+    logger.debug("Set Okta credentials.")
+    user.set_okta_username()
+    user.set_okta_password()
 
     # Authenticate okta and AWS also use assumerole to assign the role
     logger.debug("Authenticate user with Okta and AWS.")
