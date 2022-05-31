@@ -813,22 +813,6 @@ def collect_integer(valid_range):
     return user_input
 
 
-def prepare_payload(**kwargs):
-    """Prepare payload for the HTTP request header.
-
-    :param kwargs: parameters to get together
-    :return: payload for the http header
-    """
-    logger.debug("Prepare payload")
-
-    payload_dict = {}
-    if kwargs is not None:
-        for key, value in list(kwargs.items()):
-            payload_dict[key] = value
-
-    return payload_dict
-
-
 def process_options(args):
     """Collect all user-specific credentials and config params."""
     args = parse_cli_args(args)
