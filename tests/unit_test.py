@@ -176,18 +176,6 @@ def test_utc_to_local():
     assert user.utc_to_local(utc) == local_time
 
 
-def test_prepare_payload():
-    """Check if values passed return in a dictionary."""
-    from tokendito import user
-
-    assert user.prepare_payload(pytest_key="pytest_val") == {"pytest_key": "pytest_val"}
-    assert user.prepare_payload(pytest_key=None) == {"pytest_key": None}
-    assert user.prepare_payload(pytest_key1="pytest_val1", pytest_key2="pytest_val2") == {
-        "pytest_key1": "pytest_val1",
-        "pytest_key2": "pytest_val2",
-    }
-
-
 def test_set_passcode(mocker):
     """Check if numerical passcode can handle leading zero values."""
     from tokendito import duo
