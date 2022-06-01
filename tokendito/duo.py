@@ -85,9 +85,7 @@ def get_duo_sid(duo_info):
     :return: duo_info with added SID.
     :return: duo_auth_response, contains html content listing available factors.
     """
-    params = user.prepare_payload(
-        tx=duo_info["tx"], v=duo_info["version"], parent=duo_info["parent"]
-    )
+    params = {"tx": duo_info["tx"], "v": duo_info["version"], "parent": duo_info["parent"]}
 
     url = f"https://{duo_info['host']}/frame/web/v1/auth"
     logger.info(f"Calling Duo {urlparse(url).path} with params {params.keys()}")
@@ -172,15 +170,15 @@ def duo_mfa_challenge(duo_info, mfa_option, passcode):
     """
     url = f"https://{duo_info['host']}/frame/prompt"
     device = mfa_option["device"].split(" - ")[0]
-    mfa_data = user.prepare_payload(
-        factor=mfa_option["factor"],
-        device=device,
-        sid=duo_info["sid"],
-        out_of_date=False,
-        days_out_of_date=0,
-        days_to_block=None,
-    )
-    mfa_data["async"] = True  # async is a reserved keyword
+    mfa_data = {
+        "factor": mfa_option["factor"],
+        "device": device,
+        "sid": duo_info["sid"],
+        "out_of_date": False,
+        "days_out_of_date": 0,
+        "days_to_block": None,
+        "async": True,
+    }
     if passcode:
         mfa_data["passcode"] = passcode
     mfa_challenge = duo_api_post(url, payload=mfa_data)
@@ -238,7 +236,7 @@ def duo_mfa_verify(duo_info, txid):
     :return txid: Duo transaction ID used to track this auth attempt.
     """
     url = f"https://{duo_info['host']}/frame/status"
-    challenged_mfa = user.prepare_payload(txid=txid, sid=duo_info["sid"])
+    challenged_mfa = {"txid": txid, "sid": duo_info["sid"]}
     challenge_result = None
 
     while True:
@@ -337,11 +335,12 @@ def authenticate_duo(selected_okta_factor):
     sig_response = duo_factor_callback(duo_info, verify_mfa)
 
     # Prepare for Okta callback
-    payload = user.prepare_payload(
-        id=duo_info["factor_id"],
-        sig_response=sig_response,
-        stateToken=duo_info["state_token"],
-    )
+    payload = {
+        "id": duo_info["factor_id"],
+        "sig_response": sig_response,
+        "stateToken": duo_info["state_token"],
+    }
+
     headers = {}
     headers["content-type"] = "application/json"
     headers["accept"] = "application/json"

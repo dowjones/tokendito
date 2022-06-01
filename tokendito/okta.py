@@ -112,7 +112,7 @@ def authenticate_user(url, username, password):
     :return: MFA session options
     """
     headers = {"content-type": "application/json", "accept": "application/json"}
-    payload = user.prepare_payload(username=username, password=password)
+    payload = {"username": username, "password": password}
 
     primary_auth = okta_verify_api_method(f"{url}/api/v1/authn", payload, headers)
     logger.debug(f"Authenticate Okta header [{headers}] ")
@@ -215,12 +215,12 @@ def user_mfa_challenge(headers, primary_auth):
 
     mfa_challenge_url = selected_mfa_option["_links"]["verify"]["href"]
 
-    payload = user.prepare_payload(
-        stateToken=primary_auth["stateToken"],
-        factorType=selected_mfa_option["factorType"],
-        provider=selected_mfa_option["provider"],
-        profile=selected_mfa_option["profile"],
-    )
+    payload = {
+        "stateToken": primary_auth["stateToken"],
+        "factorType": selected_mfa_option["factorType"],
+        "provider": selected_mfa_option["provider"],
+        "profile": selected_mfa_option["profile"],
+    }
     selected_factor = okta_verify_api_method(mfa_challenge_url, payload, headers)
 
     mfa_provider = selected_factor["_embedded"]["factor"]["provider"].lower()
@@ -261,9 +261,7 @@ def user_mfa_options(selected_mfa_option, headers, mfa_challenge_url, payload, p
         config.okta["mfa_response"] = user.get_input()
 
     # time to verify the mfa method
-    payload = user.prepare_payload(
-        stateToken=primary_auth["stateToken"], passCode=config.okta["mfa_response"]
-    )
+    payload = {"stateToken": primary_auth["stateToken"], "passCode": config.okta["mfa_response"]}
     mfa_verify = okta_verify_api_method(mfa_challenge_url, payload, headers)
     logger.debug(f"mfa_verify [{json.dumps(mfa_verify)}]")
 
