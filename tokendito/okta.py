@@ -32,26 +32,28 @@ _status_dict = dict(
 def okta_verify_api_method(url, payload, headers=None):
     """Okta MFA authentication.
 
-    :param mfa_challenge_url: MFA challenge url
+    :param url: url to call
     :param payload: JSON Payload
     :param headers: Headers of the request
     :return: Dictionary with authentication response
     """
     try:
-        if headers:
-            response = requests.request("POST", url, data=json.dumps(payload), headers=headers)
-        else:
-            response = requests.request("POST", url, data=payload)
+        response = requests.request("POST", url, data=json.dumps(payload), headers=headers)
     except Exception as request_error:
         logger.error(f"There was an error connecting to {url}: {request_error}")
         sys.exit(1)
 
     logger.debug(f"Authentication response is {response}")
-    ret = dict()
+
     try:
         ret = response.json()
-    except ValueError:
-        logger.error(f"Received invalid type of response {type(response.text)} from {url}")
+    except ValueError as e:
+        logger.error(
+            f"{type(e).__name__} - Failed to parse response\n"
+            f"URL: {url}\n"
+            f"Status: {response.status_code}\n"
+            f"Content: {response.content}\n"
+        )
         sys.exit(1)
 
     if "errorCode" in ret:
@@ -144,8 +146,7 @@ def mfa_provider_type(
     mfa_verify = dict()
     if mfa_provider == "duo":
         payload, headers, callback_url = duo.authenticate_duo(selected_factor)
-        okta_verify_api_method(callback_url, payload)
-        payload.pop("id", "sig_response")
+        duo.duo_api_post(callback_url, payload=payload)
         mfa_verify = okta_verify_api_method(mfa_challenge_url, payload, headers)
     elif mfa_provider == "okta" or mfa_provider == "google":
         mfa_verify = user_mfa_options(
