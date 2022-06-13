@@ -41,7 +41,7 @@ def prepare_duo_info(selected_okta_factor):
     return duo_info
 
 
-def duo_api_post(url, params={}, headers={}, payload={}):
+def duo_api_post(url, params=None, headers=None, payload=None):
     """Error handling and response parsing wrapper for Duo POSTs.
 
     :param url: The URL being connected to.
@@ -122,13 +122,10 @@ def get_duo_devices(duo_auth):
 
     factor_options = []
     for device in devices:
-        factors = None
         options = soup.find("fieldset", {"data-device-index": device.split(" - ")[0]})
         factors = options.findAll("input", {"name": "factor"})
         for factor in factors:
-            factor_option = {}
-            factor_option["device"] = device
-            factor_option["factor"] = factor["value"]
+            factor_option = {"device": device, "factor": factor["value"]}
             factor_options.append(factor_option)
     return factor_options
 
@@ -340,9 +337,6 @@ def authenticate_duo(selected_okta_factor):
         "sig_response": sig_response,
         "stateToken": duo_info["state_token"],
     }
-
-    headers = {}
-    headers["content-type"] = "application/json"
-    headers["accept"] = "application/json"
+    headers = {"content-type": "application/json", "accept": "application/json"}
 
     return payload, headers, duo_info["okta_callback_url"]
