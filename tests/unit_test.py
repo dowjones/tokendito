@@ -329,6 +329,7 @@ def test_mfa_provider_type(
     )
     mocker.patch("tokendito.okta.okta_verify_api_method", return_value=mfa_verify)
     mocker.patch("tokendito.okta.user_mfa_options", return_value=mfa_verify)
+    mocker.patch("tokendito.duo.duo_api_post")
     assert (
         mfa_provider_type(
             mfa_provider,
