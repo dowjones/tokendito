@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """This module retrieves AWS credentials after authenticating with Okta."""
 import logging
+import sys
 
 from tokendito import aws
 from tokendito import config
@@ -19,7 +20,7 @@ def cli(args):
     user.setup_logging(config.user)
     logger.debug(f"Final configuration is {config}")
 
-    user.process_okta_app_url()
+    user.process_okta_org_url(config)
 
     logger.debug("Set Okta credentials.")
     user.set_okta_username()
@@ -32,9 +33,23 @@ def cli(args):
         config.okta["org"], config.okta["username"], config.okta["password"]
     )
 
+    session_cookies = None
+
+    if config.okta["app_url"]:
+        if not user.validate_okta_app_url(config.okta["app_url"]):
+            logger.error(
+                "Okta Application URL not found, or invalid. Please check "
+                "your configuration and try again."
+            )
+            sys.exit(2)
+    else:
+        session_cookies = user.request_cookies(config.okta["org"], secret_session_token)
+        config.okta["app_url"] = user.discover_app_url(config.okta["org"], session_cookies)
+
     saml_response_string, saml_xml = aws.authenticate_to_roles(
-        secret_session_token, config.okta["app_url"]
+        secret_session_token, config.okta["app_url"], cookies=session_cookies
     )
+
     assume_role_response, role_name = aws.select_assumeable_role(saml_response_string, saml_xml)
 
     aws.ensure_keys_work(assume_role_response)

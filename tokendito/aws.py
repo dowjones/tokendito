@@ -23,18 +23,19 @@ from tokendito import user
 logger = logging.getLogger(__name__)
 
 
-def authenticate_to_roles(secret_session_token, url):
+def authenticate_to_roles(secret_session_token, url, cookies=None):
     """Authenticate AWS user with saml.
 
     :param secret_session_token: secret session token
     :param url: url of the AWS account
+    :param cookies: html cookies
     :return: response text
 
     """
     payload = {"onetimetoken": secret_session_token}
     logger.debug(f"Authenticate AWS user with SAML URL [{url}]")
     try:
-        response = requests.get(url, params=payload)
+        response = requests.get(url, params=payload, cookies=cookies)
         saml_response_string = response.text
         if response.status_code == 400 or response.status_code == 401:
             errmsg = "Invalid Credentials."
