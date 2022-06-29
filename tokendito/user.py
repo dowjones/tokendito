@@ -210,37 +210,40 @@ def setup_logging(conf):
         submodule_logger.setLevel(conf["loglevel"])
 
 
-def select_role_arn(role_arns, saml_xml, saml_response_string):
+def select_role_arn(authenticated_aps):
     """Select the role user wants to pick.
 
-    :param role_arns: IAM roles ARN list assigned for the user
-    :param saml_xml: Decoded saml response from Okta
-    :param saml_response_string: http response from saml assertion to AWS
-    :return: User input index selected by the user, the arn of selected role
-
+    :param: authenticated_aps, mapping of authenticated apps metadata, dict
+    :return: user role and associated url, tuple
     """
-    logger.debug(f"Select the role user wants to pick [{role_arns}]")
+    selected_role = None
 
-    role_names = dict((role.split("/")[-1], role) for role in role_arns)
-    roles = [role.split("/")[-1] for role in role_arns]
+    for url, app in authenticated_aps.items():
+        logger.debug(f"Select the role user wants to pick [{app['roles']}]")
+        role_names = dict((role.split("/")[-1], role) for role in app["roles"])
+        roles = [role.split("/")[-1] for role in app["roles"]]
 
-    if roles.count(config.aws["profile"]) > 1:
-        logger.error(
-            "There are multiple matches for the profile selected, "
-            "please use the --role-arn option to select one"
-        )
-        sys.exit(2)
+        if roles.count(config.aws["profile"]) > 1:
+            logger.error(
+                "There are multiple matches for the profile selected, "
+                "please use the --role-arn option to select one"
+            )
+            sys.exit(2)
 
-    if config.aws["profile"] in role_names.keys():
-        selected_role = role_names[config.aws["profile"]]
-        logger.debug(f"Using aws_profile env var for role: [{config.aws['profile']}]")
-    elif config.aws["role_arn"] is None:
-        selected_role = prompt_role_choices(role_arns, saml_xml, saml_response_string)
-    elif config.aws["role_arn"] in role_arns:
-        selected_role = config.aws["role_arn"]
-    else:
-        logger.error(f"User provided rolename does not exist [{config.aws['role_arn']}]")
-        sys.exit(2)
+        if config.aws["profile"] in role_names.keys():
+            selected_role = (role_names[config.aws["profile"]], url)
+            logger.debug(f"Using aws_profile env var for role: [{config.aws['profile']}]")
+            break
+        elif config.aws["role_arn"] in app["roles"]:
+            selected_role = (config.aws["role_arn"], url)
+            break
+
+    if selected_role is None:
+        if config.aws["role_arn"] is None:
+            selected_role = prompt_role_choices(authenticated_aps)
+        else:
+            logger.error(f"User provided rolename does not exist [{config.aws['role_arn']}]")
+            sys.exit(2)
 
     logger.debug(f"Selected role: [{selected_role}]")
 
@@ -324,32 +327,38 @@ def select_preferred_mfa_index(mfa_options, factor_key="provider", subfactor_key
     return user_input
 
 
-def prompt_role_choices(role_arns, saml_xml, saml_response_string):
+def prompt_role_choices(aut_aps):
     """Ask user to select role.
 
-    :param role_arns: IAM Role list
-    :return: user input of AWS Role
+    :param aut_aps: mapping of authenticated apps metadata, dict
+    :return: user's role and associated url, tuple
     """
-    if len(role_arns) == 1:
-        account_id = role_arns[0].split(":")[4]
-        alias_table = {account_id: account_id}
-    else:
-        alias_table = get_account_aliases(saml_xml, saml_response_string)
+    aliases_mapping = []
+
+    for url, app in aut_aps.items():
+        alias_table = get_account_aliases(app["saml"], app["saml_response_string"])
+
+        for role in app["roles"]:
+            aliases_mapping.append((role, alias_table[role.split(":")[4]], app["label"], url))
 
     logger.debug("Ask user to select role")
-    print("Please select one of the following:\n")
+    print("Please select one of the following:")
 
-    longest_alias = max([len(d) for d in alias_table.values()])
-    longest_index = len(str(len(role_arns)))
-    sorted_role_arns = sorted(role_arns)
+    longest_alias = max(i[1] for i in aliases_mapping)
+    longest_index = len(str(len(aliases_mapping)))
+    print_label = ""
 
-    for (i, arn) in enumerate(sorted_role_arns):
+    for i, data in enumerate(aliases_mapping):
+        role, alias, label, _ = data
         padding_index = longest_index - len(str(i))
-        account_alias = alias_table[arn.split(":")[4]]
-        print(f"[{i}] {padding_index * ' '}{account_alias: <{longest_alias}}    {arn}")
+        if print_label != label:
+            print_label = label
+            print(f"\n{label}:")
 
-    user_input = collect_integer(len(role_arns))
-    selected_role = sorted_role_arns[user_input]
+        print(f"[{i}] {padding_index * ' '}{alias: <{len(longest_alias)}}  {role}")
+
+    user_input = collect_integer(len(aliases_mapping))
+    selected_role = (aliases_mapping[user_input][0], aliases_mapping[user_input][3])
     logger.debug(f"Selected role [{user_input}]")
 
     return selected_role
@@ -907,7 +916,11 @@ def discover_app_url(url, cookies):
         logger.error("AWS app url not found please set url and try again")
         sys.exit(2)
 
-    app_url = process_urls_pool(aws_apps) if len(aws_apps) > 1 else aws_apps[0]["linkUrl"]
+    app_url = (
+        {(url["linkUrl"], url["label"]) for url in aws_apps}
+        if len(aws_apps) > 1
+        else (aws_apps[0]["linkUrl"], aws_apps[0]["label"])
+    )
 
     return app_url
 
@@ -934,19 +947,3 @@ def make_request(method, url, headers=None, **kwargs):
         )
 
     return response
-
-
-def process_urls_pool(apps_list):
-    """
-    Ask user to choose aws url.
-
-    :param apps_list: list of apps objects
-    :returns: app url, str
-    """
-    print("You have more than one AWS app, please select one:\n")
-
-    for i, app in enumerate(apps_list):
-        print(f"[{i}] {app['label']}: {app['linkUrl']}")
-    ind = collect_integer(len(apps_list))
-
-    return apps_list[ind]["linkUrl"]

@@ -523,15 +523,15 @@ def test_correct_role_selection(mocker, selected_role):
     """Test which role does the user has chosen."""
     from tokendito.user import select_role_arn
 
-    saml_xml = "x"
-    saml_response_string = "y"
-
     role_arns = [
         "arn:aws:iam::123456789012:role/pytest",
         "arn:aws:iam::124356789012:role/pytest",
     ]
+
+    authenticated_aps = {"url": {"roles": role_arns}}
+
     mocker.patch("tokendito.user.prompt_role_choices", return_value=selected_role)
-    assert select_role_arn(role_arns, saml_xml, saml_response_string) == selected_role
+    assert select_role_arn(authenticated_aps) == selected_role
 
 
 def test_repeated_line_select_role_arn():
@@ -539,8 +539,6 @@ def test_repeated_line_select_role_arn():
     import tokendito
     from tokendito.user import select_role_arn
 
-    saml_xml = "x"
-    saml_response_string = "y"
     tokendito.config.aws["profile"] = "pytest"
 
     role_arns = [
@@ -548,8 +546,10 @@ def test_repeated_line_select_role_arn():
         "arn:aws:iam::123456789012:role/pytest",
     ]
 
+    authenticated_aps = {"url": {"roles": role_arns}}
+
     with pytest.raises(SystemExit) as error:
-        assert select_role_arn(role_arns, saml_xml, saml_response_string) == error
+        assert select_role_arn(authenticated_aps) == error
 
 
 def test_incorrect_role_arn():
@@ -557,8 +557,6 @@ def test_incorrect_role_arn():
     import tokendito
     from tokendito.user import select_role_arn
 
-    saml_xml = "x"
-    saml_response_string = "y"
     tokendito.config.aws["profile"] = "pytest_failure"
     tokendito.config.aws["role_arn"] = "pytest_failure"
 
@@ -567,8 +565,10 @@ def test_incorrect_role_arn():
         "arn:aws:iam::124356789012:role/pytest",
     ]
 
+    authenticated_aps = {"url": {"roles": role_arns}}
+
     with pytest.raises(SystemExit) as error:
-        assert select_role_arn(role_arns, saml_xml, saml_response_string) == error
+        assert select_role_arn(authenticated_aps) == error
 
 
 def test_prepare_duo_info():
@@ -649,7 +649,7 @@ def test_authenticate_to_roles(status_code, monkeypatch):
     mock_get = {"status_code": status_code, "text": "response"}
     monkeypatch.setattr(requests, "get", mock_get)
     with pytest.raises(SystemExit) as error:
-        assert authenticate_to_roles("secret_session_token", "http://test.url.com") == error
+        assert authenticate_to_roles("secret_session_token", [("http://test.url.com", "")]) == error
 
 
 def test_get_mfa_response():
