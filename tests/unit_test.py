@@ -85,6 +85,24 @@ def test_set_okta_password(mocker):
 @pytest.mark.parametrize(
     "url,expected",
     [
+        ("http://acme.org/", False),
+        ("https://acme.okta.org/app/UserHome", False),
+        ("http://login.acme.org/home/amazon_aws/0123456789abcdef0123/456", False),
+        ("https://login.acme.org/?abc=def", False),
+        ("acme.okta.org", True),
+        ("https://acme.okta.org/", True),
+    ],
+)
+def test_validate_org_url(url, expected):
+    """Test whether the Okta Org URL is parsed correctly."""
+    from tokendito import user
+
+    assert user.validate_okta_org_url(input_url=url) is expected
+
+
+@pytest.mark.parametrize(
+    "url,expected",
+    [
         ("pytest_deadbeef", False),
         ("http://acme.org/", False),
         ("https://acme.okta.org/app/UserHome", False),
@@ -97,7 +115,7 @@ def test_set_okta_password(mocker):
     ],
 )
 def test_validate_app_url(url, expected):
-    """Test whether the Okta URL is parsed correctly."""
+    """Test whether the Okta App URL is parsed correctly."""
     from tokendito import user
 
     assert user.validate_okta_app_url(input_url=url) is expected

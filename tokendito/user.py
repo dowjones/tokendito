@@ -95,7 +95,13 @@ def parse_cli_args(args):
     parser.add_argument("--aws-role-arn", help="Sets the IAM role.")
     parser.add_argument("--aws-shared-credentials-file", help="AWS credentials file to write to.")
 
-    parser.add_argument(
+    okta_me_group = parser.add_mutually_exclusive_group()
+    okta_me_group.add_argument(
+        "--okta-org-url",
+        dest="okta_org",
+        help="Set the Okta Org base URL. This enables role auto-discovery",
+    )
+    okta_me_group.add_argument(
         "--okta-app-url",
         help="Okta App URL to use.",
     )
@@ -336,29 +342,35 @@ def prompt_role_choices(aut_aps):
     aliases_mapping = []
 
     for url, app in aut_aps.items():
+        logger.debug(f"Getting aliases for {url}")
         alias_table = get_account_aliases(app["saml"], app["saml_response_string"])
 
         for role in app["roles"]:
-            aliases_mapping.append((role, alias_table[role.split(":")[4]], app["label"], url))
+            if alias_table:
+                aliases_mapping.append((app["label"], alias_table[role.split(":")[4]], role, url))
+            else:
+                logger.debug(f"There were no labels in {url}. Using account ID")
+                aliases_mapping.append((app["label"], role.split(":")[4], role, url))
 
     logger.debug("Ask user to select role")
     print("Please select one of the following:")
 
-    longest_alias = max(i[1] for i in aliases_mapping)
+    longest_alias = max(len(i[1]) for i in aliases_mapping)
     longest_index = len(str(len(aliases_mapping)))
+    aliases_mapping = sorted(aliases_mapping)
     print_label = ""
 
     for i, data in enumerate(aliases_mapping):
-        role, alias, label, _ = data
+        label, alias, role, _ = data
         padding_index = longest_index - len(str(i))
         if print_label != label:
             print_label = label
             print(f"\n{label}:")
 
-        print(f"[{i}] {padding_index * ' '}{alias: <{len(longest_alias)}}  {role}")
+        print(f"[{i}] {padding_index * ' '}{alias: <{longest_alias}}  {role}")
 
     user_input = collect_integer(len(aliases_mapping))
-    selected_role = (aliases_mapping[user_input][0], aliases_mapping[user_input][3])
+    selected_role = (aliases_mapping[user_input][2], aliases_mapping[user_input][3])
     logger.debug(f"Selected role [{user_input}]")
 
     return selected_role
@@ -430,6 +442,29 @@ def validate_saml_response(html):
     return xml
 
 
+def validate_okta_org_url(input_url=None):
+    """Validate whether a given URL is a valid AWS Org URL in Okta.
+
+    :param input_url: string
+    :return: bool. True if valid, False otherwise
+    """
+    logger.debug(f"Will try to match '{input_url}' to a valid URL")
+
+    url = urlparse(input_url)
+    logger.debug(f"URL parsed as {url}")
+    if (
+        url.scheme == "https"
+        and (url.path == "" or url.path == "/")
+        and url.params == ""
+        and url.query == ""
+        and url.fragment == ""
+    ) or (url.scheme == "" and url.params == "" and url.query == "" and url.fragment == ""):
+        return True
+
+    logger.debug(f"{url} does not look like a valid match.")
+    return False
+
+
 def validate_okta_app_url(input_url=None):
     """Validate whether a given URL is a valid AWS app URL in Okta.
 
@@ -439,6 +474,7 @@ def validate_okta_app_url(input_url=None):
     logger.debug(f"Will try to match '{input_url}' to a valid URL")
 
     url = urlparse(input_url)
+    logger.debug(f"URL parsed as {url}")
     # Here, we could also check url.netloc against r'.*\.okta(preview)?\.com$'
     # but Okta allows the usage of custome URLs such as login.acme.com
     if url.scheme == "https" and re.match(r"^/home/amazon_aws/\w{20}/\d{3}$", url.path) is not None:
@@ -468,9 +504,9 @@ def get_account_aliases(saml_xml, saml_response_string):
         sys.exit(1)
 
     if "Account: " not in aws_response.text:
-        logger.error("There were no accounts returned in the AWS SAML page.")
+        logger.debug("No labels found")
         logger.debug(json.dumps(aws_response.text))
-        sys.exit(2)
+        return None
 
     soup = BeautifulSoup(aws_response.text, "html.parser")
     account_names = soup.find_all(text=re.compile("Account:"))
@@ -860,13 +896,26 @@ def process_okta_org_url(config_obj):
     :param config_obj: configuration object
     :returns: None
     """
+    message = "Okta Org URL. E.g. https://acme.okta.com/: "
     if not config_obj.okta["app_url"] and not config_obj.okta["org"]:
         while not config_obj.okta["org"]:
-            user_input = input("Please set okta org url:")
-            config_obj.okta["org"] = user_input
+            user_input = input(message)
+            user_input = user_input.strip()
+            if validate_okta_org_url(user_input):
+                config_obj.okta["org"] = user_input
+            else:
+                print("Invalid input, try again")
 
     elif config_obj.okta["app_url"] and not config_obj.okta["org"]:
         process_okta_app_url(config_obj)
+
+    url = urlparse(config_obj.okta["org"])
+    logger.debug(f"Cleaning up {config_obj.okta['org']}")
+    if url.path and not url.netloc:
+        config_obj.okta["org"] = f"https://{url.path.split('/')[0]}"
+    else:
+        config_obj.okta["org"] = f"https://{url.netloc}"
+    logger.debug(f"Connection string is {config_obj.okta['org']}")
 
 
 def request_cookies(url, session_token):
@@ -891,7 +940,7 @@ def request_cookies(url, session_token):
 
 def discover_app_url(url, cookies):
     """
-    Discover aws app url on user`s okta dashboard.
+    Discover aws app url on user's okta dashboard.
 
     :param url: okta org url
     :param cookies: HTML cookies
@@ -902,7 +951,7 @@ def discover_app_url(url, cookies):
         "type": "all",
         "expand": ["items", "items.resource"],
     }
-
+    logger.debug(f"Performing auto-discovery on {url}.")
     response_with_tabs = make_request(method="GET", url=url, cookies=cookies, params=params)
     tabs = response_with_tabs.json()
 
@@ -921,6 +970,10 @@ def discover_app_url(url, cookies):
         if len(aws_apps) > 1
         else (aws_apps[0]["linkUrl"], aws_apps[0]["label"])
     )
+    logger.debug(f"Discovered {len(app_url)} URLs.")
+
+    if len(app_url) >= 5:
+        logger.warning(f"Discovering roles in {len(app_url)} tiles, this may take some time.")
 
     return app_url
 
