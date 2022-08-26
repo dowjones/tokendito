@@ -54,7 +54,7 @@ jobs:
         echo ::set-output name=tags::${TAGS}
         echo ::set-output name=docker_image::${DOCKER_IMAGE}
     - name: Build
-      uses: docker/build-push-action@v2
+      uses: docker/build-push-action@v3
       with:
         builder: ${{ steps.buildx.outputs.name }}
         file: /${GITHUB_WORKSPACE}/Dockerfile
