@@ -23,44 +23,53 @@ from tokendito import user
 logger = logging.getLogger(__name__)
 
 
-def authenticate_to_roles(secret_session_token, url):
+def authenticate_to_roles(secret_session_token, urls, cookies=None):
     """Authenticate AWS user with saml.
 
     :param secret_session_token: secret session token
-    :param url: url of the AWS account
+    :param urls: list of tuples or tuple, with apps info
+    :param cookies: html cookies
     :return: response text
 
     """
     payload = {"onetimetoken": secret_session_token}
-    logger.debug(f"Authenticate AWS user with SAML URL [{url}]")
-    try:
-        response = requests.get(url, params=payload)
-        saml_response_string = response.text
-        if response.status_code == 400 or response.status_code == 401:
-            errmsg = "Invalid Credentials."
-            logger.error(f"{errmsg}\nExiting with code:{response.status_code}")
-            sys.exit(2)
-        elif response.status_code == 404:
-            errmsg = "Invalid Okta application URL. Please verify your configuration."
-            logger.error(f"{errmsg}")
-            sys.exit(2)
-        elif response.status_code >= 500 and response.status_code < 504:
-            errmsg = "Unable to establish connection with Okta. Verify Okta Org URL and try again."
-            logger.error(f"{errmsg}\nExiting with code:{response.status_code}")
-            sys.exit(2)
-        elif response.status_code != 200:
-            logger.error(f"Exiting with code:{response.status_code}")
-            logger.debug(saml_response_string)
-            sys.exit(2)
+    url_list = [urls] if isinstance(urls, tuple) else urls
+    responses = []
 
-    except Exception as error:
-        errmsg = f"Okta auth failed:\n{error}"
-        logger.error(errmsg)
-        sys.exit(1)
+    for url, label in url_list:
+        try:
+            logger.debug(f"Authenticate AWS user with SAML URL [{url}]")
 
-    saml_xml = user.validate_saml_response(saml_response_string)
+            response = requests.get(url, params=payload, cookies=cookies)
+            saml_response_string = response.text
+            if response.status_code == 400 or response.status_code == 401:
+                errmsg = "Invalid Credentials."
+                logger.error(f"{errmsg}\nExiting with code:{response.status_code}")
+                sys.exit(2)
+            elif response.status_code == 404:
+                errmsg = "Invalid Okta application URL. Please verify your configuration."
+                logger.error(f"{errmsg}")
+                sys.exit(2)
+            elif response.status_code >= 500 and response.status_code < 504:
+                errmsg = (
+                    "Unable to establish connection with Okta. Verify Okta Org URL and try again."
+                )
+                logger.error(f"{errmsg}\nExiting with code:{response.status_code}")
+                sys.exit(2)
+            elif response.status_code != 200:
+                logger.error(f"Exiting with code:{response.status_code}")
+                logger.debug(saml_response_string)
+                sys.exit(2)
 
-    return saml_response_string, saml_xml
+        except Exception as error:
+            errmsg = f"Okta auth failed:\n{error}"
+            logger.error(errmsg)
+            sys.exit(1)
+
+        saml_xml = user.validate_saml_response(saml_response_string)
+        responses.append((url, saml_response_string, saml_xml, label))
+
+    return responses
 
 
 def assume_role(role_arn, provider_arn, saml):
@@ -171,17 +180,30 @@ def ensure_keys_work(assume_role_response):
         sys.exit(1)
 
 
-def select_assumeable_role(saml_response_string, saml):
+def select_assumeable_role(apps):
     """Select the role to perform the AssumeRoleWithSaml.
 
-    :param saml_response_string response from Okta with saml data:
-    :param saml decoded saml response from Okta:
-    :return AWS AssumeRoleWithSaml response, role name:
+    # :param apps: apps metadata, list of tuples
+    # :return: AWS AssumeRoleWithSaml response, role name, tuple
     """
-    roles_and_providers = user.extract_arns(saml)
-    role_arn = user.select_role_arn(list(roles_and_providers.keys()), saml, saml_response_string)
+    authenticated_aps = {}
+    for url, saml_response, saml, label in apps:
+        roles_and_providers = user.extract_arns(saml)
+        authenticated_aps[url] = {
+            "roles": list(roles_and_providers.keys()),
+            "saml": saml,
+            "saml_response_string": saml_response,
+            "roles_and_providers": roles_and_providers,
+            "label": label,
+        }
+
+    role_arn, _id = user.select_role_arn(authenticated_aps)
     role_name = role_arn.split("/")[-1]
 
-    assume_role_response = assume_role(role_arn, roles_and_providers[role_arn], saml)
+    assume_role_response = assume_role(
+        role_arn,
+        authenticated_aps[_id]["roles_and_providers"][role_arn],
+        authenticated_aps[_id]["saml"],
+    )
 
     return assume_role_response, role_name
