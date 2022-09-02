@@ -1,16 +1,16 @@
 -r ./requirements.txt
-black==20.8b1
+black>=22.1.0
 coveragepy-lcov; python_version >= '3.8'
-docutils<0.16,>=0.10
+docutils
 flake8
 flake8-black
 flake8-colors
 flake8-docstrings
-flake8-import-order>=0.9
+flake8-import-order
 pep8-naming
-pexpect>=4.6.0
-pydocstyle==3.0.0
-pylint>=1.8.4
+pexpect
+pydocstyle
+pylint
 pyotp
 pyroma
 pytest
