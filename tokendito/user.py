@@ -95,7 +95,13 @@ def parse_cli_args(args):
     parser.add_argument("--aws-role-arn", help="Sets the IAM role.")
     parser.add_argument("--aws-shared-credentials-file", help="AWS credentials file to write to.")
 
-    parser.add_argument(
+    okta_me_group = parser.add_mutually_exclusive_group()
+    okta_me_group.add_argument(
+        "--okta-org-url",
+        dest="okta_org",
+        help="Set the Okta Org base URL. This enables role auto-discovery",
+    )
+    okta_me_group.add_argument(
         "--okta-app-url",
         help="Okta App URL to use.",
     )
@@ -210,37 +216,40 @@ def setup_logging(conf):
         submodule_logger.setLevel(conf["loglevel"])
 
 
-def select_role_arn(role_arns, saml_xml, saml_response_string):
+def select_role_arn(authenticated_aps):
     """Select the role user wants to pick.
 
-    :param role_arns: IAM roles ARN list assigned for the user
-    :param saml_xml: Decoded saml response from Okta
-    :param saml_response_string: http response from saml assertion to AWS
-    :return: User input index selected by the user, the arn of selected role
-
+    :param: authenticated_aps, mapping of authenticated apps metadata, dict
+    :return: user role and associated url, tuple
     """
-    logger.debug(f"Select the role user wants to pick [{role_arns}]")
+    selected_role = None
 
-    role_names = dict((role.split("/")[-1], role) for role in role_arns)
-    roles = [role.split("/")[-1] for role in role_arns]
+    for url, app in authenticated_aps.items():
+        logger.debug(f"Select the role user wants to pick [{app['roles']}]")
+        role_names = dict((role.split("/")[-1], role) for role in app["roles"])
+        roles = [role.split("/")[-1] for role in app["roles"]]
 
-    if roles.count(config.aws["profile"]) > 1:
-        logger.error(
-            "There are multiple matches for the profile selected, "
-            "please use the --role-arn option to select one"
-        )
-        sys.exit(2)
+        if roles.count(config.aws["profile"]) > 1:
+            logger.error(
+                "There are multiple matches for the profile selected, "
+                "please use the --role-arn option to select one"
+            )
+            sys.exit(2)
 
-    if config.aws["profile"] in role_names.keys():
-        selected_role = role_names[config.aws["profile"]]
-        logger.debug(f"Using aws_profile env var for role: [{config.aws['profile']}]")
-    elif config.aws["role_arn"] is None:
-        selected_role = prompt_role_choices(role_arns, saml_xml, saml_response_string)
-    elif config.aws["role_arn"] in role_arns:
-        selected_role = config.aws["role_arn"]
-    else:
-        logger.error(f"User provided rolename does not exist [{config.aws['role_arn']}]")
-        sys.exit(2)
+        if config.aws["profile"] in role_names.keys():
+            selected_role = (role_names[config.aws["profile"]], url)
+            logger.debug(f"Using aws_profile env var for role: [{config.aws['profile']}]")
+            break
+        elif config.aws["role_arn"] in app["roles"]:
+            selected_role = (config.aws["role_arn"], url)
+            break
+
+    if selected_role is None:
+        if config.aws["role_arn"] is None:
+            selected_role = prompt_role_choices(authenticated_aps)
+        else:
+            logger.error(f"User provided rolename does not exist [{config.aws['role_arn']}]")
+            sys.exit(2)
 
     logger.debug(f"Selected role: [{selected_role}]")
 
@@ -324,32 +333,44 @@ def select_preferred_mfa_index(mfa_options, factor_key="provider", subfactor_key
     return user_input
 
 
-def prompt_role_choices(role_arns, saml_xml, saml_response_string):
+def prompt_role_choices(aut_aps):
     """Ask user to select role.
 
-    :param role_arns: IAM Role list
-    :return: user input of AWS Role
+    :param aut_aps: mapping of authenticated apps metadata, dict
+    :return: user's role and associated url, tuple
     """
-    if len(role_arns) == 1:
-        account_id = role_arns[0].split(":")[4]
-        alias_table = {account_id: account_id}
-    else:
-        alias_table = get_account_aliases(saml_xml, saml_response_string)
+    aliases_mapping = []
+
+    for url, app in aut_aps.items():
+        logger.debug(f"Getting aliases for {url}")
+        alias_table = get_account_aliases(app["saml"], app["saml_response_string"])
+
+        for role in app["roles"]:
+            if alias_table:
+                aliases_mapping.append((app["label"], alias_table[role.split(":")[4]], role, url))
+            else:
+                logger.debug(f"There were no labels in {url}. Using account ID")
+                aliases_mapping.append((app["label"], role.split(":")[4], role, url))
 
     logger.debug("Ask user to select role")
-    print("Please select one of the following:\n")
+    print("Please select one of the following:")
 
-    longest_alias = max([len(d) for d in alias_table.values()])
-    longest_index = len(str(len(role_arns)))
-    sorted_role_arns = sorted(role_arns)
+    longest_alias = max(len(i[1]) for i in aliases_mapping)
+    longest_index = len(str(len(aliases_mapping)))
+    aliases_mapping = sorted(aliases_mapping)
+    print_label = ""
 
-    for (i, arn) in enumerate(sorted_role_arns):
+    for i, data in enumerate(aliases_mapping):
+        label, alias, role, _ = data
         padding_index = longest_index - len(str(i))
-        account_alias = alias_table[arn.split(":")[4]]
-        print(f"[{i}] {padding_index * ' '}{account_alias: <{longest_alias}}    {arn}")
+        if print_label != label:
+            print_label = label
+            print(f"\n{label}:")
 
-    user_input = collect_integer(len(role_arns))
-    selected_role = sorted_role_arns[user_input]
+        print(f"[{i}] {padding_index * ' '}{alias: <{longest_alias}}  {role}")
+
+    user_input = collect_integer(len(aliases_mapping))
+    selected_role = (aliases_mapping[user_input][2], aliases_mapping[user_input][3])
     logger.debug(f"Selected role [{user_input}]")
 
     return selected_role
@@ -421,6 +442,29 @@ def validate_saml_response(html):
     return xml
 
 
+def validate_okta_org_url(input_url=None):
+    """Validate whether a given URL is a valid AWS Org URL in Okta.
+
+    :param input_url: string
+    :return: bool. True if valid, False otherwise
+    """
+    logger.debug(f"Will try to match '{input_url}' to a valid URL")
+
+    url = urlparse(input_url)
+    logger.debug(f"URL parsed as {url}")
+    if (
+        url.scheme == "https"
+        and (url.path == "" or url.path == "/")
+        and url.params == ""
+        and url.query == ""
+        and url.fragment == ""
+    ) or (url.scheme == "" and url.params == "" and url.query == "" and url.fragment == ""):
+        return True
+
+    logger.debug(f"{url} does not look like a valid match.")
+    return False
+
+
 def validate_okta_app_url(input_url=None):
     """Validate whether a given URL is a valid AWS app URL in Okta.
 
@@ -430,6 +474,7 @@ def validate_okta_app_url(input_url=None):
     logger.debug(f"Will try to match '{input_url}' to a valid URL")
 
     url = urlparse(input_url)
+    logger.debug(f"URL parsed as {url}")
     # Here, we could also check url.netloc against r'.*\.okta(preview)?\.com$'
     # but Okta allows the usage of custome URLs such as login.acme.com
     if url.scheme == "https" and re.match(r"^/home/amazon_aws/\w{20}/\d{3}$", url.path) is not None:
@@ -459,9 +504,9 @@ def get_account_aliases(saml_xml, saml_response_string):
         sys.exit(1)
 
     if "Account: " not in aws_response.text:
-        logger.error("There were no accounts returned in the AWS SAML page.")
+        logger.debug("No labels found")
         logger.debug(json.dumps(aws_response.text))
-        sys.exit(2)
+        return None
 
     soup = BeautifulSoup(aws_response.text, "html.parser")
     account_names = soup.find_all(text=re.compile("Account:"))
@@ -575,24 +620,25 @@ def process_environment(prefix="tokendito"):
     return config_env
 
 
-def process_okta_app_url():
-    """Process Okta app url.
-
-    :param app_url: string with okta tile URL.
-    :return: None.
+def process_okta_app_url(config_obj):
     """
-    if not validate_okta_app_url(config.okta["app_url"]):
+    Validate okta app url, and extract okta org url from it.
+
+    :param config_obj: configuration object
+    :returns: None
+    """
+    if not validate_okta_app_url(config_obj.okta["app_url"]):
         logger.error(
             "Okta Application URL not found, or invalid. Please check "
             "your configuration and try again."
         )
         sys.exit(2)
 
-    url = urlparse(config.okta["app_url"])
+    url = urlparse(config_obj.okta["app_url"])
     okta_org = f"{url.scheme}://{url.netloc}"
     okta_aws_app_url = f"{okta_org}{url.path}"
-    config.okta["org"] = okta_org
-    config.okta["app_url"] = okta_aws_app_url
+    config_obj.okta["org"] = okta_org
+    config_obj.okta["app_url"] = okta_aws_app_url
 
 
 def user_configuration_input():
@@ -841,3 +887,116 @@ def process_options(args):
     config.update(config_ini)
     config.update(config_env)
     config.update(config_args)
+
+
+def process_okta_org_url(config_obj):
+    """
+    Extract okta org url from app url, or request it from user.
+
+    :param config_obj: configuration object
+    :returns: None
+    """
+    message = "Okta Org URL. E.g. https://acme.okta.com/: "
+    if not config_obj.okta["app_url"] and not config_obj.okta["org"]:
+        while not config_obj.okta["org"]:
+            user_input = input(message)
+            user_input = user_input.strip()
+            if validate_okta_org_url(user_input):
+                config_obj.okta["org"] = user_input
+            else:
+                print("Invalid input, try again")
+
+    elif config_obj.okta["app_url"] and not config_obj.okta["org"]:
+        process_okta_app_url(config_obj)
+
+    url = urlparse(config_obj.okta["org"])
+    logger.debug(f"Cleaning up {config_obj.okta['org']}")
+    if url.path and not url.netloc:
+        config_obj.okta["org"] = f"https://{url.path.split('/')[0]}"
+    else:
+        config_obj.okta["org"] = f"https://{url.netloc}"
+    logger.debug(f"Connection string is {config_obj.okta['org']}")
+
+
+def request_cookies(url, session_token):
+    """
+    Request session cookie.
+
+    :param url: okta org url, str
+    :param session_token: session token, str
+    :returns: cookies object
+    """
+    url = f"{url}/api/v1/sessions"
+    data = json.dumps({"sessionToken": f"{session_token}"})
+
+    response_with_cookie = make_request(method="POST", url=url, data=data)
+    sesh_id = response_with_cookie.json()["id"]
+
+    cookies = response_with_cookie.cookies
+    cookies.update({"sid": f"{sesh_id}"})
+
+    return cookies
+
+
+def discover_app_url(url, cookies):
+    """
+    Discover aws app url on user's okta dashboard.
+
+    :param url: okta org url
+    :param cookies: HTML cookies
+    :returns: aws app url. str
+    """
+    url = f"{url}/api/v1/users/me/home/tabs"
+    params = {
+        "type": "all",
+        "expand": ["items", "items.resource"],
+    }
+    logger.debug(f"Performing auto-discovery on {url}.")
+    response_with_tabs = make_request(method="GET", url=url, cookies=cookies, params=params)
+    tabs = response_with_tabs.json()
+
+    aws_apps = []
+    for tab in tabs:
+        for app in tab["_embedded"]["items"]:
+            if "amazon_aws" in app["_embedded"]["resource"]["linkUrl"]:
+                aws_apps.append(app["_embedded"]["resource"])
+
+    if not aws_apps:
+        logger.error("AWS app url not found please set url and try again")
+        sys.exit(2)
+
+    app_url = (
+        {(url["linkUrl"], url["label"]) for url in aws_apps}
+        if len(aws_apps) > 1
+        else (aws_apps[0]["linkUrl"], aws_apps[0]["label"])
+    )
+    logger.debug(f"Discovered {len(app_url)} URLs.")
+
+    if len(app_url) >= 5:
+        logger.warning(f"Discovering roles in {len(app_url)} tiles, this may take some time.")
+
+    return app_url
+
+
+def make_request(method, url, headers=None, **kwargs):
+    """
+    Wrap 'requests.request' and perform response checks.
+
+    :param method: request method
+    :param url: request URL
+    :param headers: request headers
+    :param kwargs: additional parameters passed to request
+    :returns: response object
+    """
+    if headers is None:
+        headers = {"content-type": "application/json", "accept": "application/json"}
+
+    response = requests.request(method=method, url=url, headers=headers, **kwargs)
+
+    if response.status_code != 200:
+        logger.error(
+            f"Your {method} request failed with status_code {response.status_code}.\n"
+            f"{response.content}\n"
+        )
+
+    return response

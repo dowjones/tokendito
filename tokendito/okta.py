@@ -37,6 +37,7 @@ def okta_verify_api_method(url, payload, headers=None):
     :param headers: Headers of the request
     :return: Dictionary with authentication response
     """
+    logger.debug(f"url is {url}")
     try:
         response = requests.request("POST", url, data=json.dumps(payload), headers=headers)
     except Exception as request_error:
@@ -116,8 +117,8 @@ def authenticate_user(url, username, password):
     headers = {"content-type": "application/json", "accept": "application/json"}
     payload = {"username": username, "password": password}
 
+    logger.debug(f"Authenticate Okta headers [{headers}] ")
     primary_auth = okta_verify_api_method(f"{url}/api/v1/authn", payload, headers)
-    logger.debug(f"Authenticate Okta header [{headers}] ")
 
     session_token = user_session_token(primary_auth, headers)
     logger.info("User has been succesfully authenticated.")
