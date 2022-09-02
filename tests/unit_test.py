@@ -85,6 +85,24 @@ def test_set_okta_password(mocker):
 @pytest.mark.parametrize(
     "url,expected",
     [
+        ("http://acme.org/", False),
+        ("https://acme.okta.org/app/UserHome", False),
+        ("http://login.acme.org/home/amazon_aws/0123456789abcdef0123/456", False),
+        ("https://login.acme.org/?abc=def", False),
+        ("acme.okta.org", True),
+        ("https://acme.okta.org/", True),
+    ],
+)
+def test_validate_org_url(url, expected):
+    """Test whether the Okta Org URL is parsed correctly."""
+    from tokendito import user
+
+    assert user.validate_okta_org_url(input_url=url) is expected
+
+
+@pytest.mark.parametrize(
+    "url,expected",
+    [
         ("pytest_deadbeef", False),
         ("http://acme.org/", False),
         ("https://acme.okta.org/app/UserHome", False),
@@ -97,7 +115,7 @@ def test_set_okta_password(mocker):
     ],
 )
 def test_validate_app_url(url, expected):
-    """Test whether the Okta URL is parsed correctly."""
+    """Test whether the Okta App URL is parsed correctly."""
     from tokendito import user
 
     assert user.validate_okta_app_url(input_url=url) is expected
@@ -523,15 +541,15 @@ def test_correct_role_selection(mocker, selected_role):
     """Test which role does the user has chosen."""
     from tokendito.user import select_role_arn
 
-    saml_xml = "x"
-    saml_response_string = "y"
-
     role_arns = [
         "arn:aws:iam::123456789012:role/pytest",
         "arn:aws:iam::124356789012:role/pytest",
     ]
+
+    authenticated_aps = {"url": {"roles": role_arns}}
+
     mocker.patch("tokendito.user.prompt_role_choices", return_value=selected_role)
-    assert select_role_arn(role_arns, saml_xml, saml_response_string) == selected_role
+    assert select_role_arn(authenticated_aps) == selected_role
 
 
 def test_repeated_line_select_role_arn():
@@ -539,8 +557,6 @@ def test_repeated_line_select_role_arn():
     import tokendito
     from tokendito.user import select_role_arn
 
-    saml_xml = "x"
-    saml_response_string = "y"
     tokendito.config.aws["profile"] = "pytest"
 
     role_arns = [
@@ -548,8 +564,10 @@ def test_repeated_line_select_role_arn():
         "arn:aws:iam::123456789012:role/pytest",
     ]
 
+    authenticated_aps = {"url": {"roles": role_arns}}
+
     with pytest.raises(SystemExit) as error:
-        assert select_role_arn(role_arns, saml_xml, saml_response_string) == error
+        assert select_role_arn(authenticated_aps) == error
 
 
 def test_incorrect_role_arn():
@@ -557,8 +575,6 @@ def test_incorrect_role_arn():
     import tokendito
     from tokendito.user import select_role_arn
 
-    saml_xml = "x"
-    saml_response_string = "y"
     tokendito.config.aws["profile"] = "pytest_failure"
     tokendito.config.aws["role_arn"] = "pytest_failure"
 
@@ -567,8 +583,10 @@ def test_incorrect_role_arn():
         "arn:aws:iam::124356789012:role/pytest",
     ]
 
+    authenticated_aps = {"url": {"roles": role_arns}}
+
     with pytest.raises(SystemExit) as error:
-        assert select_role_arn(role_arns, saml_xml, saml_response_string) == error
+        assert select_role_arn(authenticated_aps) == error
 
 
 def test_prepare_duo_info():
@@ -649,7 +667,7 @@ def test_authenticate_to_roles(status_code, monkeypatch):
     mock_get = {"status_code": status_code, "text": "response"}
     monkeypatch.setattr(requests, "get", mock_get)
     with pytest.raises(SystemExit) as error:
-        assert authenticate_to_roles("secret_session_token", "http://test.url.com") == error
+        assert authenticate_to_roles("secret_session_token", [("http://test.url.com", "")]) == error
 
 
 def test_get_mfa_response():
