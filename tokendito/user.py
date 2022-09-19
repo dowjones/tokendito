@@ -17,7 +17,7 @@ import sys
 from urllib.parse import urlparse
 
 from botocore import __version__ as __botocore_version__
-from bs4 import __version__ as __bs4_version__
+from bs4 import __version__ as __bs4_version__  # type: ignore (bs4 does not have PEP 561 support)
 from bs4 import BeautifulSoup
 import requests
 from tokendito import __version__
@@ -122,9 +122,12 @@ def utc_to_local(utc_dt):
     :param:utc_str:datetime
     :return:local_time:string
     """
-    local_time = utc_dt.replace(tzinfo=timezone.utc).astimezone(tz=None)
-    local_time = local_time.strftime("%Y-%m-%d %H:%M:%S %Z")
-
+    try:
+        local_time = utc_dt.replace(tzinfo=timezone.utc).astimezone(tz=None)
+        local_time = local_time.strftime("%Y-%m-%d %H:%M:%S %Z")
+    except TypeError as err:
+        logger.error(f"Could not convert time: {err}")
+        sys.exit(1)
     return local_time
 
 
@@ -138,38 +141,6 @@ def create_directory(dir_name):
                 f"Cannot continue creating directory: {config.user['config_dir']}: {error.strerror}"
             )
             sys.exit(1)
-
-
-def set_okta_username():
-    """Set okta username in a constant settings variable.
-
-    :return: okta_username
-
-    """
-    logger.debug("Set username.")
-
-    if config.okta["username"] == "":
-        username = input("Username: ")
-        config.okta["username"] = username
-        logger.debug("username set interactively.")
-    return config.okta["username"]
-
-
-def set_okta_password():
-    """Set okta password in a constant settings variable.
-
-    :param args: command line arguments
-    :return: okta_password
-
-    """
-    logger.debug("Set password.")
-
-    while config.okta["password"] == "":
-        password = getpass.getpass()
-        config.okta["password"] = password
-    logger.debug("password set interactively")
-
-    return config.okta["password"]
 
 
 def get_submodule_names(location=__file__):
@@ -189,10 +160,29 @@ def get_submodule_names(location=__file__):
     return submodules
 
 
+def setup_early_logging(args):
+    """Do a best-effort attempt to enable early logging.
+
+    :param args: list of arguments to parse
+    :return: dict with values set
+    """
+    early_logging = {}
+    if "TOKENDITO_USER_LOGLEVEL" in os.environ:
+        early_logging["loglevel"] = os.environ["TOKENDITO_USER_LOGLEVEL"]
+    if "TOKENDITO_USER_LOG_OUTPUT_FILE" in os.environ:
+        early_logging["log_output_file"] = os.environ["TOKENDITO_USER_LOG_OUTPUT_FILE"]
+    if "user_loglevel" in args and args.user_loglevel:
+        early_logging["loglevel"] = args.user_loglevel
+    if "user_log_output_file" in args and args.user_log_output_file:
+        early_logging["log_output_file"] = args.user_log_output_file
+    setup_logging(early_logging)
+    return early_logging
+
+
 def setup_logging(conf):
     """Set logging level.
 
-    :param conf: User config
+    :param conf: dictionary with config
     :return: None
 
     """
@@ -201,19 +191,30 @@ def setup_logging(conf):
         fmt="%(asctime)s %(name)s [%(funcName)s():%(lineno)i] - %(levelname)s - %(message)s"
     )
     handler = logging.StreamHandler()
-    if conf["log_output_file"]:
+    if "log_output_file" in conf and conf["log_output_file"]:
         handler = logging.FileHandler(conf["log_output_file"])
     handler.setFormatter(formatter)
 
     # Set a reasonable default logging format.
+    root_logger.handlers.clear()
     root_logger.addHandler(handler)
 
     # Pre-create a log handler for each submodule
     # with the same format and level. Settings are
     # inherited from the root logger.
-    for submodule in get_submodule_names():
-        submodule_logger = logging.getLogger(f"tokendito.{submodule}")
-        submodule_logger.setLevel(conf["loglevel"])
+    submodules = [f"tokendito.{x}" for x in get_submodule_names()]
+    if "loglevel" in conf:
+        conf["loglevel"] = conf["loglevel"].upper()
+        for submodule in submodules:
+            submodule_logger = logging.getLogger(submodule)
+            try:
+                submodule_logger.setLevel(conf["loglevel"])
+            except ValueError as err:
+                root_logger.setLevel(config.get_defaults()["user"]["loglevel"])
+                submodule_logger.warning(f"{err}. Plese check your configuration and try again.")
+                break
+    loglevel = logging.getLogger(submodules[0]).getEffectiveLevel()
+    return loglevel
 
 
 def select_role_arn(authenticated_aps):
@@ -376,14 +377,20 @@ def prompt_role_choices(aut_aps):
     return selected_role
 
 
-def print_selected_role(profile_name, expiration_time):
+def display_selected_role(profile_name="", role_response={}):
     """Print details about how to assume role.
 
     :param profile_name: AWS profile name
-    :param expiration_time: Credentials expiration time
-    :return:
+    :param role_response: Assume Role response dict
+    :return: message displayed.
 
     """
+    try:
+        expiration_time = role_response["Credentials"]["Expiration"]
+    except (KeyError, TypeError) as err:
+        logger.error(f"Could not retrieve expiration time: {err}")
+        sys.exit(1)
+
     expiration_time_local = utc_to_local(expiration_time)
     msg = (
         f"\nGenerated profile '{profile_name}' in {config.aws['shared_credentials_file']}.\n"
@@ -394,7 +401,8 @@ def print_selected_role(profile_name, expiration_time):
         f"Credentials are valid until {expiration_time} ({expiration_time_local})."
     )
 
-    return print(msg)
+    print(msg)
+    return msg
 
 
 def extract_arns(saml):
@@ -458,7 +466,7 @@ def validate_okta_org_url(input_url=None):
         and url.params == ""
         and url.query == ""
         and url.fragment == ""
-    ) or (url.scheme == "" and url.params == "" and url.query == "" and url.fragment == ""):
+    ):
         return True
 
     logger.debug(f"{url} does not look like a valid match.")
@@ -477,7 +485,10 @@ def validate_okta_app_url(input_url=None):
     logger.debug(f"URL parsed as {url}")
     # Here, we could also check url.netloc against r'.*\.okta(preview)?\.com$'
     # but Okta allows the usage of custome URLs such as login.acme.com
-    if url.scheme == "https" and re.match(r"^/home/amazon_aws/\w{20}/\d{3}$", url.path) is not None:
+    if (
+        url.scheme == "https"
+        and re.match(r"^/home/amazon_aws/\w{20}/\d{3}$", str(url.path)) is not None
+    ):
         return True
 
     logger.debug(f"{url} does not look like a valid match.")
@@ -492,7 +503,9 @@ def get_account_aliases(saml_xml, saml_response_string):
     :return: mapping table of account ids to their aliases
     """
     soup = BeautifulSoup(saml_response_string, "html.parser")
-    url = soup.find("form").get("action")
+    form = soup.find("form")
+    action = form.get("action")  # type: ignore (bs4 does not have PEP 561 support)
+    url = str(action)
 
     encoded_xml = codecs.encode(saml_xml.encode("utf-8"), "base64")
     aws_response = None
@@ -519,6 +532,7 @@ def display_version():
     """Print program version and exit."""
     python_version = platform.python_version()
     (system, _, release, _, _, _) = platform.uname()
+    logger.debug(f"Display version: {__version__}")
     print(
         f"tokendito/{__version__} Python/{python_version} {system}/{release} "
         f"botocore/{__botocore_version__} bs4/{__bs4_version__} requests/{requests.__version__}"
@@ -548,6 +562,7 @@ def process_ini_file(file, profile):
     except configparser.Error as err:
         logger.error(f"Could not load profile '{profile}': {str(err)}")
         sys.exit(2)
+    logger.debug(f"Found ini directives: {res}")
 
     try:
         config_ini = Config(**res)
@@ -579,6 +594,7 @@ def process_arguments(args):
                 res[match.group(1)] = dict()
             if val:
                 res[match.group(1)][match.group(2)] = val
+    logger.debug(f"Found arguments: {res}")
 
     try:
         config_args = Config(**res)
@@ -607,6 +623,7 @@ def process_environment(prefix="tokendito"):
             if match.group(2) not in res:
                 res[match.group(2)] = dict()
             res[match.group(2)][match.group(3)] = val
+    logger.debug(f"Found environment variables: {res}")
 
     try:
         config_env = Config(**res)
@@ -620,61 +637,132 @@ def process_environment(prefix="tokendito"):
     return config_env
 
 
-def process_okta_app_url(config_obj):
+def get_base_url(urlstring):
     """
     Validate okta app url, and extract okta org url from it.
 
     :param config_obj: configuration object
     :returns: None
     """
-    if not validate_okta_app_url(config_obj.okta["app_url"]):
+    if not validate_okta_app_url(urlstring):
         logger.error(
-            "Okta Application URL not found, or invalid. Please check "
-            "your configuration and try again."
+            "Okta URL not found, or invalid. Please check " "your configuration and try again."
         )
         sys.exit(2)
 
-    url = urlparse(config_obj.okta["app_url"])
-    okta_org = f"{url.scheme}://{url.netloc}"
-    okta_aws_app_url = f"{okta_org}{url.path}"
-    config_obj.okta["org"] = okta_org
-    config_obj.okta["app_url"] = okta_aws_app_url
+    url = urlparse(urlstring)
+    baseurl = f"{url.scheme}://{url.netloc}"
+    return baseurl
 
 
-def user_configuration_input():
-    """Obtain user input for the user.
+def get_interactive_config(app_url="", org_url="", username=""):
+    """Obtain user input from the user.
 
-    :return: tuple with (okta_app_url, username)
+    :return: dictionary with values
     """
     logger.debug("Obtain user input for the user.")
-    url = ""
-    username = ""
-    config_details = []
-    message = {
-        "app_url": "\nOkta App URL. E.g https://acme.okta.com/home/"
-        "amazon_aws/b07384d113edec49eaa6/123\n[none]: ",
-        "username": "\nOrganization username. E.g jane.doe@acme.com\n[none]: ",
-    }
+    config_details = {}
 
-    while url == "":
-        user_data = input(message["app_url"])
+    # We need either one of these two:
+    while org_url == "" and app_url == "":
+        print("\nPlease enter either your Organization URL, a tile (app) URL, or both.")
+        org_url = get_org_url()
+        app_url = get_app_url()
+    while username == "":
+        username = get_username()
+
+    if org_url != "":
+        config_details["okta_org_url"] = org_url
+    if app_url != "":
+        config_details["okta_app_url"] = app_url
+    config_details["okta_username"] = username
+
+    logger.debug(f"Details: {config_details}")
+    return config_details
+
+
+def get_org_url():
+    """Get Org URL from user.
+
+    :return: string with sanitized value, or the empty string.
+    """
+    message = "Okta Org URL. E.g. https://acme.okta.com/ [none]: "
+    res = ""
+
+    while res == "":
+        user_data = get_input(message)
         user_data = user_data.strip()
-        if validate_okta_app_url(user_data):
-            url = user_data
+        if user_data == "":
+            break
+        if not user_data.startswith("https://"):
+            user_data = f"https://{user_data}"
+        if validate_okta_org_url(user_data):
+            res = user_data
         else:
             print("Invalid input, try again.")
-    config_details.append(url)
+    logger.debug(f"Org URL is: {res}")
+    return res
 
-    while username == "":
-        user_data = input(message["username"])
+
+def get_app_url():
+    """Get App URL from user.
+
+    :return: string with sanitized value, or the empty string.
+    """
+    message = (
+        "Okta App URL. E.g. https://acme.okta.com/home/"
+        "amazon_aws/b07384d113edec49eaa6/123 [none]: "
+    )
+    res = ""
+
+    while res == "":
+        user_data = get_input(message)
+        user_data = user_data.strip()
+        if user_data == "":
+            break
+        if not user_data.startswith("https://"):
+            user_data = f"https://{user_data}"
+        if validate_okta_app_url(user_data):
+            res = user_data
+        else:
+            print("Invalid input, try again.")
+    logger.debug(f"App URL is: {res}")
+    return res
+
+
+def get_username():
+    """Get username from user.
+
+    :return: string with sanitized value.
+    """
+    message = "Organization username. E.g jane.doe@acme.com [none]: "
+    res = ""
+    while res == "":
+        user_data = get_input(message)
         user_data = user_data.strip()
         if user_data != "":
-            username = user_data
+            res = user_data
         else:
             print("Invalid input, try again.")
-    config_details.append(username)
+    logger.debug(f"Username is {res}")
+    return res
 
-    return (config_details[0], config_details[1])
+
+def get_password():
+    """Set okta password interactively.
+
+    :param args: command line arguments
+    :return: okta_password
+
+    """
+    res = ""
+    logger.debug("Set password.")
+
+    while res == "":
+        password = getpass.getpass()
+        res = password
+        logger.debug("password set interactively")
+    return res
 
 
 def update_configuration(ini_file, profile):
@@ -686,108 +774,82 @@ def update_configuration(ini_file, profile):
     """
     logger.debug("Update configuration file on local system.")
 
-    ini = configparser.RawConfigParser()
+    results = get_interactive_config()
 
-    create_directory(config.user["config_dir"])
-
-    if os.path.isfile(ini_file):
-        logger.debug(f"Read config [{ini_file} {profile}]")
-        ini.read(ini_file, encoding=config.user["encoding"])
-    if not ini.has_section(profile):
-        ini.add_section(profile)
-        logger.debug(f"Added section {profile} to configuration")
-
-    (app_url, username) = user_configuration_input()
-
-    url = urlparse(app_url.strip())
-    okta_username = username.strip()
-
-    okta_app_url = f"{url.scheme}://{url.netloc}{url.path}"
-
-    ini.set(profile, "okta_app_url", okta_app_url)
-    ini.set(profile, "okta_username", okta_username)
-    logger.debug(f"Final configuration: [{ini}]")
-
-    with open(ini_file, "w+", encoding=config.user["encoding"]) as file:
-        ini.write(file)
-        logger.debug(f"Write new config [{ini_file} {config}]")
+    update_ini(profile=profile, ini_file=ini_file, **results)
+    logger.info(f"Updated {ini_file} with profile {profile}")
 
 
-def set_local_credentials(assume_role_response, role_name, aws_region, aws_output):
+def set_local_credentials(response={}, role="default", region="us-east-1", output="json"):
     """Write to local files to insert credentials.
 
-    :param assume_role_response AWS AssumeRoleWithSaml response:
-    :param role_name the name of the assumed role, used for local profile:
-    :param aws_region configured region for aws credential profile:
-    :param aws output configured datatype for aws cli output:
+    :param response: AWS AssumeRoleWithSaml response
+    :param role: the name of the assumed role, used for local profile
+    :param region: configured region for aws credential profile
+    :param output: configured datatype for aws cli output
+    :return: Role name on a successful call.
     """
-    expiration_time = assume_role_response["Credentials"]["Expiration"]
-    aws_access_key = assume_role_response["Credentials"]["AccessKeyId"]
-    aws_secret_key = assume_role_response["Credentials"]["SecretAccessKey"]
-    aws_session_token = assume_role_response["Credentials"]["SessionToken"]
+    try:
+        aws_access_key = response["Credentials"]["AccessKeyId"]
+        aws_secret_key = response["Credentials"]["SecretAccessKey"]
+        aws_session_token = response["Credentials"]["SessionToken"]
+    except KeyError as err:
+        logger.error(f"Could not retrieve crendentials: {err}")
+        sys.exit(1)
 
-    if config.aws["profile"] is not None:
-        role_name = config.aws["profile"]
+    update_ini(
+        profile=role,
+        ini_file=config.aws["shared_credentials_file"],
+        aws_access_key=aws_access_key,
+        aws_secret_key=aws_secret_key,
+        aws_session_token=aws_session_token,
+    )
 
-    update_aws_credentials(role_name, aws_access_key, aws_secret_key, aws_session_token)
-    update_aws_config(role_name, aws_output, aws_region)
+    update_ini(
+        profile=role,
+        ini_file=config.aws["config_file"],
+        aws_output=output,
+        aws_region=region,
+    )
 
-    print_selected_role(role_name, expiration_time)
+    return role
 
 
-def update_aws_credentials(profile, aws_access_key, aws_secret_key, aws_session_token):
+def update_ini(profile="", ini_file="", **kwargs):
     """Update AWS credentials in ~/.aws/credentials default file.
 
     :param profile: AWS profile name
-    :param aws_access_key: AWS access key
-    :param aws_secret_key: AWS secret access key
-    :param aws_session_token: Session token
+    :param ini_file: File to write to.
+    :param **kwargs: key/value pairs to write to the ini file
+    :return: ConfigParser object written
     """
-    cred_file = config.aws["shared_credentials_file"]
-    cred_dir = os.path.dirname(cred_file)
-    logger.debug(f"Update AWS credentials in: [{cred_file}]")
+    ini_dir = os.path.dirname(ini_file)
+    logger.debug(f"Updating: '{ini_file}'")
 
-    create_directory(cred_dir)
+    create_directory(ini_dir)
 
     ini = configparser.RawConfigParser()
-    if os.path.isfile(cred_file):
-        ini.read(cred_file, encoding=config.user["encoding"])
+    try:
+        ini.read(ini_file, encoding=config.user["encoding"])
+        logger.debug(f"Parsed '{ini_file}'")
+    except (configparser.Error, OSError) as err:
+        logger.error(f"Failed to read '{ini_file}': {err}")
+        sys.exit(1)
+
     if not ini.has_section(profile):
         ini.add_section(profile)
-    ini.set(profile, "aws_access_key_id", aws_access_key)
-    ini.set(profile, "aws_secret_access_key", aws_secret_key)
-    ini.set(profile, "aws_session_token", aws_session_token)
-    with open(cred_file, "w+", encoding=config.user["encoding"]) as file:
-        ini.write(file)
 
+    for key, value in kwargs.items():
+        ini.set(profile, key, value)
 
-def update_aws_config(profile, output, region):
-    """Update AWS config file in ~/.aws/config file.
-
-    :param profile: tokendito profile
-    :param output: aws output
-    :param region: aws region
-    :return:
-
-    """
-    config_file = config.aws["config_file"]
-    config_dir = os.path.dirname(config_file)
-    logger.debug(f"Update AWS config to file: [{config_file}]")
-
-    create_directory(config_dir)
-
-    # Prepend the word profile the the profile name
-    profile = f"profile {profile}"
-    ini = configparser.RawConfigParser()
-    if os.path.isfile(config_file):
-        ini.read(config_file, encoding=config.user["encoding"])
-    if not ini.has_section(profile):
-        ini.add_section(profile)
-    ini.set(profile, "output", output)
-    ini.set(profile, "region", region)
-
-    with open(config_file, "w+", encoding=config.user["encoding"]) as file:
-        ini.write(file)
+    try:
+        with open(ini_file, "w+", encoding=config.user["encoding"]) as file:
+            ini.write(file)
+        logger.debug(f"Wrote {len(kwargs.items())} keys to '{ini_file}'")
+    except (configparser.Error, OSError) as err:
+        logger.error(f"Failed to write to '{ini_file}': {err}")
+        sys.exit(1)
+    return ini
 
 
 def check_within_range(user_input, valid_range):
@@ -866,6 +928,8 @@ def collect_integer(valid_range):
 def process_options(args):
     """Collect all user-specific credentials and config params."""
     args = parse_cli_args(args)
+    # Early logging, in case the user requests debugging via command line
+    setup_early_logging(args)
 
     if args.version:
         display_version()
@@ -887,35 +951,38 @@ def process_options(args):
     config.update(config_ini)
     config.update(config_env)
     config.update(config_args)
+    logger.debug(f"Final configuration is {config}")
+    # Late logging (default)
+    setup_logging(config.user)
 
 
-def process_okta_org_url(config_obj):
+def process_interactive_input(config_obj):
     """
-    Extract okta org url from app url, or request it from user.
+    Request input interactively interactively for elements that are not proesent.
 
     :param config_obj: configuration object
     :returns: None
     """
-    message = "Okta Org URL. E.g. https://acme.okta.com/: "
-    if not config_obj.okta["app_url"] and not config_obj.okta["org"]:
-        while not config_obj.okta["org"]:
-            user_input = input(message)
-            user_input = user_input.strip()
-            if validate_okta_org_url(user_input):
-                config_obj.okta["org"] = user_input
-            else:
-                print("Invalid input, try again")
+    # reuse interactive config. It will only request the portions needed.
+    config_details = get_interactive_config(
+        app_url=config_obj.okta["app_url"],
+        org_url=config_obj.okta["org"],
+        username=config_obj.okta["username"],
+    )
+    if "okta_app_url" in config_details:
+        config_obj.okta["app_url"] = config_details["okta_app_url"]
+    if "okta_org_url" in config_details:
+        config_obj.okta["org"] = config_details["okta_org_url"]
+    if "okta_username" in config_details:
+        config_obj.okta["username"] = config_details["okta_username"]
 
-    elif config_obj.okta["app_url"] and not config_obj.okta["org"]:
-        process_okta_app_url(config_obj)
+    if config_obj.okta["app_url"] and not config_obj.okta["org"]:
+        config_obj["org"] = get_base_url(config_obj["app_url"])
+        logger.debug(f"Connection string is {config_obj.okta['org']}")
 
-    url = urlparse(config_obj.okta["org"])
-    logger.debug(f"Cleaning up {config_obj.okta['org']}")
-    if url.path and not url.netloc:
-        config_obj.okta["org"] = f"https://{url.path.split('/')[0]}"
-    else:
-        config_obj.okta["org"] = f"https://{url.netloc}"
-    logger.debug(f"Connection string is {config_obj.okta['org']}")
+    if config_obj.okta["password"] == "":
+        config_obj.okta["password"] = get_password()
+    logger.debug(f"Runtime configuration is: {config_obj}")
 
 
 def request_cookies(url, session_token):
@@ -930,10 +997,10 @@ def request_cookies(url, session_token):
     data = json.dumps({"sessionToken": f"{session_token}"})
 
     response_with_cookie = make_request(method="POST", url=url, data=data)
-    sesh_id = response_with_cookie.json()["id"]
+    sess_id = response_with_cookie.json()["id"]
 
     cookies = response_with_cookie.cookies
-    cookies.update({"sid": f"{sesh_id}"})
+    cookies.update({"sid": f"{sess_id}"})
 
     return cookies
 
