@@ -4,12 +4,14 @@ on:
     branches:
       - main
       - master
+      - development/2.0.0
     tags:
       - '[0-9]+.[0-9]+.[0-9]+'
   pull_request:
     branches:
       - master
       - main
+      - development/2.0.0
 
 jobs:
   testpypipublish:
