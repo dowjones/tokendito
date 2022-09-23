@@ -60,26 +60,197 @@ def test_semver_version():
     assert semver.VersionInfo.parse(version)
 
 
-def test_set_okta_username(mocker):
+def test_get_username(mocker):
     """Test whether data sent is the same as data returned."""
-    from tokendito import user, config
+    from tokendito import user
 
     mocker.patch("tokendito.user.input", return_value="pytest_patched")
-    val = user.set_okta_username()
+    val = user.get_username()
 
     assert val == "pytest_patched"
-    assert config.okta["username"] == "pytest_patched"
 
 
-def test_set_okta_password(mocker):
+def test_get_password(mocker):
     """Test whether data sent is the same as data returned."""
-    from tokendito import user, config
+    from tokendito import user
 
     mocker.patch("getpass.getpass", return_value="pytest_patched")
-    val = user.set_okta_password()
+    val = user.get_password()
 
     assert val == "pytest_patched"
-    assert config.okta["password"] == "pytest_patched"
+
+
+def test_setup_logging():
+    """Test logging setup."""
+    from tokendito import user
+    import logging
+
+    # test that a correct level is set
+    args = {"loglevel": "info"}
+    ret = user.setup_logging(args)
+    assert ret == logging.INFO
+
+
+def test_setup_early_logging(monkeypatch, tmpdir):
+    """Test early logging."""
+    from tokendito import user
+    from argparse import Namespace
+
+    path = tmpdir.mkdir("pytest")
+    logfile = f"{path}/pytest_log"
+    # test that known values are set correctly
+    args = {"user_loglevel": "debug", "user_log_output_file": logfile}
+    ret = user.setup_early_logging(Namespace(**args))
+    assert "loglevel" in ret
+    assert "log_output_file" in ret
+
+    # test that unknown bad values are ignored
+    args = {"pytest_bad": "pytest"}
+    ret = user.setup_early_logging(Namespace(**args))
+    assert "pytest_bad" not in ret
+
+    # test that known values are set correctly, and bad ones ignored
+    valid_keys = dict(
+        TOKENDITO_USER_LOGLEVEL="debug",
+        TOKENDITO_USER_LOG_OUTPUT_FILE=logfile,
+    )
+    invalid_keys = dict(TOKENDITO_USER_PYTEST_EXPECTED_FAILURE="pytest_expected_failure")
+
+    monkeypatch.setattr(os, "environ", {**valid_keys, **invalid_keys})
+    ret = user.setup_early_logging([])
+    assert "loglevel" in ret
+    assert "log_output_file" in ret
+    assert "TOKENDITO_USER_PYTEST_EXPECTED_FAILURE" not in ret
+
+
+def test_get_interactive_config(mocker):
+    """Test if interactive configuration is collected correctly."""
+    from tokendito import user
+
+    # test that all values return
+    ret = user.get_interactive_config(
+        app_url="https://pytest", org_url="https://pytest", username="pytest"
+    )
+    assert (
+        ret["okta_username"] == "pytest"
+        and ret["okta_org_url"] == "https://pytest"
+        and ret["okta_app_url"] == "https://pytest"
+    )
+
+    # test that interactive values are handled correctly
+    mocker.patch("tokendito.user.get_org_url", return_value="https://pytest")
+    mocker.patch("tokendito.user.get_app_url", return_value="https://pytest")
+    ret = user.get_interactive_config(app_url="", org_url="", username="pytest")
+    assert ret["okta_username"] == "pytest" and ret["okta_org_url"] == "https://pytest"
+
+
+@pytest.mark.parametrize(
+    "url,expected",
+    [
+        ("", ""),
+        ("https://acme.okta.org", "https://acme.okta.org"),
+        ("acme.okta.org", "https://acme.okta.org"),
+    ],
+)
+def test_get_org_url(mocker, url, expected):
+    """Test Org URL."""
+    from tokendito import user
+
+    mocker.patch("tokendito.user.input", return_value=url)
+    assert user.get_org_url() == expected
+
+
+@pytest.mark.parametrize(
+    "url,expected",
+    [
+        ("", ""),
+        (
+            "https://acme.okta.org/home/amazon_aws/0123456789abcdef0123/456?fromHome=true",
+            "https://acme.okta.org/home/amazon_aws/0123456789abcdef0123/456?fromHome=true",
+        ),
+        (
+            "acme.okta.org/home/amazon_aws/0123456789abcdef0123/456?fromHome=true",
+            "https://acme.okta.org/home/amazon_aws/0123456789abcdef0123/456?fromHome=true",
+        ),
+    ],
+)
+def test_get_app_url(mocker, url, expected):
+    """Test get App URL."""
+    from tokendito import user
+
+    mocker.patch("tokendito.user.input", return_value=url)
+    assert user.get_app_url() == expected
+
+
+def test_update_ini(tmpdir):
+    """Ensure ini files are updated correctly."""
+    from tokendito import user
+
+    path = tmpdir.mkdir("pytest")
+    ini_file = f"{path}/update_ini"
+    profile = "pytest"
+    args = {"key_pytest_1": "val_pytest_1", "key_pytest_2": "val_pytest_2"}
+    ret = user.update_ini(profile=profile, ini_file=ini_file, **args)
+    assert ret.get(profile, "key_pytest_1") == "val_pytest_1"
+    assert ret.get(profile, "key_pytest_2") == "val_pytest_2"
+
+
+def test_assert_credentials():
+    """Test whether getting credentials works as expeted."""
+    from moto import mock_sts
+    from tokendito import aws
+
+    with pytest.raises(SystemExit) as err:
+        aws.assert_credentials({})
+        assert err.value.code == 2
+
+    saml_response = {
+        "Credentials": {
+            "AccessKeyId": "pytest",
+            "SecretAccessKey": "pytest",
+            "SessionToken": "pytest",
+        }
+    }
+    with mock_sts():
+        ret = aws.assert_credentials(role_response=saml_response)
+        assert "Arn" in ret and "UserId" in ret
+
+
+def test_set_local_credentials(tmpdir):
+    """Test setting credentials."""
+    from tokendito import user
+
+    # evaluate that we exit on a bad role
+    with pytest.raises(SystemExit) as err:
+        user.set_local_credentials(response={}, role="pytest", region="pytest", output="pytest")
+        assert err.value.code == 1
+
+    # evaluate that we succeed on a working role
+    response = {
+        "Credentials": {
+            "AccessKeyId": "pytest",
+            "SecretAccessKey": "pytest",
+            "SessionToken": "pytest",
+        }
+    }
+
+    path = tmpdir.mkdir("pytest")
+    user.config.aws["shared_credentials_file"] = f"{path}/pytest_credentials"
+    user.config.aws["config_file"] = f"{path}/pytest_config"
+    ret = user.set_local_credentials(response=response, role="default")
+    assert ret == "default"
+
+
+def test_display_selected_role():
+    """Test that role is printed correctly."""
+    from datetime import timezone
+    from tokendito import user
+
+    now = datetime.now()
+    utcnow = now.replace(tzinfo=timezone.utc)
+
+    ret = user.display_selected_role("pytest", {"Credentials": {"Expiration": utcnow}})
+    assert ret is not None and "pytest" in ret
 
 
 @pytest.mark.parametrize(
@@ -89,7 +260,7 @@ def test_set_okta_password(mocker):
         ("https://acme.okta.org/app/UserHome", False),
         ("http://login.acme.org/home/amazon_aws/0123456789abcdef0123/456", False),
         ("https://login.acme.org/?abc=def", False),
-        ("acme.okta.org", True),
+        ("acme.okta.org", False),
         ("https://acme.okta.org/", True),
     ],
 )

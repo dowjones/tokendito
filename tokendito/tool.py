@@ -17,14 +17,9 @@ def cli(args):
     """Tokendito retrieves AWS credentials after authenticating with Okta."""
     # Set some required initial values
     user.process_options(args)
-    user.setup_logging(config.user)
     logger.debug(f"Final configuration is {config}")
 
-    user.process_okta_org_url(config)
-
-    logger.debug("Set Okta credentials.")
-    user.set_okta_username()
-    user.set_okta_password()
+    user.process_interactive_input(config)
 
     # Authenticate okta and AWS also use assumerole to assign the role
     logger.debug("Authenticate user with Okta and AWS.")
@@ -53,10 +48,20 @@ def cli(args):
         secret_session_token, config.okta["app_url"], cookies=session_cookies
     )
 
-    assume_role_response, role_name = aws.select_assumeable_role(auth_apps)
+    (role_response, role_name) = aws.select_assumeable_role(auth_apps)
 
-    aws.ensure_keys_work(assume_role_response)
+    identity = aws.assert_credentials(role_response=role_response)
+    if "Arn" not in identity and "UserId" not in identity:
+        logger.error(
+            f"There was an error retrieving and verifying AWS credentials: {role_response}"
+        )
+        sys.exit(1)
 
     user.set_local_credentials(
-        assume_role_response, role_name, config.aws["region"], config.aws["output"]
+        response=role_response,
+        role=role_name,
+        region=config.aws["region"],
+        output=config.aws["output"],
     )
+
+    user.display_selected_role(profile_name=role_name, role_response=role_response)
