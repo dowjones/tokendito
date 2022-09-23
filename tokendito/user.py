@@ -790,8 +790,8 @@ def set_local_credentials(response={}, role="default", region="us-east-1", outpu
     :return: Role name on a successful call.
     """
     try:
-        aws_access_key = response["Credentials"]["AccessKeyId"]
-        aws_secret_key = response["Credentials"]["SecretAccessKey"]
+        aws_access_key_id = response["Credentials"]["AccessKeyId"]
+        aws_secret_access_key = response["Credentials"]["SecretAccessKey"]
         aws_session_token = response["Credentials"]["SessionToken"]
     except KeyError as err:
         logger.error(f"Could not retrieve crendentials: {err}")
@@ -800,16 +800,16 @@ def set_local_credentials(response={}, role="default", region="us-east-1", outpu
     update_ini(
         profile=role,
         ini_file=config.aws["shared_credentials_file"],
-        aws_access_key=aws_access_key,
-        aws_secret_key=aws_secret_key,
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
         aws_session_token=aws_session_token,
     )
 
     update_ini(
-        profile=role,
+        profile=f"profile {role}",
         ini_file=config.aws["config_file"],
-        aws_output=output,
-        aws_region=region,
+        output=output,
+        region=region,
     )
 
     return role
@@ -977,7 +977,7 @@ def process_interactive_input(config_obj):
         config_obj.okta["username"] = config_details["okta_username"]
 
     if config_obj.okta["app_url"] and not config_obj.okta["org"]:
-        config_obj["org"] = get_base_url(config_obj["app_url"])
+        config_obj.okta["org"] = get_base_url(config_obj.okta["app_url"])
         logger.debug(f"Connection string is {config_obj.okta['org']}")
 
     if config_obj.okta["password"] == "":
