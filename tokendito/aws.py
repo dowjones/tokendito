@@ -150,21 +150,24 @@ def handle_assume_role(role_arn, provider_arn, encoded_xml, duration, default_er
     return assume_role_response
 
 
-def ensure_keys_work(assume_role_response):
+def assert_credentials(role_response={}):
     """Validate the temporary AWS credentials.
 
-    :param aws_access_key: AWS access key
-    :param aws_secret_key: AWS secret key
-    :param aws_session_token: AWS session token
-    :return:
+    :param assume_role_response: dictionary with response. It should contain the credentials to AWS.
+    :return: Dictionary with identity object
 
     """
     logger.debug("Validate the temporary AWS credentials")
 
-    aws_access_key = assume_role_response["Credentials"]["AccessKeyId"]
-    aws_secret_key = assume_role_response["Credentials"]["SecretAccessKey"]
-    aws_session_token = assume_role_response["Credentials"]["SessionToken"]
+    try:
+        aws_access_key = role_response["Credentials"]["AccessKeyId"]
+        aws_secret_key = role_response["Credentials"]["SecretAccessKey"]
+        aws_session_token = role_response["Credentials"]["SessionToken"]
+    except KeyError:
+        logger.error("SAML Response did not contain credentials")
+        sys.exit(1)
 
+    identity = {}
     try:
         session = botocore.session.get_session()
 
@@ -174,10 +177,12 @@ def ensure_keys_work(assume_role_response):
             aws_secret_access_key=aws_secret_key,
             aws_session_token=aws_session_token,
         )
-        client.get_caller_identity()
+        identity = client.get_caller_identity()
+        logger.debug(f"Logged on with role ARN: {identity['Arn']}")
     except Exception as auth_error:
         logger.error(f"There was an error authenticating your keys with AWS: {auth_error}")
         sys.exit(1)
+    return identity
 
 
 def select_assumeable_role(apps):

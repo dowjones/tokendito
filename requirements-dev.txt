@@ -2,11 +2,11 @@
 black>=22.1.0
 coveragepy-lcov; python_version >= '3.8'
 docutils
-flake8
+flake8>=5.0.0
 flake8-black
-flake8-colors
 flake8-docstrings
 flake8-import-order
+moto
 pep8-naming
 pexpect
 pydocstyle
