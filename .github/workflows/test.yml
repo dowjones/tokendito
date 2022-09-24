@@ -79,7 +79,7 @@ jobs:
           pip install tox
       - name: Run Authenticated tests
         run: |
-          tox -e auth
+          tox -e py310,auth
         env:
           TOKENDITO_OKTA_USERNAME: ${{ secrets.TOXTEST_OKTA_USERNAME }}
           TOKENDITO_OKTA_PASSWORD: ${{ secrets.TOXTEST_OKTA_PASSWORD }}
