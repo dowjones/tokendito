@@ -473,13 +473,15 @@ def test_user_session_token(
 
     mocker.patch("tokendito.okta.user_mfa_challenge", return_value=session_token)
     assert user_session_token(primary_auth, sample_headers) == expected
+    with pytest.raises(SystemExit) as err:
+        assert user_session_token(None, sample_headers) == err
 
 
 def test_bad_user_session_token(mocker, sample_json_response, sample_headers):
     """Test whether function behave accordingly."""
     from tokendito.okta import user_session_token
 
-    mocker.patch("tokendito.okta.login_error_code_parser", return_value=None)
+    mocker.patch("tokendito.okta.api_error_code_parser", return_value=None)
     okta_response_statuses = ["okta_response_error", "okta_response_empty"]
 
     for response in okta_response_statuses:
@@ -516,7 +518,7 @@ def test_mfa_provider_type(
         "tokendito.duo.authenticate_duo",
         return_value=(payload, sample_headers, callback_url),
     )
-    mocker.patch("tokendito.okta.okta_verify_api_method", return_value=mfa_verify)
+    mocker.patch("tokendito.okta.api_wrapper", return_value=mfa_verify)
     mocker.patch("tokendito.okta.user_mfa_options", return_value=mfa_verify)
     mocker.patch("tokendito.duo.duo_api_post")
     assert (
@@ -550,7 +552,7 @@ def test_bad_mfa_provider_type(mocker, sample_headers):
         "tokendito.duo.authenticate_duo",
         return_value=(payload, sample_headers, callback_url),
     )
-    mocker.patch("tokendito.okta.okta_verify_api_method", return_value=mfa_verify)
+    mocker.patch("tokendito.okta.api_wrapper", return_value=mfa_verify)
     mocker.patch("tokendito.okta.user_mfa_options", return_value=mfa_verify)
 
     with pytest.raises(SystemExit) as error:
@@ -568,38 +570,48 @@ def test_bad_mfa_provider_type(mocker, sample_headers):
         )
 
 
-def test_okta_verify_api_method():
+def test_api_wrapper():
     """Test whether verify_api_method returns the correct data."""
-    from tokendito.okta import okta_verify_api_method
+    from tokendito.okta import api_wrapper
 
     url = "https://acme.org"
     with requests_mock.Mocker() as m:
         data = {"response": "ok"}
         m.post(url, json=data, status_code=200)
-        assert okta_verify_api_method(url, data) == data
+        assert api_wrapper(url, data) == data
+
+    with pytest.raises(SystemExit) as error, requests_mock.Mocker() as m:
+        data = None
+        m.post(url, json=data, status_code=200)
+        assert api_wrapper(url, data) == error
+
+    with pytest.raises(SystemExit) as error, requests_mock.Mocker() as m:
+        data = {"response": "ok", "errorCode": "0xdeadbeef"}
+        m.post(url, json=data, status_code=200)
+        assert api_wrapper(url, data) == error
 
     with pytest.raises(SystemExit) as error, requests_mock.Mocker() as m:
         data = "pytest_bad_datatype"
         m.post(url, text=data, status_code=403)
-        assert okta_verify_api_method(url, data) == error
+        assert api_wrapper(url, data) == error
 
     with pytest.raises(SystemExit) as error, requests_mock.Mocker() as m:
         data = {"response": "incorrect", "errorCode": "0xdeadbeef"}
         m.post(url, json=data, status_code=403)
-        assert okta_verify_api_method("http://acme.org", data) == error
+        assert api_wrapper("http://acme.org", data) == error
 
 
-def test_login_error_code_parser():
+def test_api_error_code_parser():
     """Test whether message on specific status equal."""
-    from tokendito.okta import login_error_code_parser, _status_dict
+    from tokendito.okta import api_error_code_parser, _status_dict
 
     okta_status_dict = _status_dict
 
     for (key, value) in okta_status_dict.items():
-        assert login_error_code_parser(key) == "Okta auth failed: " + value
+        assert api_error_code_parser(key) == "Okta auth failed: " + value
     unexpected_key = "UNEXPECTED_KEY"
     value = f"Okta auth failed: {unexpected_key}. Please verify your settings and try again."
-    assert login_error_code_parser(unexpected_key) == value
+    assert api_error_code_parser(unexpected_key) == value
 
 
 @pytest.mark.parametrize(
@@ -895,7 +907,7 @@ def test_config_object():
     assert pytest_config.user["config_profile"] == "pytest_user"
 
     # Check that default values from the original object are kept
-    assert pytest_config.aws["region"] == "us-east-1"
+    assert pytest_config.get_defaults()["aws"]["region"] == pytest_config.aws["region"]
 
 
 def test_default_loglevel():
