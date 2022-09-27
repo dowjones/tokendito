@@ -29,7 +29,7 @@ _status_dict = dict(
 )
 
 
-def okta_verify_api_method(url, payload, headers=None):
+def api_wrapper(url, payload, headers=None):
     """Okta MFA authentication.
 
     :param url: url to call
@@ -40,11 +40,12 @@ def okta_verify_api_method(url, payload, headers=None):
     logger.debug(f"url is {url}")
     try:
         response = requests.request("POST", url, data=json.dumps(payload), headers=headers)
-    except Exception as request_error:
-        logger.error(f"There was an error connecting to {url}: {request_error}")
+        response.raise_for_status()
+    except Exception as err:
+        logger.error(f"There was an error with the call to {url}: {err}")
         sys.exit(1)
 
-    logger.debug(f"Authentication response is {response}")
+    logger.debug(f"Response is {response}")
 
     try:
         ret = response.json()
@@ -58,19 +59,19 @@ def okta_verify_api_method(url, payload, headers=None):
         sys.exit(1)
 
     if "errorCode" in ret:
-        login_error_code_parser(ret["errorCode"])
+        api_error_code_parser(ret["errorCode"])
         sys.exit(1)
 
     return ret
 
 
-def login_error_code_parser(status=None):
+def api_error_code_parser(status=None):
     """Status code parsing.
 
     param status: Response status
     return message: status message
     """
-    if status in _status_dict.keys():
+    if status and status in _status_dict.keys():
         message = f"Okta auth failed: {_status_dict[status]}"
     else:
         message = f"Okta auth failed: {status}. Please verify your settings and try again."
@@ -87,22 +88,20 @@ def user_session_token(primary_auth, headers):
     return session_token: Session Token from JSON response
     """
     status = None
-    if primary_auth.get("errorCode"):
-        status = primary_auth.get("errorCode")
-    else:
-        status = primary_auth.get("status")
+    try:
+        status = primary_auth.get("status", None)
+    except AttributeError:
+        pass
 
-    if status == "SUCCESS":
+    if status == "SUCCESS" and "sessionToken" in primary_auth:
         session_token = primary_auth.get("sessionToken")
     elif status == "MFA_REQUIRED":
         session_token = user_mfa_challenge(headers, primary_auth)
-    elif status is None:
-        logger.debug(f"Error parsing response: {json.dumps(primary_auth)}")
-        logger.error("Okta auth failed: unknown status")
-        sys.exit(1)
     else:
-        login_error_code_parser(status)
+        logger.debug(f"Error parsing response: {json.dumps(primary_auth)}")
+        logger.error("Okta auth failed: unknown status.")
         sys.exit(1)
+
     return session_token
 
 
@@ -118,7 +117,7 @@ def authenticate_user(url, username, password):
     payload = {"username": username, "password": password}
 
     logger.debug(f"Authenticate Okta headers [{headers}] ")
-    primary_auth = okta_verify_api_method(f"{url}/api/v1/authn", payload, headers)
+    primary_auth = api_wrapper(f"{url}/api/v1/authn", payload, headers)
 
     session_token = user_session_token(primary_auth, headers)
     logger.info("User has been succesfully authenticated.")
@@ -148,7 +147,7 @@ def mfa_provider_type(
     if mfa_provider == "duo":
         payload, headers, callback_url = duo.authenticate_duo(selected_factor)
         duo.duo_api_post(callback_url, payload=payload)
-        mfa_verify = okta_verify_api_method(mfa_challenge_url, payload, headers)
+        mfa_verify = api_wrapper(mfa_challenge_url, payload, headers)
     elif mfa_provider == "okta" or mfa_provider == "google":
         mfa_verify = user_mfa_options(
             selected_mfa_option, headers, mfa_challenge_url, payload, primary_auth
@@ -223,7 +222,7 @@ def user_mfa_challenge(headers, primary_auth):
         "provider": selected_mfa_option["provider"],
         "profile": selected_mfa_option["profile"],
     }
-    selected_factor = okta_verify_api_method(mfa_challenge_url, payload, headers)
+    selected_factor = api_wrapper(mfa_challenge_url, payload, headers)
 
     mfa_provider = selected_factor["_embedded"]["factor"]["provider"].lower()
     logger.debug(f"MFA Challenge URL: [{mfa_challenge_url}] headers: {headers}")
@@ -264,7 +263,7 @@ def user_mfa_options(selected_mfa_option, headers, mfa_challenge_url, payload, p
 
     # time to verify the mfa method
     payload = {"stateToken": primary_auth["stateToken"], "passCode": config.okta["mfa_response"]}
-    mfa_verify = okta_verify_api_method(mfa_challenge_url, payload, headers)
+    mfa_verify = api_wrapper(mfa_challenge_url, payload, headers)
     logger.debug(f"mfa_verify [{json.dumps(mfa_verify)}]")
 
     return mfa_verify
@@ -285,7 +284,7 @@ def push_approval(headers, mfa_challenge_url, payload):
     mfa_status = "WAITING"
     mfa_verify = None
     while mfa_status == "WAITING":
-        mfa_verify = okta_verify_api_method(mfa_challenge_url, payload, headers)
+        mfa_verify = api_wrapper(mfa_challenge_url, payload, headers)
 
         logger.debug(f"MFA Response:\n{json.dumps(mfa_verify)}")
 
@@ -307,6 +306,9 @@ def push_approval(headers, mfa_challenge_url, payload):
             logger.error("Device approval window has expired.")
             sys.exit(2)
 
-        time.sleep(2)
+        time.sleep(0.5)
 
+    if mfa_verify is None:
+        logger.error("Unknown error in MFA approval.")
+        sys.exit(2)
     return mfa_verify
