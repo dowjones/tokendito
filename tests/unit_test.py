@@ -652,7 +652,10 @@ def test_mfa_option_info(factor_type, output):
     assert mfa_option_info(mfa_option) == output
 
 
-@pytest.mark.parametrize("preset_mfa, output", [("push", 0), (None, 1)])
+@pytest.mark.parametrize(
+    "preset_mfa, output",
+    [("push", 0), (None, 1), ("0xdeadbeef", 1), ("opfrar9yi4bKJNH2WEWQ0x8", 0), ("pytest_dupe", 1)],
+)
 def test_user_mfa_index(preset_mfa, output, mocker, sample_json_response):
     """Test whether the function returns correct mfa method index."""
     from tokendito.okta import user_mfa_index
@@ -660,10 +663,15 @@ def test_user_mfa_index(preset_mfa, output, mocker, sample_json_response):
     primary_auth = sample_json_response["okta_response_mfa"]
 
     mfa_options = primary_auth["_embedded"]["factors"]
-    available_mfas = [d["factorType"] for d in mfa_options]
+    available_mfas = [f"{d['provider']}_{d['factorType']}_{d['id']}" for d in mfa_options]
     mocker.patch("tokendito.user.select_preferred_mfa_index", return_value=1)
 
-    assert user_mfa_index(preset_mfa, available_mfas, mfa_options) == output
+    if preset_mfa == "pytest_dupe":
+        with pytest.raises(SystemExit) as err:
+            user_mfa_index(preset_mfa, available_mfas, mfa_options)
+        assert err.value.code == output
+    else:
+        assert user_mfa_index(preset_mfa, available_mfas, mfa_options) == output
 
 
 def test_select_preferred_mfa_index(mocker, sample_json_response):

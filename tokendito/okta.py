@@ -168,11 +168,23 @@ def user_mfa_index(preset_mfa, available_mfas, mfa_options):
     :param available_mfas: available mfa method ids
     :param mfa_options: available mfa methods
     """
-    logger.debug("Get mfa method index in request.")
-    if preset_mfa is not None and preset_mfa in available_mfas:
-        mfa_index = available_mfas.index(preset_mfa)
-    else:
+    indices = []
+    if preset_mfa:
+        logger.debug(f"Get mfa method from {available_mfas}.")
+        indices = [i for i, elem in enumerate(available_mfas) if preset_mfa in elem]
+
+    mfa_index = None
+    if len(indices) == 0:
+        logger.debug(f"No matches with {preset_mfa}, going to get user input")
         mfa_index = user.select_preferred_mfa_index(mfa_options)
+    elif len(indices) == 1:
+        logger.debug(f"One match: {preset_mfa} in {indices}")
+        mfa_index = indices[0]
+    else:
+        logger.error(
+            f"{preset_mfa} is not unique in {available_mfas}. Please check your configuration."
+        )
+        sys.exit(1)
 
     return mfa_index
 
@@ -193,20 +205,7 @@ def user_mfa_challenge(headers, primary_auth):
 
     preset_mfa = config.okta["mfa_method"]
 
-    available_mfas = [d["factorType"] for d in mfa_options]
-
-    if available_mfas.count(preset_mfa) > 1:
-        mfa_method = config.okta["mfa_method"]
-        mfa_index = available_mfas.index(preset_mfa)
-        provider = mfa_options[mfa_index]["provider"]
-        mfa_id = mfa_options[mfa_index]["id"]
-
-        logger.warning(
-            f"\n\nMore than one method found with {mfa_method}.\n"
-            f"Defaulting to {provider} - {mfa_method} - Id: {mfa_id}.\n"
-            "This functionality will be deprecated in"
-            "the next major release.\n"
-        )
+    available_mfas = [f"{d['provider']}_{d['factorType']}_{d['id']}" for d in mfa_options]
 
     mfa_index = user_mfa_index(preset_mfa, available_mfas, mfa_options)
 
