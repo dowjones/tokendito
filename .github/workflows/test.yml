@@ -36,7 +36,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ['3.6', '3.7', '3.8', '3.9', '3.10']
+        python-version: ['3.6', '3.7', '3.8', '3.9', '3.10', '3.11']
     steps:
     - name: Checkout
       uses: actions/checkout@v2
@@ -72,14 +72,14 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: '3.x'
+          python-version: '3.11'
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install tox
       - name: Run Authenticated tests
         run: |
-          tox -e py310,auth
+          tox -e py311,auth
         env:
           TOKENDITO_OKTA_USERNAME: ${{ secrets.TOXTEST_OKTA_USERNAME }}
           TOKENDITO_OKTA_PASSWORD: ${{ secrets.TOXTEST_OKTA_PASSWORD }}
