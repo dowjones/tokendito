@@ -90,6 +90,11 @@ def test_setup_logging():
     ret = user.setup_logging(args)
     assert ret == logging.INFO
 
+    # test that a default level is set on a bad level
+    args = {"loglevel": "pytest"}
+    ret = user.setup_logging(args)
+    assert ret == logging.INFO
+
 
 def test_setup_early_logging(monkeypatch, tmpdir):
     """Test early logging."""
@@ -127,14 +132,14 @@ def test_get_interactive_config(mocker):
     """Test if interactive configuration is collected correctly."""
     from tokendito import user
 
-    # test that all values return
+    # test that all values return correctly
     ret = user.get_interactive_config(
-        app_url="https://pytest", org_url="https://pytest", username="pytest"
+        app_url="https://pytest/pytest", org_url="https://pytest", username="pytest"
     )
     assert (
         ret["okta_username"] == "pytest"
         and ret["okta_org_url"] == "https://pytest"
-        and ret["okta_app_url"] == "https://pytest"
+        and ret["okta_app_url"] == "https://pytest/pytest"
     )
 
     # test that interactive values are handled correctly
@@ -287,6 +292,12 @@ def test_display_selected_role():
     ret = user.display_selected_role("pytest", {"Credentials": {"Expiration": utcnow}})
     assert ret is not None and "pytest" in ret
 
+    with pytest.raises(SystemExit) as err:
+        ret = user.display_selected_role("pytest", {"pytest": {}})
+        assert err.value.code == 1
+
+    assert ret is not None and "pytest" in ret
+
 
 @pytest.mark.parametrize(
     "url,expected",
@@ -398,6 +409,10 @@ def test_utc_to_local():
     local_time = local_time.strftime("%Y-%m-%d %H:%M:%S %Z")
 
     assert user.utc_to_local(utc) == local_time
+
+    with pytest.raises(SystemExit) as err:
+        user.utc_to_local("pytest")
+        assert err.value.code == 1
 
 
 def test_set_passcode(mocker):
@@ -957,7 +972,8 @@ def test_default_loglevel():
 def test_loglevel_collected_from_env(monkeypatch, tmpdir):
     """Ensure that the loglevel collected from env vars."""
     from argparse import Namespace
-    from tokendito import user, config, Config
+    import logging
+    from tokendito import user
 
     args = {
         "okta_username": "pytest_arg",
@@ -970,8 +986,192 @@ def test_loglevel_collected_from_env(monkeypatch, tmpdir):
 
     monkeypatch.setenv("TOKENDITO_USER_LOGLEVEL", "DEBUG")
     monkeypatch.setattr(user, "parse_cli_args", lambda *x: Namespace(**args))
-    monkeypatch.setattr(user, "process_ini_file", lambda *x: Config())
+    ret = user.setup_early_logging(args)["loglevel"]
+    val = logging.getLevelName(ret)
 
-    user.process_options(None)
+    assert val == logging.DEBUG
 
-    assert config.user["loglevel"] == "DEBUG"
+
+def test_create_directory(tmpdir):
+    """Test dir creation."""
+    from tokendito import user
+
+    path = tmpdir.mkdir("pytest")
+    testdir = f"{path}/pytest"
+
+    ret = user.create_directory(testdir)
+    assert ret is None
+
+    with pytest.raises(SystemExit) as err:
+        user.create_directory(__file__)
+        assert err.value.code == 1
+
+
+def test_get_submodules_names():
+    """Test whether submodules are retrieves correctly."""
+    from tokendito import user
+
+    ret = user.get_submodule_names()
+    assert "__main__" in ret
+
+    ret = user.get_submodule_names("")
+    assert ret == []
+
+
+def test_process_interactive_input(mocker):
+    """Test interactive input processor."""
+    from tokendito import user, Config
+
+    # Check that a good object retrieves an interactive password
+    mocker.patch("getpass.getpass", return_value="pytest_password")
+    config = dict(okta=dict())
+    pytest_config = Config(**config)
+    pytest_config.okta["app_url"] = "https://pytest/appurl"
+    pytest_config.okta["org"] = "https://pytest/"
+    pytest_config.okta["username"] = "pytest"
+    ret = user.process_interactive_input(pytest_config)
+    assert ret.okta["password"] == "pytest_password"
+
+    # Check that a bad object raises an exception
+    with pytest.raises(SystemExit) as error:
+        assert user.process_interactive_input({"pytest": "pytest"}) == error
+
+
+@pytest.mark.parametrize(
+    "value,submit,expected",
+    [
+        ("pytest", None, "pytest"),
+        ("pytest", "deadbeef", "pytest"),
+        ("pytest", 0xDEADBEEF, "pytest"),
+        (None, None, "default"),
+        (None, "", "default"),
+        (None, 0xDEADBEEF, str(0xDEADBEEF)),
+    ],
+)
+def test_set_role_name(value, submit, expected):
+    """Test setting the AWS Role (profile) name."""
+    from tokendito import user, Config
+
+    pytest_config = Config(aws=dict(profile=value))
+
+    ret = user.set_role_name(pytest_config, submit)
+    assert ret.aws["profile"] == expected
+
+
+@pytest.mark.parametrize(
+    "config,expected",
+    [
+        (
+            {"okta": {"username": "", "password": "", "org": None, "app_url": None}},
+            [
+                "Username not set.",
+                "Password not set.",
+                "Either Okta Org or App URL must be defined.",
+            ],
+        ),
+        (
+            {
+                "okta": {
+                    "username": "pytest",
+                    "password": "pytest",
+                    "org": "https://acme.okta.org",
+                    "app_url": None,
+                }
+            },
+            [],
+        ),
+        (
+            {
+                "okta": {
+                    "username": "pytest",
+                    "password": "pytest",
+                    "org": "https://acme.okta.org",
+                    "app_url": "https://badurl_pytest.org",
+                }
+            },
+            [
+                "Tile URL https://badurl_pytest.org is not valid.",
+                "Org URL https://acme.okta.org and Tile URL "
+                "https://badurl_pytest.org must be in the same domain.",
+            ],
+        ),
+        (
+            {
+                "okta": {
+                    "username": "pytest",
+                    "password": "pytest",
+                    "org": "https://acme.okta.org",
+                    "app_url": "https://acme.okta.org/home/amazon_aws/"
+                    "0123456789abcdef0123/456?fromHome=true",
+                }
+            },
+            [],
+        ),
+        (
+            {
+                "okta": {
+                    "username": "pytest",
+                    "password": "pytest",
+                    "org": "https://acme.okta.com/",
+                    "app_url": "https://acme.okta.org/home/amazon_aws/"
+                    "0123456789abcdef0123/456?fromHome=true",
+                }
+            },
+            [
+                "Org URL https://acme.okta.com/ and Tile URL "
+                "https://acme.okta.org/home/amazon_aws/"
+                "0123456789abcdef0123/456?fromHome=true must be in the same domain."
+            ],
+        ),
+        (
+            {
+                "okta": {
+                    "username": "pytest",
+                    "password": "pytest",
+                    "org": "pytest_deadbeef",
+                    "app_url": None,
+                }
+            },
+            ["Org URL pytest_deadbeef is not valid"],
+        ),
+    ],
+)
+def test_validate_configuration(config, expected):
+    """Test configuration validator."""
+    from tokendito import user, Config
+
+    pytest_config = Config(**config)
+    print(pytest_config)
+    assert user.validate_configuration(pytest_config) == expected
+
+
+def test_sanitize_config_values():
+    """Test configuration sanitizer method."""
+    from tokendito import user, Config
+
+    pytest_config = Config(
+        aws=dict(output="pytest", region="pytest"),
+        okta=dict(app_url="https://pytest_org", org="https://pytest_bar/"),
+    )
+    ret = user.sanitize_config_values(pytest_config)
+    assert ret.aws["region"] == pytest_config.get_defaults()["aws"]["region"]
+    assert ret.aws["output"] == pytest_config.get_defaults()["aws"]["output"]
+    assert ret.okta["app_url"].startswith(ret.okta["org"])
+
+
+def test_get_regions():
+    """Test retrieval of available AWS regions."""
+    from tokendito import aws
+
+    ret = aws.get_regions(profile="pytest")
+    assert ret == []
+    ret = aws.get_regions()
+    assert "us-east-1" in ret
+
+
+def test_get_output_types():
+    """Test getting AWS output types."""
+    from tokendito import aws
+
+    ret = aws.get_output_types()
+    assert "json" in ret

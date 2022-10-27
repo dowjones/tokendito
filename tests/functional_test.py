@@ -78,6 +78,7 @@ def custom_args(request):
         "--okta-mfa-response",
         "--aws-role-arn",
         "--config-file",
+        "--aws-profile",
     ]
     arg_list = []
     # pytest does not have a method for listing options, so we have look them up.
@@ -211,6 +212,8 @@ def test_generate_credentials(custom_args):
     args = [
         "--aws-role-arn",
         f"{config.aws['role_arn']}",
+        "--aws-profile",
+        f"{config.aws['profile']}",
         "--okta-app-url",
         f"{config.okta['app_url']}",
         "--okta-mfa-method",
@@ -252,8 +255,8 @@ def test_aws_credentials(custom_args):
 
     if not config.aws["role_arn"]:
         pytest.skip("No AWS profile defined, test will be skipped.")
-    profile = config.aws["role_arn"].split("/")[-1]
-    runnable = ["aws", "--profile", profile, "sts", "get-caller-identity"]
+
+    runnable = ["aws", "--profile", config.aws["profile"], "sts", "get-caller-identity"]
     proc = run_process(runnable)
     assert not proc["stderr"]
     assert proc["exit_status"] == 0

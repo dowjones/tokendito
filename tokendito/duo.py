@@ -114,7 +114,7 @@ def get_duo_devices(duo_auth):
     """
     soup = BeautifulSoup(duo_auth.content, "html.parser")
 
-    device_soup = soup.find("select", {"name": "device"}).findAll("option")
+    device_soup = soup.find("select", {"name": "device"}).findAll("option")  # type: ignore
     devices = [f"{d['value']} - {d.text}" for d in device_soup]
     if not devices:
         logger.error("Please configure devices for your Duo MFA and retry.")
@@ -123,7 +123,7 @@ def get_duo_devices(duo_auth):
     factor_options = []
     for device in devices:
         options = soup.find("fieldset", {"data-device-index": device.split(" - ")[0]})
-        factors = options.findAll("input", {"name": "factor"})
+        factors = options.findAll("input", {"name": "factor"})  # type: ignore (PEP 561)
         for factor in factors:
             factor_option = {"device": device, "factor": factor["value"]}
             factor_options.append(factor_option)
