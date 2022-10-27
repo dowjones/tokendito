@@ -21,6 +21,7 @@ from bs4 import __version__ as __bs4_version__  # type: ignore (bs4 does not hav
 from bs4 import BeautifulSoup
 import requests
 from tokendito import __version__
+from tokendito import aws
 from tokendito import Config
 from tokendito import config as config
 
@@ -171,7 +172,7 @@ def get_submodule_names(location=__file__):
     submodules = []
 
     try:
-        package = Path(location).resolve()
+        package = Path(location).resolve(strict=True)
         submodules = [x.name for x in iter_modules([str(package.parent)])]
     except Exception as err:
         logger.warning(f"Could not resolve modules: {str(err)}")
@@ -202,8 +203,7 @@ def setup_logging(conf):
     """Set logging level.
 
     :param conf: dictionary with config
-    :return: None
-
+    :return: loglevel name
     """
     root_logger = logging.getLogger()
     formatter = logging.Formatter(
@@ -670,22 +670,42 @@ def process_environment(prefix="tokendito"):
     return config_env
 
 
-def get_base_url(urlstring):
+def process_interactive_input(config):
     """
-    Validate okta app url, and extract okta org url from it.
+    Request input interactively interactively for elements that are not proesent.
 
-    :param config_obj: configuration object
-    :returns: None
+    :param config: Config object with some values set
+    :returns: Config object with necessary values set.
     """
-    if not validate_okta_app_url(urlstring):
-        logger.error(
-            "Okta URL not found, or invalid. Please check " "your configuration and try again."
+    # reuse interactive config. It will only request the portions needed.
+    try:
+        details = get_interactive_config(
+            app_url=config.okta["app_url"],
+            org_url=config.okta["org"],
+            username=config.okta["username"],
         )
-        sys.exit(2)
+    except (AttributeError, KeyError, ValueError) as err:
+        logger.error(f"Interactive arguments are not correct: {err}")
+        sys.exit(1)
 
-    url = urlparse(urlstring)
-    baseurl = f"{url.scheme}://{url.netloc}"
-    return baseurl
+    # Create a dict that can be passed to Config later
+    res = dict(okta=dict())
+    # Copy the values set by get_interactive_config
+    if "okta_app_url" in details:
+        res["okta"]["app_url"] = details["okta_app_url"]
+    if "okta_org_url" in details:
+        res["okta"]["org"] = details["okta_org_url"]
+    if "okta_username" in details:
+        res["okta"]["username"] = details["okta_username"]
+
+    if "password" not in config.okta:
+        logger.debug("No password set, will try to get one interactively")
+        res["okta"]["password"] = get_password()
+        add_sensitive_value_to_be_masked(res["okta"]["password"])
+
+    config_int = Config(**res)
+    logger.debug(f"Interactive configuration is: {config_int}")
+    return config_int
 
 
 def get_interactive_config(app_url="", org_url="", username=""):
@@ -694,7 +714,7 @@ def get_interactive_config(app_url="", org_url="", username=""):
     :return: dictionary with values
     """
     logger.debug("Obtain user input for the user.")
-    config_details = {}
+    details = {}
 
     # We need either one of these two:
     while org_url == "" and app_url == "":
@@ -705,13 +725,25 @@ def get_interactive_config(app_url="", org_url="", username=""):
         username = get_username()
 
     if org_url != "":
-        config_details["okta_org_url"] = org_url
+        details["okta_org_url"] = org_url
     if app_url != "":
-        config_details["okta_app_url"] = app_url
-    config_details["okta_username"] = username
+        details["okta_app_url"] = app_url
+    details["okta_username"] = username
 
-    logger.debug(f"Details: {config_details}")
-    return config_details
+    logger.debug(f"Details: {details}")
+    return details
+
+
+def get_base_url(urlstring):
+    """
+    Extract base url from string.
+
+    :param urlstring: url string
+    :returns: base URL
+    """
+    url = urlparse(urlstring)
+    baseurl = f"{url.scheme}://{url.netloc}"
+    return baseurl
 
 
 def get_org_url():
@@ -796,6 +828,21 @@ def get_password():
         res = password
         logger.debug("password set interactively")
     return res
+
+
+def set_role_name(config_obj, name):
+    """Set AWS Role alias name based on user preferences.
+
+    :param config: Config object.
+    :param name: Role name. Defaults to the string "default"
+    :return: Config object.
+    """
+    if name is None or name == "":
+        name = "default"
+    if config_obj.aws["profile"] is None:
+        config_obj.aws["profile"] = str(name)
+
+    return config_obj
 
 
 def update_configuration(ini_file, profile):
@@ -931,6 +978,7 @@ def validate_input(value, valid_range):
 def get_input(prompt="-> "):
     """Collect user input for TOTP.
 
+    :param prompt: optional string with prompt.
     :return user_input: raw from user.
     """
     user_input = input(prompt)
@@ -960,10 +1008,6 @@ def collect_integer(valid_range):
 
 def process_options(args):
     """Collect all user-specific credentials and config params."""
-    args = parse_cli_args(args)
-    # Early logging, in case the user requests debugging via command line
-    setup_early_logging(args)
-
     if args.version:
         display_version()
         sys.exit(0)
@@ -984,39 +1028,64 @@ def process_options(args):
     config.update(config_ini)
     config.update(config_env)
     config.update(config_args)
+
+    # 4: Get missing data from the user, if necessary
+    config_int = process_interactive_input(config)
+    config.update(config_int)
+
+    sanitize_config_values(config)
     logger.debug(f"Final configuration is {config}")
-    # Late logging (default)
-    setup_logging(config.user)
 
 
-def process_interactive_input(config_obj):
+def validate_configuration(config):
+    """Ensure that minimum configuration values are sane.
+
+    :param config: Config element with final configuration.
+    :return: message with validation issues.
     """
-    Request input interactively interactively for elements that are not proesent.
+    message = []
+    if not config.okta["username"] or config.okta["username"] == "":
+        message.append("Username not set.")
+    if not config.okta["password"] or config.okta["password"] == "":
+        message.append("Password not set.")
+    if not config.okta["org"] and not config.okta["app_url"]:
+        message.append("Either Okta Org or App URL must be defined.")
+    if config.okta["app_url"] and not validate_okta_app_url(config.okta["app_url"]):
+        message.append(f"Tile URL {config.okta['app_url']} is not valid.")
+    if config.okta["org"] and not validate_okta_org_url(config.okta["org"]):
+        message.append(f"Org URL {config.okta['org']} is not valid")
+    if (
+        config.okta["org"]
+        and config.okta["app_url"]
+        and not config.okta["app_url"].startswith(config.okta["org"])
+    ):
+        message.append(
+            f"Org URL {config.okta['org']} and Tile URL"
+            f" {config.okta['app_url']} must be in the same domain."
+        )
 
-    :param config_obj: configuration object
-    :returns: None
+    return message
+
+
+def sanitize_config_values(config):
+    """Adjust values that may need to be corrected.
+
+    :param config: Config object to adjust
+    :returns: modified object.
     """
-    # reuse interactive config. It will only request the portions needed.
-    config_details = get_interactive_config(
-        app_url=config_obj.okta["app_url"],
-        org_url=config_obj.okta["org"],
-        username=config_obj.okta["username"],
-    )
-    if "okta_app_url" in config_details:
-        config_obj.okta["app_url"] = config_details["okta_app_url"]
-    if "okta_org_url" in config_details:
-        config_obj.okta["org"] = config_details["okta_org_url"]
-    if "okta_username" in config_details:
-        config_obj.okta["username"] = config_details["okta_username"]
+    if config.okta["app_url"]:
+        base_url = get_base_url(config.okta["app_url"])
+        config.okta["org"] = base_url
 
-    if config_obj.okta["app_url"] and not config_obj.okta["org"]:
-        config_obj.okta["org"] = get_base_url(config_obj.okta["app_url"])
-        logger.debug(f"Connection string is {config_obj.okta['org']}")
+    if config.aws["output"] not in aws.get_output_types():
+        config.aws["output"] = config.get_defaults()["aws"]["output"]
+        logger.warning(f"AWS Output reset to {config.aws['output']}")
 
-    if config_obj.okta["password"] == "":
-        config_obj.okta["password"] = get_password()
-        add_sensitive_value_to_be_masked(config_obj.okta["password"])
-    logger.debug(f"Runtime configuration is: {config_obj}")
+    if config.aws["region"] not in aws.get_regions():
+        config.aws["region"] = config.get_defaults()["aws"]["region"]
+        logger.warning(f"AWS Region reset to {config.aws['region']}")
+
+    return config
 
 
 def request_cookies(url, session_token):

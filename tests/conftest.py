@@ -18,3 +18,4 @@ def pytest_addoption(parser):
         default="/dev/null",
         help="Sets an optional config file to read from",
     )
+    parser.addoption("--aws-profile", default="pytest", help="Sets the AWS profile name")
