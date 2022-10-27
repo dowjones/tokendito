@@ -241,6 +241,41 @@ def test_set_local_credentials(tmpdir):
     assert ret == "default"
 
 
+def test_add_sensitive_value_to_be_masked():
+    """Test adding some values only adds whatas expected."""
+    from tokendito import user
+
+    user.add_sensitive_value_to_be_masked("should be added")
+    user.add_sensitive_value_to_be_masked("should be added2")
+    user.add_sensitive_value_to_be_masked("should be added3", "password")
+    user.add_sensitive_value_to_be_masked("should not be added", "public")
+    assert (
+        "should be added" in user.mask_items
+        and "should be added2" in user.mask_items
+        and "should be added3" in user.mask_items
+        and len(user.mask_items) == 3
+    )
+
+
+def test_logger_mask(caplog):
+    """Test that masking data in loggger works as expected."""
+    from tokendito import user
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.addFilter(user.MaskLoggerSecret())
+    user.add_sensitive_value_to_be_masked("supersecret")
+    user.add_sensitive_value_to_be_masked("another secret", "sessionToken")
+    with caplog.at_level(logging.DEBUG):
+        logger.debug("This should be displayed, but not: supersecret")
+        logger.debug("another secret")
+    assert (
+        "supersecret" not in caplog.text
+        and "another secret" not in caplog.text
+        and "This should be displayed" in caplog.text
+    )
+
+
 def test_display_selected_role():
     """Test that role is printed correctly."""
     from datetime import timezone
@@ -399,14 +434,14 @@ def test_process_arguments():
     from tokendito import user
     from argparse import Namespace
 
-    valid_settings = dict(okta_username="pytest", okta_password="pytest")
+    valid_settings = dict(okta_username="pytest", okta_password="pytest_password")
     invalid_settings = dict(pytest_expected_failure="pytest_failure")
     args = {**valid_settings, **invalid_settings}
     ret = user.process_arguments(Namespace(**args))
 
     # Make sure that the arguments we passed are interpreted
     assert ret.okta["username"] == "pytest"
-    assert ret.okta["password"] == "pytest"
+    assert ret.okta["password"] == "pytest_password"
     # Make sure that incorrect arguments are not passed down to the Config object.
     assert "pytest" not in ret.__dict__
 
@@ -416,7 +451,7 @@ def test_process_ini_file(tmpdir):
     from tokendito import user
 
     valid_settings = dict(
-        okta_password="pytest",
+        okta_password="pytest_password",
         okta_username="pytest",
     )
     invalid_settings = dict(user_pytest_expected_failure="pytest")
@@ -442,7 +477,7 @@ def test_process_ini_file(tmpdir):
 
     ret = user.process_ini_file(path, "pytest")
     assert ret.okta["username"] == "pytest"
-    assert ret.okta["password"] == "pytest"
+    assert ret.okta["password"] == "pytest_password"
 
     with pytest.raises(SystemExit) as err:
         user.process_ini_file(path, "pytest_expected_element_failure")
@@ -546,7 +581,7 @@ def test_bad_mfa_provider_type(mocker, sample_headers):
     primary_auth = 1
     selected_factor = 1
 
-    mfa_verify = {"sessionToken": "123"}
+    mfa_verify = {"sessionToken": "pytest_session_token"}
     mfa_bad_provider = "bad_provider"
     mocker.patch(
         "tokendito.duo.authenticate_duo",

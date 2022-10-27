@@ -5,7 +5,6 @@ import json
 from os.path import expanduser
 import sys
 
-
 __version__ = "2.0.0"
 __title__ = "tokendito"
 __description__ = "Get AWS STS tokens from Okta SSO"
@@ -28,6 +27,7 @@ class Config(object):
             encoding=sys.stdin.encoding,
             loglevel="WARNING",
             log_output_file="",
+            mask_items=[],
         ),
         aws=dict(
             config_file=f"{expanduser('~')}/.aws/config",
