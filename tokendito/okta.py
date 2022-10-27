@@ -107,19 +107,18 @@ def user_session_token(primary_auth, headers):
     return session_token
 
 
-def authenticate_user(url, username, password):
+def authenticate_user(config):
     """Authenticate user with okta credential.
 
-    :param url: company specific URL of the okta
-    :param username: okta username
-    :param password: okta password
-    :return: MFA session options
+    :param config: Config object
+    :return: MFA session with options
     """
     headers = {"content-type": "application/json", "accept": "application/json"}
-    payload = {"username": username, "password": password}
+    payload = {"username": config.okta["username"], "password": config.okta["password"]}
 
-    logger.debug(f"Authenticate Okta headers [{headers}] ")
-    primary_auth = api_wrapper(f"{url}/api/v1/authn", payload, headers)
+    logger.debug("Authenticate user to Okta")
+    logger.debug(f"Sending {headers}, {payload} to {config.okta['org']}")
+    primary_auth = api_wrapper(f"{config.okta['org']}/api/v1/authn", payload, headers)
 
     session_token = user_session_token(primary_auth, headers)
     logger.info("User has been succesfully authenticated.")
@@ -311,7 +310,7 @@ def push_approval(headers, mfa_challenge_url, payload):
             logger.error("Device approval window has expired.")
             sys.exit(2)
 
-        time.sleep(0.5)
+        time.sleep(1)
 
     if mfa_verify is None:
         logger.error("Unknown error in MFA approval.")

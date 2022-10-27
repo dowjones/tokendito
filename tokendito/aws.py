@@ -23,6 +23,30 @@ from tokendito import user
 logger = logging.getLogger(__name__)
 
 
+def get_regions(profile=None):
+    """Get avaliable regions from botocore.
+
+    :return: List of available regions.
+    """
+    regions = []
+    try:
+        session = botocore.session.get_session(env_vars=profile)
+        regions = session.get_available_regions("sts")
+        logger.debug(f"Found AWS regions: {regions}")
+    except Exception:
+        pass
+    return regions
+
+
+def get_output_types():
+    """Provide available output types.
+
+    Currently, this cannot be done dynamically.
+    :return: List of available output types.
+    """
+    return ["json", "text", "csv", "yaml", "yaml-stream"]
+
+
 def authenticate_to_roles(secret_session_token, urls, cookies=None):
     """Authenticate AWS user with saml.
 
@@ -41,29 +65,10 @@ def authenticate_to_roles(secret_session_token, urls, cookies=None):
             logger.debug(f"Authenticate AWS user with SAML URL [{url}]")
 
             response = requests.get(url, params=payload, cookies=cookies)
+            response.raise_for_status()
             saml_response_string = response.text
-            if response.status_code == 400 or response.status_code == 401:
-                errmsg = "Invalid Credentials."
-                logger.error(f"{errmsg}\nExiting with code:{response.status_code}")
-                sys.exit(2)
-            elif response.status_code == 404:
-                errmsg = "Invalid Okta application URL. Please verify your configuration."
-                logger.error(f"{errmsg}")
-                sys.exit(2)
-            elif response.status_code >= 500 and response.status_code < 504:
-                errmsg = (
-                    "Unable to establish connection with Okta. Verify Okta Org URL and try again."
-                )
-                logger.error(f"{errmsg}\nExiting with code:{response.status_code}")
-                sys.exit(2)
-            elif response.status_code != 200:
-                logger.error(f"Exiting with code:{response.status_code}")
-                logger.debug(saml_response_string)
-                sys.exit(2)
-
-        except Exception as error:
-            errmsg = f"Okta auth failed:\n{error}"
-            logger.error(errmsg)
+        except Exception as err:
+            logger.error(f"There was an error with the call to {url}: {err}")
             sys.exit(1)
 
         saml_xml = user.validate_saml_response(saml_response_string)
@@ -163,7 +168,7 @@ def assert_credentials(role_response={}):
         aws_access_key = role_response["Credentials"]["AccessKeyId"]
         aws_secret_key = role_response["Credentials"]["SecretAccessKey"]
         aws_session_token = role_response["Credentials"]["SessionToken"]
-    except KeyError:
+    except (KeyError, TypeError):
         logger.error("SAML Response did not contain credentials")
         sys.exit(1)
 
@@ -188,8 +193,8 @@ def assert_credentials(role_response={}):
 def select_assumeable_role(apps):
     """Select the role to perform the AssumeRoleWithSaml.
 
-    # :param apps: apps metadata, list of tuples
-    # :return: AWS AssumeRoleWithSaml response, role name, tuple
+    :param apps: apps metadata, list of tuples
+    :return: tuple with AWS AssumeRoleWithSaml response and role name
     """
     authenticated_aps = {}
     for url, saml_response, saml, label in apps:
@@ -211,4 +216,4 @@ def select_assumeable_role(apps):
         authenticated_aps[_id]["saml"],
     )
 
-    return assume_role_response, role_name
+    return (assume_role_response, role_name)
