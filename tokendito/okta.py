@@ -102,6 +102,8 @@ def user_session_token(primary_auth, headers):
         logger.error("Okta auth failed: unknown status.")
         sys.exit(1)
 
+    user.add_sensitive_value_to_be_masked(session_token)
+
     return session_token
 
 
@@ -260,10 +262,13 @@ def user_mfa_options(selected_mfa_option, headers, mfa_challenge_url, payload, p
         logger.debug("Getting verification code from user.")
         print("Type verification code and press Enter")
         config.okta["mfa_response"] = user.get_input()
+        user.add_sensitive_value_to_be_masked(config.okta["mfa_response"])
 
     # time to verify the mfa method
     payload = {"stateToken": primary_auth["stateToken"], "passCode": config.okta["mfa_response"]}
     mfa_verify = api_wrapper(mfa_challenge_url, payload, headers)
+    if "sessionToken" in mfa_verify:
+        user.add_sensitive_value_to_be_masked(mfa_verify["sessionToken"])
     logger.debug(f"mfa_verify [{json.dumps(mfa_verify)}]")
 
     return mfa_verify

@@ -221,13 +221,18 @@ def test_generate_credentials(custom_args):
         f"{config.okta['username']}",
         "--password",
         f"{config.okta['password']}",
+        "--loglevel",
+        "DEBUG",
     ]
     # run as a local module, as we can't guarantee that the binary is installed.
     executable = [sys.executable, "-m", "tokendito"]
     runnable = executable + args
 
     proc = run_process(runnable)
-    assert not proc["stderr"]
+    assert "'password': '*****'" in proc["stderr"]
+    assert f"{config.okta['password']}" not in proc["stderr"]
+    assert f"{config.okta['mfa_response']}" not in proc["stderr"]
+    assert '"sessionToken": "*****"' in proc["stderr"]
     assert proc["exit_status"] == 0
 
 
