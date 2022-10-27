@@ -27,6 +27,25 @@ from tokendito import config as config
 logger = logging.getLogger(__name__)
 
 
+mask_items = []
+
+
+class MaskLoggerSecret(logging.Filter):
+    """Masks secrets in logger messages."""
+
+    def __init__(self):
+        """Initialize filter."""
+        logging.Filter.__init__(self)
+
+    def filter(self, record):
+        """Apply filter on logger messages."""
+        for secret in mask_items:
+            if not isinstance(secret, str):
+                secret = str(secret)
+            record.msg = record.msg.replace(secret, "*****")
+        return True
+
+
 def parse_cli_args(args):
     """Parse command line arguments.
 
@@ -198,6 +217,7 @@ def setup_logging(conf):
     # Set a reasonable default logging format.
     root_logger.handlers.clear()
     root_logger.addHandler(handler)
+    root_logger.addFilter(MaskLoggerSecret())
 
     # Pre-create a log handler for each submodule
     # with the same format and level. Settings are
@@ -207,6 +227,7 @@ def setup_logging(conf):
         conf["loglevel"] = conf["loglevel"].upper()
         for submodule in submodules:
             submodule_logger = logging.getLogger(submodule)
+            submodule_logger.addFilter(MaskLoggerSecret())
             try:
                 submodule_logger.setLevel(conf["loglevel"])
             except ValueError as err:
@@ -539,6 +560,14 @@ def display_version():
     )
 
 
+def add_sensitive_value_to_be_masked(value, key=None):
+    """Add value to be masked from the logs."""
+    """If a key is passed only add it if the key refers to a secret element."""
+    sensitive_keys = ("password", "mfa_response", "sessionToken")
+    if key is None or key in sensitive_keys:
+        mask_items.append(value)
+
+
 def process_ini_file(file, profile):
     """Process options from a ConfigParser ini file.
 
@@ -559,6 +588,7 @@ def process_ini_file(file, profile):
                 if match.group(1) not in res:
                     res[match.group(1)] = dict()
                 res[match.group(1)][match.group(2)] = val
+                add_sensitive_value_to_be_masked(val, match.group(2))
     except configparser.Error as err:
         logger.error(f"Could not load profile '{profile}': {str(err)}")
         sys.exit(2)
@@ -594,6 +624,7 @@ def process_arguments(args):
                 res[match.group(1)] = dict()
             if val:
                 res[match.group(1)][match.group(2)] = val
+                add_sensitive_value_to_be_masked(val, match.group(2))
     logger.debug(f"Found arguments: {res}")
 
     try:
@@ -622,7 +653,9 @@ def process_environment(prefix="tokendito"):
         if match:
             if match.group(2) not in res:
                 res[match.group(2)] = dict()
-            res[match.group(2)][match.group(3)] = val
+            if val:
+                res[match.group(2)][match.group(3)] = val
+                add_sensitive_value_to_be_masked(val, match.group(3))
     logger.debug(f"Found environment variables: {res}")
 
     try:
@@ -982,6 +1015,7 @@ def process_interactive_input(config_obj):
 
     if config_obj.okta["password"] == "":
         config_obj.okta["password"] = get_password()
+        add_sensitive_value_to_be_masked(config_obj.okta["password"])
     logger.debug(f"Runtime configuration is: {config_obj}")
 
 
