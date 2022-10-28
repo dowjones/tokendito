@@ -145,7 +145,7 @@ def test_get_interactive_config(mocker):
     # test that interactive values are handled correctly
     mocker.patch("tokendito.user.get_org_url", return_value="https://pytest")
     mocker.patch("tokendito.user.get_app_url", return_value="https://pytest")
-    ret = user.get_interactive_config(app_url="", org_url="", username="pytest")
+    ret = user.get_interactive_config(app_url=None, org_url=None, username="pytest")
     assert ret["okta_username"] == "pytest" and ret["okta_org_url"] == "https://pytest"
 
 
