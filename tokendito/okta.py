@@ -261,8 +261,7 @@ def user_mfa_options(selected_mfa_option, headers, mfa_challenge_url, payload, p
 
     if config.okta["mfa_response"] is None:
         logger.debug("Getting verification code from user.")
-        print("Type verification code and press Enter")
-        config.okta["mfa_response"] = user.get_input()
+        config.okta["mfa_response"] = user.get_input("Enter your verification code")
         user.add_sensitive_value_to_be_masked(config.okta["mfa_response"])
 
     # time to verify the mfa method
@@ -284,11 +283,13 @@ def push_approval(headers, mfa_challenge_url, payload):
     :return: Session Token if succeeded or terminates if user wait goes 5 min
 
     """
-    logger.debug(f"Handle push approval from the user [{headers}] [{mfa_challenge_url}]")
+    logger.debug(
+        f"Handle push approval from the user headers:{headers} challenge_url:{mfa_challenge_url}"
+    )
 
-    print("Waiting for an approval from device...")
+    user.print("Waiting for an approval from the device...")
     mfa_status = "WAITING"
-    mfa_verify = None
+    mfa_verify = {}
     while mfa_status == "WAITING":
         mfa_verify = api_wrapper(mfa_challenge_url, payload, headers)
 
@@ -296,11 +297,11 @@ def push_approval(headers, mfa_challenge_url, payload):
 
         if "factorResult" in mfa_verify:
             mfa_status = mfa_verify["factorResult"]
-        elif mfa_verify["status"] == "SUCCESS":
+        elif "status" in mfa_verify and mfa_verify["status"] == "SUCCESS":
             break
         else:
             logger.error("There was an error getting your MFA status.")
-            logger.debug(mfa_verify)
+            logger.debug(f"{mfa_verify}")
             if "status" in mfa_verify:
                 logger.error(f"Exiting due to error: {mfa_verify['status']}")
             sys.exit(1)
@@ -314,7 +315,4 @@ def push_approval(headers, mfa_challenge_url, payload):
 
         time.sleep(1)
 
-    if mfa_verify is None:
-        logger.error("Unknown error in MFA approval.")
-        sys.exit(2)
     return mfa_verify
