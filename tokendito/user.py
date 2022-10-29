@@ -5,7 +5,6 @@ import argparse
 import codecs
 import configparser
 from datetime import timezone
-import getpass
 import json
 import logging
 import os
@@ -20,10 +19,20 @@ from botocore import __version__ as __botocore_version__
 from bs4 import __version__ as __bs4_version__  # type: ignore (bs4 does not have PEP 561 support)
 from bs4 import BeautifulSoup
 import requests
+import rich
+from rich.console import Console
+from rich.logging import RichHandler
+from rich.prompt import IntPrompt, Prompt
 from tokendito import __version__
 from tokendito import aws
 from tokendito import Config
 from tokendito import config as config
+
+# Unfortunately, readline is only available in non-Windows systems. There is no substitution.
+try:
+    import readline  # noqa: F401
+except ModuleNotFoundError:
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -91,8 +100,7 @@ def parse_cli_args(args):
         type=lambda s: s.upper(),
         dest="user_loglevel",
         choices=["DEBUG", "INFO", "WARN", "ERROR"],
-        help="[DEBUG|INFO|WARN|ERROR], default loglevel is WARNING."
-        " Note: DEBUG level will display credentials",
+        help="[DEBUG|INFO|WARN|ERROR], default loglevel is WARNING.",
     )
     parser.add_argument(
         "--log-output-file",
@@ -129,6 +137,20 @@ def parse_cli_args(args):
     parser.add_argument(
         "--okta-mfa-response",
         help="Sets the MFA response to a challenge",
+    )
+    parser.add_argument(
+        "--no-color",
+        dest="user_no_color",
+        action="store_true",
+        default=False,
+        help="Supress colored output.",
+    )
+    parser.add_argument(
+        "--quiet",
+        dest="user_quiet",
+        action="store_true",
+        default=False,
+        help="Suppress output (implies --no-color)",
     )
 
     parsed_args = parser.parse_args(args)
@@ -169,14 +191,8 @@ def get_submodule_names():
     :return: List of submodule names
 
     """
-    submodules = []
-
-    try:
-        package = Path(__file__).resolve(strict=True)
-        submodules = [x.name for x in iter_modules([str(package.parent)])]
-    except Exception as err:
-        logger.warning(f"Could not resolve modules: {str(err)}")
-
+    package = Path(__file__).resolve(strict=True)
+    submodules = [x.name for x in iter_modules([str(package.parent)])]
     return submodules
 
 
@@ -186,15 +202,19 @@ def setup_early_logging(args):
     :param args: list of arguments to parse
     :return: dict with values set
     """
-    early_logging = {}
+    # Get some sane defaults
+    early_logging = config.get_defaults()["user"].copy()
+
     if "TOKENDITO_USER_LOGLEVEL" in os.environ:
         early_logging["loglevel"] = os.environ["TOKENDITO_USER_LOGLEVEL"]
     if "TOKENDITO_USER_LOG_OUTPUT_FILE" in os.environ:
         early_logging["log_output_file"] = os.environ["TOKENDITO_USER_LOG_OUTPUT_FILE"]
+
     if "user_loglevel" in args and args.user_loglevel:
         early_logging["loglevel"] = args.user_loglevel
     if "user_log_output_file" in args and args.user_log_output_file:
         early_logging["log_output_file"] = args.user_log_output_file
+
     setup_logging(early_logging)
     return early_logging
 
@@ -206,11 +226,26 @@ def setup_logging(conf):
     :return: loglevel name
     """
     root_logger = logging.getLogger()
-    formatter = logging.Formatter(
-        fmt="%(asctime)s %(name)s [%(funcName)s():%(lineno)i] - %(levelname)s - %(message)s"
+    # We get quiet / no color directly from the stdout console settings
+    stdout_console = rich.get_console()
+    # Time and level name come from the Rich handler
+    formatter = logging.Formatter(fmt="|%(name)s %(funcName)s():%(lineno)i| %(message)s")
+    handler = RichHandler(
+        show_time=True,
+        omit_repeated_times=False,
+        show_path=False,
+        markup=True,
+        console=Console(
+            stderr=True,
+            no_color=stdout_console.no_color,
+            quiet=stdout_console.quiet,
+        ),
     )
-    handler = logging.StreamHandler()
+
     if "log_output_file" in conf and conf["log_output_file"]:
+        formatter = logging.Formatter(
+            fmt="%(asctime)s %(levelname)s |%(name)s %(funcName)s():%(lineno)i| %(message)s"
+        )
         handler = logging.FileHandler(conf["log_output_file"])
     handler.setFormatter(formatter)
 
@@ -236,6 +271,40 @@ def setup_logging(conf):
                 break
     loglevel = logging.getLogger(submodules[0]).getEffectiveLevel()
     return loglevel
+
+
+def setup_console(args):
+    """Set up readline, and screen colors.
+
+    :param args: ConfigParser object
+    :return: None
+    """
+    # These areconsidered true if present. We do this here as there is no env processing yet.
+    # The order of operations is backwards from the general flow of the program as having
+    # an env variable here should override the command-line defaults, which default to not quiet,
+    # and with color.
+    console_settings = {
+        "no_color": args.user_no_color,
+        "quiet": args.user_quiet,
+    }
+    if "TOKENDITO_USER_NO_COLOR" in os.environ:
+        console_settings["no_color"] = True
+    if "TOKENDITO_USER_QUIET" in os.environ:
+        console_settings["quiet"] = True
+
+    rich.reconfigure(
+        no_color=console_settings["no_color"],
+        quiet=console_settings["quiet"],
+    )
+    console = rich.get_console()
+    return console
+
+
+def print(args):
+    """Pass-through to rich, so that it interprets colors."""
+    console = rich.get_console()
+    console.print(args, end=os.linesep, soft_wrap=True, highlight=False)
+    return args
 
 
 def select_role_arn(authenticated_aps):
@@ -332,7 +401,7 @@ def select_preferred_mfa_index(mfa_options, factor_key="provider", subfactor_key
     """
     logger.debug("Show all the MFA options to the users.")
     logger.debug(json.dumps(mfa_options))
-    print("\nSelect your preferred MFA method and press Enter:")
+    print("\n[green]Select your preferred MFA method and press Enter:[/green]")
 
     longest_index = len(str(len(mfa_options)))
     longest_factor_name = max([len(d[factor_key]) for d in mfa_options])
@@ -345,9 +414,11 @@ def select_preferred_mfa_index(mfa_options, factor_key="provider", subfactor_key
         mfa_method = mfa_option.get(subfactor_key, "Not presented")
         provider = mfa_option.get(factor_key, "Not presented")
         print(
-            f"[{i: >{longest_index}}]  {provider: <{longest_factor_name}}  "
-            f"{mfa_method: <{longest_subfactor_name}} "
-            f"{factor_info: <{factor_info_indent}} Id: {factor_id}"
+            f"[bold][{i: >{longest_index}}][/bold]  "
+            f"[cyan]{provider: <{longest_factor_name}}[/cyan]  "
+            f"[blue]{mfa_method: <{longest_subfactor_name}}[/blue] "
+            f"[blue]{factor_info: <{factor_info_indent}}[/blue] "
+            f"[magenta]Id: {factor_id}[/magenta]"
         )
 
     user_input = collect_integer(len(mfa_options))
@@ -375,7 +446,7 @@ def prompt_role_choices(aut_aps):
                 aliases_mapping.append((app["label"], role.split(":")[4], role, url))
 
     logger.debug("Ask user to select role")
-    print("Please select one of the following:")
+    print("\n[bold]Please select one of the following[/bold]:")
 
     longest_alias = max(len(i[1]) for i in aliases_mapping)
     longest_index = len(str(len(aliases_mapping)))
@@ -387,9 +458,12 @@ def prompt_role_choices(aut_aps):
         padding_index = longest_index - len(str(i))
         if print_label != label:
             print_label = label
-            print(f"\n{label}:")
+            print(f"\n[green]{label}:[/green]")
 
-        print(f"[{i}] {padding_index * ' '}{alias: <{longest_alias}}  {role}")
+        print(
+            f"[bold][{i}][/bold] {padding_index * ' '}"
+            f"[cyan]{alias: <{longest_alias}}[/cyan]  [blue]{role}[/blue]"
+        )
 
     user_input = collect_integer(len(aliases_mapping))
     selected_role = (aliases_mapping[user_input][2], aliases_mapping[user_input][3])
@@ -414,12 +488,13 @@ def display_selected_role(profile_name="", role_response={}):
 
     expiration_time_local = utc_to_local(expiration_time)
     msg = (
-        f"\nGenerated profile '{profile_name}' in {config.aws['shared_credentials_file']}.\n"
+        f"\nGenerated profile [bold]'{profile_name}'[/bold] in"
+        f" [green]{config.aws['shared_credentials_file']}[/green].\n"
         "\nUse profile to authenticate to AWS:\n\t"
-        f"aws --profile '{profile_name}' sts get-caller-identity"
+        f"[bold]aws --profile '{profile_name}' sts get-caller-identity[/bold]"
         "\nOR\n\t"
-        f"export AWS_PROFILE='{profile_name}'\n\n"
-        f"Credentials are valid until {expiration_time} ({expiration_time_local})."
+        f"[bold]export AWS_PROFILE='{profile_name}'[/bold]\n\n"
+        f"Credentials are valid until [bold]{expiration_time}[/bold] ({expiration_time_local})."
     )
 
     print(msg)
@@ -555,8 +630,12 @@ def display_version():
     (system, _, release, _, _, _) = platform.uname()
     logger.debug(f"Display version: {__version__}")
     print(
-        f"tokendito/{__version__} Python/{python_version} {system}/{release} "
-        f"botocore/{__botocore_version__} bs4/{__bs4_version__} requests/{requests.__version__}"
+        f"[bold]tokendito[/bold]/{__version__} "
+        f"[bold]Python[/bold]/{python_version} "
+        f"[bold]{system}[/bold]/{release} "
+        f"[bold]botocore[/bold]/{__botocore_version__} "
+        f"[bold]bs4[/bold]/{__bs4_version__} "
+        f"[bold]requests[/bold]/{requests.__version__}"
     )
 
 
@@ -718,7 +797,9 @@ def get_interactive_config(app_url=None, org_url=None, username=""):
 
     # We need either one of these two:
     while org_url is None and app_url is None:
-        print("\nPlease enter either your Organization URL, a tile (app) URL, or both.")
+        print(
+            "\n\n[bold]Please enter either your Organization URL, a tile (app) URL, or both.[/bold]"
+        )
         org_url = get_org_url()
         app_url = get_app_url()
 
@@ -726,7 +807,7 @@ def get_interactive_config(app_url=None, org_url=None, username=""):
         username = get_username()
 
     if org_url is not None:
-        details["okta_org_url"] = org_url
+        details["okta_org"] = org_url
     if app_url is not None:
         details["okta_app_url"] = app_url
     details["okta_username"] = username
@@ -752,11 +833,11 @@ def get_org_url():
 
     :return: string with sanitized value, or the empty string.
     """
-    message = "Okta Org URL. E.g. https://acme.okta.com/ [none]: "
+    message = "Okta Org URL. E.g. https://acme.okta.com/"
     res = ""
 
     while res == "":
-        user_data = get_input(message)
+        user_data = get_input(prompt=message)
         user_data = user_data.strip()
         if user_data == "":
             break
@@ -765,7 +846,7 @@ def get_org_url():
         if validate_okta_org_url(user_data):
             res = user_data
         else:
-            print("Invalid input, try again.")
+            print("[red]Invalid input, try again.[/red]")
     logger.debug(f"Org URL is: {res}")
     return res
 
@@ -775,14 +856,11 @@ def get_app_url():
 
     :return: string with sanitized value, or the empty string.
     """
-    message = (
-        "Okta App URL. E.g. https://acme.okta.com/home/"
-        "amazon_aws/b07384d113edec49eaa6/123 [none]: "
-    )
+    message = "Okta App URL. E.g. https://acme.okta.com/home/" "amazon_aws/b07384d113edec49eaa6/123"
     res = ""
 
     while res == "":
-        user_data = get_input(message)
+        user_data = get_input(prompt=message)
         user_data = user_data.strip()
         if user_data == "":
             break
@@ -791,7 +869,7 @@ def get_app_url():
         if validate_okta_app_url(user_data):
             res = user_data
         else:
-            print("Invalid input, try again.")
+            print("[red]Invalid input, try again.[/red]")
     logger.debug(f"App URL is: {res}")
     return res
 
@@ -801,15 +879,15 @@ def get_username():
 
     :return: string with sanitized value.
     """
-    message = "Organization username. E.g jane.doe@acme.com [none]: "
+    message = "Organization username. E.g. jane.doe@acme.com"
     res = ""
     while res == "":
-        user_data = get_input(message)
+        user_data = get_input(prompt=message)
         user_data = user_data.strip()
         if user_data != "":
             res = user_data
         else:
-            print("Invalid input, try again.")
+            print("[red]Invalid input, try again.[/red]")
     logger.debug(f"Username is {res}")
     return res
 
@@ -825,7 +903,7 @@ def get_password():
     logger.debug("Set password.")
 
     while res == "":
-        password = getpass.getpass()
+        password = Prompt.ask("[bold]Password[/bold]", password=True)
         res = password
         logger.debug("password set interactively")
     return res
@@ -933,62 +1011,19 @@ def update_ini(profile="", ini_file="", **kwargs):
     return ini
 
 
-def check_within_range(user_input, valid_range):
-    """Validate the user input is within the range of the presented menu.
-
-    :param user_input: integer-validated user input.
-    :param valid_range: the valid range presented on the user's menu.
-    :return range_validation: true or false
-    """
-    range_validation = False
-    if int(user_input) in range(0, valid_range):
-        range_validation = True
-    else:
-        logger.debug(f"Valid range is {valid_range}")
-        logger.error("Value is not in within the selection range.")
-    return range_validation
-
-
-def check_integer(value):
-    """Validate integer.
-
-    :param value: value to be validated.
-    :return: True when the number is a positive integer, false otherwise.
-    """
-    integer_validation = False
-    if str(value).isdigit():
-        integer_validation = True
-    else:
-        logger.error("Please enter a valid integer.")
-
-    return integer_validation
-
-
-def validate_input(value, valid_range):
-    """Validate user input is an integer and within menu range.
-
-    :param value: user input
-    :param valid_range: valid range based on how many menu options available to user.
-    """
-    integer_validation = check_integer(value)
-    if integer_validation and valid_range:
-        integer_validation = check_within_range(value, valid_range)
-    return integer_validation
-
-
-def get_input(prompt="-> "):
+def get_input(prompt=""):
     """Collect user input for TOTP.
 
     :param prompt: optional string with prompt.
     :return user_input: raw from user.
     """
-    user_input = input(prompt)
+    user_input = Prompt.ask(f"[bold]{prompt}[/bold]")
     logger.debug(f"User input [{user_input}]")
 
     return user_input
 
 
-def collect_integer(valid_range):
+def collect_integer(valid_range=0):
     """Collect input from user.
 
     Prompt the user for input. Validate it and cast to integer.
@@ -996,14 +1031,8 @@ def collect_integer(valid_range):
     :param valid_range: number of menu options available to user.
     :return user_input: validated, casted integer from user.
     """
-    user_input = None
-    while True:
-        user_input = get_input()
-        valid_input = validate_input(user_input, valid_range)
-        logger.debug(f"User input validation status is {valid_input}")
-        if valid_input:
-            user_input = int(user_input)
-            break
+    prompt_choices = [f"{x}" for x in range(valid_range)]
+    user_input = IntPrompt.ask("[bold]Enter your selection[/bold]", choices=prompt_choices)
     return user_input
 
 
@@ -1102,9 +1131,11 @@ def request_cookies(url, session_token):
 
     response_with_cookie = make_request(method="POST", url=url, data=data)
     sess_id = response_with_cookie.json()["id"]
+    add_sensitive_value_to_be_masked(sess_id)
 
     cookies = response_with_cookie.cookies
     cookies.update({"sid": f"{sess_id}"})
+    logger.debug(f"Session cookies: {cookies}")
 
     return cookies
 
@@ -1142,9 +1173,6 @@ def discover_app_url(url, cookies):
         else (aws_apps[0]["linkUrl"], aws_apps[0]["label"])
     )
     logger.debug(f"Discovered {len(app_url)} URLs.")
-
-    if len(app_url) >= 5:
-        logger.warning(f"Discovering roles in {len(app_url)} tiles, this may take some time.")
 
     return app_url
 

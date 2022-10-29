@@ -1,3 +1,13 @@
 [tool.black]
 line-length = 100
 target-version = ['py36', 'py37', 'py38', 'py39', 'py310', 'py311']
+
+[tool.coverage.report]
+exclude_lines = [
+    "break",
+    "except KeyboardInterrupt:",
+    "if __name__ == .__main__.:",
+    "if __package__ is None:",
+    "logger.debug",
+    "pragma: no cover",
+    ]

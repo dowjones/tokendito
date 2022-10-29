@@ -55,7 +55,7 @@ def run_process(proc):
 @pytest.fixture
 def package_regex():
     """Get compiled package regex."""
-    version_regex = re.compile(r"^\S+/(?P<version>.*?)\s+.*$")
+    version_regex = re.compile(r"^\S+/(?P<version>\d.\d.\d)\D+")
     return version_regex
 
 

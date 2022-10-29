@@ -12,7 +12,7 @@ with_mfa = {
         },
         "factors": [
             {
-                "id": "opfrar9yi4bKJNH2WEWQ0x8",
+                "id": "opfrar9yi4bKJNH2WEW",
                 "factorType": "push",
                 "provider": "OKTA",
                 "profile": {"name": "Redmi 6 Pro"},
