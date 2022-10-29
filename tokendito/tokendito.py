@@ -4,6 +4,8 @@
 """tokendito cli entry point."""
 import sys
 
+from rich import print
+
 
 def main(args=None):  # needed for console script
     """Packge entry point."""
@@ -21,5 +23,5 @@ if __name__ == "__main__":
     try:
         sys.exit(main(sys.argv[1:]))
     except KeyboardInterrupt:
-        print("\nInterrupted")
+        print("\n[bold red]Interrupted[/bold red]")
         sys.exit(1)

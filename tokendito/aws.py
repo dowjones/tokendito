@@ -17,6 +17,7 @@ from botocore.client import Config
 from botocore.exceptions import ClientError
 import botocore.session
 import requests
+from rich.progress import track
 from tokendito import user
 
 
@@ -59,10 +60,16 @@ def authenticate_to_roles(secret_session_token, urls, cookies=None):
     payload = {"onetimetoken": secret_session_token}
     url_list = [urls] if isinstance(urls, tuple) else urls
     responses = []
+    tile_count = len(url_list)
+    plural = ""
+    if tile_count > 1:
+        plural = "s"
 
-    for url, label in url_list:
+    for url, label in track(
+        url_list, description=f"Discovering roles in {tile_count} tile{plural}:"
+    ):
         try:
-            logger.debug(f"Authenticate AWS user with SAML URL [{url}]")
+            logger.debug(f"Performing role discovery in {url}")
 
             response = requests.get(url, params=payload, cookies=cookies)
             response.raise_for_status()
@@ -86,9 +93,7 @@ def assume_role(role_arn, provider_arn, saml):
     :return: AssumeRoleWithSaml API response
 
     """
-    default_error = (
-        "\nUnable to assume role with the following details:\n- Role ARN: {}\n- Error: {}\n"
-    )
+    default_error = "Unable to assume role {}: {}"
 
     encoded_xml = codecs.encode(saml.encode("utf-8"), "base64")
     assume_role_response = None
@@ -135,7 +140,7 @@ def handle_assume_role(role_arn, provider_arn, encoded_xml, duration, default_er
         # Client Exceptions
     except ClientError as error:
         if error.response["Error"]["Code"] == "ValidationError":
-            logger.info(
+            logger.debug(
                 f"AssumeRoleWithSaml failed with {error.response['Error']['Code']} "
                 f"for duration {duration}"
             )

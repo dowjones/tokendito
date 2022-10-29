@@ -88,7 +88,7 @@ def get_duo_sid(duo_info):
     params = {"tx": duo_info["tx"], "v": duo_info["version"], "parent": duo_info["parent"]}
 
     url = f"https://{duo_info['host']}/frame/web/v1/auth"
-    logger.info(f"Calling Duo {urlparse(url).path} with params {params.keys()}")
+    logger.debug(f"Calling Duo {urlparse(url).path} with params {params.keys()}")
     duo_auth_response = duo_api_post(url, params=params)
 
     try:
@@ -145,7 +145,7 @@ def parse_duo_mfa_challenge(mfa_challenge):
         sys.exit(1)
     except KeyError as key_error:
         logger.error(f"The Duo API response is missing a required parameter: {key_error}")
-        print(json.dumps(mfa_challenge))
+        logger.debug(json.dumps(mfa_challenge))
         sys.exit(1)
 
     if mfa_status == "fail":
@@ -209,13 +209,13 @@ def parse_challenge(verify_mfa, challenge_result):
     challenge_reason = None
 
     if "status" in verify_mfa:
-        print(verify_mfa["status"])
+        user.print(f"[bold]{verify_mfa['status']}[/bold]")
 
     if "reason" in verify_mfa:
         challenge_reason = verify_mfa["reason"]
 
     if "result" in verify_mfa:
-        logger.info(f"Result received: {verify_mfa['result']}")
+        logger.debug(f"Result received: {verify_mfa['result']}")
         challenge_result = verify_mfa["result"].lower()
 
     logger.debug(f"Challenge result is {challenge_result}")
@@ -293,7 +293,7 @@ def set_passcode(mfa_option):
     """
     passcode = None
     if mfa_option["factor"].lower() == "passcode":
-        print("Type your TOTP and press Enter")
+        user.print("[bold]Type your TOTP and press Enter[/bold]")
         passcode = user.get_input()
     return passcode
 

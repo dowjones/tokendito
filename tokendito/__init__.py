@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """tokendito module initialization."""
 import json
+import os
 from os.path import expanduser
 import sys
 
@@ -21,17 +22,19 @@ class Config(object):
     # Instantiated objects can get Class defaults with get_defaults()
     _defaults = dict(
         user=dict(
-            config_dir=f"{expanduser('~')}/.aws",
-            config_file=f"{expanduser('~')}/.aws/okta_auth",
+            config_dir=os.path.join(expanduser("~"), ".aws"),
+            config_file=os.path.join(expanduser("~"), ".aws", "okta_auth"),
             config_profile="default",
             encoding=sys.stdin.encoding,
-            loglevel="WARNING",
+            loglevel="INFO",
             log_output_file="",
             mask_items=[],
+            no_color=False,
+            quiet=False,
         ),
         aws=dict(
-            config_file=f"{expanduser('~')}/.aws/config",
-            shared_credentials_file=f"{expanduser('~')}/.aws/credentials",
+            config_file=os.path.join(expanduser("~"), ".aws", "config"),
+            shared_credentials_file=os.path.join(expanduser("~"), ".aws", "credentials"),
             output="json",
             profile=None,
             region="us-east-1",

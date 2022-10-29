@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 def cli(args):
     """Tokendito retrieves AWS credentials after authenticating with Okta."""
     args = user.parse_cli_args(args)
+    # Set up colors and command-line editing
+    user.setup_console(args)
+
     # Early logging, in case the user requests debugging via env/CLI
     user.setup_early_logging(args)
 
