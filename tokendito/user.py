@@ -698,7 +698,7 @@ def process_interactive_input(config):
     if "okta_username" in details:
         res["okta"]["username"] = details["okta_username"]
 
-    if "password" not in config.okta:
+    if "password" not in config.okta or config.okta["password"] == "":
         logger.debug("No password set, will try to get one interactively")
         res["okta"]["password"] = get_password()
         add_sensitive_value_to_be_masked(res["okta"]["password"])
@@ -708,7 +708,7 @@ def process_interactive_input(config):
     return config_int
 
 
-def get_interactive_config(app_url="", org_url="", username=""):
+def get_interactive_config(app_url=None, org_url=None, username=""):
     """Obtain user input from the user.
 
     :return: dictionary with values
@@ -717,16 +717,17 @@ def get_interactive_config(app_url="", org_url="", username=""):
     details = {}
 
     # We need either one of these two:
-    while org_url == "" and app_url == "":
+    while org_url is None and app_url is None:
         print("\nPlease enter either your Organization URL, a tile (app) URL, or both.")
         org_url = get_org_url()
         app_url = get_app_url()
+
     while username == "":
         username = get_username()
 
-    if org_url != "":
+    if org_url is not None:
         details["okta_org_url"] = org_url
-    if app_url != "":
+    if app_url is not None:
         details["okta_app_url"] = app_url
     details["okta_username"] = username
 
