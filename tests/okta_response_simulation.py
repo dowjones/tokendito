@@ -29,6 +29,18 @@ with_mfa = {
                 "provider": "OKTA",
                 "profile": {"credentialId": "First.Last@acme.org"},
             },
+            {
+                "id": "fdsfsd6ewREr0",
+                "factorType": "pytest_dupe",
+                "provider": "GOOGLE",
+                "profile": {"credentialId": "First.Last@acme.org"},
+            },
+            {
+                "id": "fdsfsd6ewREr1",
+                "factorType": "pytest_dupe",
+                "provider": "OKTA",
+                "profile": {"credentialId": "First.Last@acme.org"},
+            },
         ],
     },
 }

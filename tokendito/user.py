@@ -163,7 +163,7 @@ def create_directory(dir_name):
             sys.exit(1)
 
 
-def get_submodule_names(location=__file__):
+def get_submodule_names():
     """Inspect the current module and find any submodules.
 
     :return: List of submodule names
@@ -172,7 +172,7 @@ def get_submodule_names(location=__file__):
     submodules = []
 
     try:
-        package = Path(location).resolve(strict=True)
+        package = Path(__file__).resolve(strict=True)
         submodules = [x.name for x in iter_modules([str(package.parent)])]
     except Exception as err:
         logger.warning(f"Could not resolve modules: {str(err)}")
