@@ -29,7 +29,6 @@ class Config(object):
             loglevel="INFO",
             log_output_file="",
             mask_items=[],
-            no_color=False,
             quiet=False,
         ),
         aws=dict(

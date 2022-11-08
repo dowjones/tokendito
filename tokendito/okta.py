@@ -261,7 +261,7 @@ def user_mfa_options(selected_mfa_option, headers, mfa_challenge_url, payload, p
 
     if config.okta["mfa_response"] is None:
         logger.debug("Getting verification code from user.")
-        config.okta["mfa_response"] = user.get_input("Enter your verification code")
+        config.okta["mfa_response"] = user.get_input("Enter your verification code:")
         user.add_sensitive_value_to_be_masked(config.okta["mfa_response"])
 
     # time to verify the mfa method
