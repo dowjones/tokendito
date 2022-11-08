@@ -2,9 +2,11 @@
 # -*- coding: utf-8 -*-
 """Helper module for AWS and Okta configuration, management and data flow."""
 import argparse
+import builtins
 import codecs
 import configparser
 from datetime import timezone
+import getpass
 import json
 import logging
 import os
@@ -19,10 +21,6 @@ from botocore import __version__ as __botocore_version__
 from bs4 import __version__ as __bs4_version__  # type: ignore (bs4 does not have PEP 561 support)
 from bs4 import BeautifulSoup
 import requests
-import rich
-from rich.console import Console
-from rich.logging import RichHandler
-from rich.prompt import IntPrompt, Prompt
 from tokendito import __version__
 from tokendito import aws
 from tokendito import Config
@@ -139,18 +137,11 @@ def parse_cli_args(args):
         help="Sets the MFA response to a challenge",
     )
     parser.add_argument(
-        "--no-color",
-        dest="user_no_color",
-        action="store_true",
-        default=False,
-        help="Supress colored output.",
-    )
-    parser.add_argument(
         "--quiet",
         dest="user_quiet",
         action="store_true",
         default=False,
-        help="Suppress output (implies --no-color)",
+        help="Suppress output",
     )
 
     parsed_args = parser.parse_args(args)
@@ -226,26 +217,12 @@ def setup_logging(conf):
     :return: loglevel name
     """
     root_logger = logging.getLogger()
-    # We get quiet / no color directly from the stdout console settings
-    stdout_console = rich.get_console()
-    # Time and level name come from the Rich handler
-    formatter = logging.Formatter(fmt="|%(name)s %(funcName)s():%(lineno)i| %(message)s")
-    handler = RichHandler(
-        show_time=True,
-        omit_repeated_times=False,
-        show_path=False,
-        markup=True,
-        console=Console(
-            stderr=True,
-            no_color=stdout_console.no_color,
-            quiet=stdout_console.quiet,
-        ),
+    formatter = logging.Formatter(
+        fmt="%(asctime)s %(levelname)s |%(name)s %(funcName)s():%(lineno)i| %(message)s"
     )
+    handler = logging.StreamHandler()
 
     if "log_output_file" in conf and conf["log_output_file"]:
-        formatter = logging.Formatter(
-            fmt="%(asctime)s %(levelname)s |%(name)s %(funcName)s():%(lineno)i| %(message)s"
-        )
         handler = logging.FileHandler(conf["log_output_file"])
     handler.setFormatter(formatter)
 
@@ -273,37 +250,10 @@ def setup_logging(conf):
     return loglevel
 
 
-def setup_console(args):
-    """Set up readline, and screen colors.
-
-    :param args: ConfigParser object
-    :return: None
-    """
-    # These areconsidered true if present. We do this here as there is no env processing yet.
-    # The order of operations is backwards from the general flow of the program as having
-    # an env variable here should override the command-line defaults, which default to not quiet,
-    # and with color.
-    console_settings = {
-        "no_color": args.user_no_color,
-        "quiet": args.user_quiet,
-    }
-    if "TOKENDITO_USER_NO_COLOR" in os.environ:
-        console_settings["no_color"] = True
-    if "TOKENDITO_USER_QUIET" in os.environ:
-        console_settings["quiet"] = True
-
-    rich.reconfigure(
-        no_color=console_settings["no_color"],
-        quiet=console_settings["quiet"],
-    )
-    console = rich.get_console()
-    return console
-
-
 def print(args):
-    """Pass-through to rich, so that it interprets colors."""
-    console = rich.get_console()
-    console.print(args, end=os.linesep, soft_wrap=True, highlight=False)
+    """Print only if not in quiet mode. Does not affect logging."""
+    if config.user["quiet"] is not True:
+        builtins.print(args)
     return args
 
 
@@ -401,7 +351,7 @@ def select_preferred_mfa_index(mfa_options, factor_key="provider", subfactor_key
     """
     logger.debug("Show all the MFA options to the users.")
     logger.debug(json.dumps(mfa_options))
-    print("\n[green]Select your preferred MFA method and press Enter:[/green]")
+    print("\nSelect your preferred MFA method and press Enter:")
 
     longest_index = len(str(len(mfa_options)))
     longest_factor_name = max([len(d[factor_key]) for d in mfa_options])
@@ -414,11 +364,11 @@ def select_preferred_mfa_index(mfa_options, factor_key="provider", subfactor_key
         mfa_method = mfa_option.get(subfactor_key, "Not presented")
         provider = mfa_option.get(factor_key, "Not presented")
         print(
-            f"[bold][{i: >{longest_index}}][/bold]  "
-            f"[cyan]{provider: <{longest_factor_name}}[/cyan]  "
-            f"[blue]{mfa_method: <{longest_subfactor_name}}[/blue] "
-            f"[blue]{factor_info: <{factor_info_indent}}[/blue] "
-            f"[magenta]Id: {factor_id}[/magenta]"
+            f"[{i: >{longest_index}}]  "
+            f"{provider: <{longest_factor_name}}  "
+            f"{mfa_method: <{longest_subfactor_name}} "
+            f"{factor_info: <{factor_info_indent}} "
+            f"Id: {factor_id}"
         )
 
     user_input = collect_integer(len(mfa_options))
@@ -446,7 +396,7 @@ def prompt_role_choices(aut_aps):
                 aliases_mapping.append((app["label"], role.split(":")[4], role, url))
 
     logger.debug("Ask user to select role")
-    print("\n[bold]Please select one of the following[/bold]:")
+    print("\nPlease select one of the following:")
 
     longest_alias = max(len(i[1]) for i in aliases_mapping)
     longest_index = len(str(len(aliases_mapping)))
@@ -458,12 +408,9 @@ def prompt_role_choices(aut_aps):
         padding_index = longest_index - len(str(i))
         if print_label != label:
             print_label = label
-            print(f"\n[green]{label}:[/green]")
+            print(f"\n{label}:")
 
-        print(
-            f"[bold][{i}][/bold] {padding_index * ' '}"
-            f"[cyan]{alias: <{longest_alias}}[/cyan]  [blue]{role}[/blue]"
-        )
+        print(f"[{i}] {padding_index * ' '}" f"{alias: <{longest_alias}}  {role}")
 
     user_input = collect_integer(len(aliases_mapping))
     selected_role = (aliases_mapping[user_input][2], aliases_mapping[user_input][3])
@@ -488,13 +435,13 @@ def display_selected_role(profile_name="", role_response={}):
 
     expiration_time_local = utc_to_local(expiration_time)
     msg = (
-        f"\nGenerated profile [bold]'{profile_name}'[/bold] in"
-        f" [green]{config.aws['shared_credentials_file']}[/green].\n"
+        f"\nGenerated profile '{profile_name}' in "
+        f"{config.aws['shared_credentials_file']}.\n"
         "\nUse profile to authenticate to AWS:\n\t"
-        f"[bold]aws --profile '{profile_name}' sts get-caller-identity[/bold]"
+        f"aws --profile '{profile_name}' sts get-caller-identity"
         "\nOR\n\t"
-        f"[bold]export AWS_PROFILE='{profile_name}'[/bold]\n\n"
-        f"Credentials are valid until [bold]{expiration_time}[/bold] ({expiration_time_local})."
+        f"export AWS_PROFILE='{profile_name}'\n\n"
+        f"Credentials are valid until {expiration_time} ({expiration_time_local})."
     )
 
     print(msg)
@@ -630,12 +577,12 @@ def display_version():
     (system, _, release, _, _, _) = platform.uname()
     logger.debug(f"Display version: {__version__}")
     print(
-        f"[bold]tokendito[/bold]/{__version__} "
-        f"[bold]Python[/bold]/{python_version} "
-        f"[bold]{system}[/bold]/{release} "
-        f"[bold]botocore[/bold]/{__botocore_version__} "
-        f"[bold]bs4[/bold]/{__bs4_version__} "
-        f"[bold]requests[/bold]/{requests.__version__}"
+        f"tokendito/{__version__} "
+        f"Python/{python_version} "
+        f"{system}/{release} "
+        f"botocore/{__botocore_version__} "
+        f"bs4/{__bs4_version__} "
+        f"requests/{requests.__version__}"
     )
 
 
@@ -756,7 +703,12 @@ def process_interactive_input(config):
     :param config: Config object with some values set
     :returns: Config object with necessary values set.
     """
-    # reuse interactive config. It will only request the portions needed.
+    # Return quickly if the user attempts to run in quiet (non-interactive) mode.
+    if config.user["quiet"] is True:
+        logger.debug(f"Skipping interactive config: quiet mode is {config.user['quiet']}")
+        return config
+
+    # Reuse interactive config. It will only request the portions needed.
     try:
         details = get_interactive_config(
             app_url=config.okta["app_url"],
@@ -772,8 +724,8 @@ def process_interactive_input(config):
     # Copy the values set by get_interactive_config
     if "okta_app_url" in details:
         res["okta"]["app_url"] = details["okta_app_url"]
-    if "okta_org_url" in details:
-        res["okta"]["org"] = details["okta_org_url"]
+    if "okta_org" in details:
+        res["okta"]["org"] = details["okta_org"]
     if "okta_username" in details:
         res["okta"]["username"] = details["okta_username"]
 
@@ -784,6 +736,7 @@ def process_interactive_input(config):
 
     config_int = Config(**res)
     logger.debug(f"Interactive configuration is: {config_int}")
+    config.update(config_int)
     return config_int
 
 
@@ -797,9 +750,7 @@ def get_interactive_config(app_url=None, org_url=None, username=""):
 
     # We need either one of these two:
     while org_url is None and app_url is None:
-        print(
-            "\n\n[bold]Please enter either your Organization URL, a tile (app) URL, or both.[/bold]"
-        )
+        print("\n\nPlease enter either your Organization URL, a tile (app) URL, or both.")
         org_url = get_org_url()
         app_url = get_app_url()
 
@@ -833,7 +784,7 @@ def get_org_url():
 
     :return: string with sanitized value, or the empty string.
     """
-    message = "Okta Org URL. E.g. https://acme.okta.com/"
+    message = "Okta Org URL. E.g. https://acme.okta.com/: "
     res = ""
 
     while res == "":
@@ -846,7 +797,7 @@ def get_org_url():
         if validate_okta_org_url(user_data):
             res = user_data
         else:
-            print("[red]Invalid input, try again.[/red]")
+            print("Invalid input, try again.")
     logger.debug(f"Org URL is: {res}")
     return res
 
@@ -856,7 +807,9 @@ def get_app_url():
 
     :return: string with sanitized value, or the empty string.
     """
-    message = "Okta App URL. E.g. https://acme.okta.com/home/" "amazon_aws/b07384d113edec49eaa6/123"
+    message = (
+        "Okta App URL. E.g. https://acme.okta.com/home/" "amazon_aws/b07384d113edec49eaa6/123: "
+    )
     res = ""
 
     while res == "":
@@ -869,7 +822,7 @@ def get_app_url():
         if validate_okta_app_url(user_data):
             res = user_data
         else:
-            print("[red]Invalid input, try again.[/red]")
+            print("Invalid input, try again.")
     logger.debug(f"App URL is: {res}")
     return res
 
@@ -879,7 +832,7 @@ def get_username():
 
     :return: string with sanitized value.
     """
-    message = "Organization username. E.g. jane.doe@acme.com"
+    message = "Organization username. E.g. jane.doe@acme.com: "
     res = ""
     while res == "":
         user_data = get_input(prompt=message)
@@ -887,7 +840,7 @@ def get_username():
         if user_data != "":
             res = user_data
         else:
-            print("[red]Invalid input, try again.[/red]")
+            print("Invalid input, try again.")
     logger.debug(f"Username is {res}")
     return res
 
@@ -903,7 +856,7 @@ def get_password():
     logger.debug("Set password.")
 
     while res == "":
-        password = Prompt.ask("[bold]Password[/bold]", password=True)
+        password = getpass.getpass()
         res = password
         logger.debug("password set interactively")
     return res
@@ -1011,14 +964,57 @@ def update_ini(profile="", ini_file="", **kwargs):
     return ini
 
 
-def get_input(prompt=""):
+def check_within_range(user_input, valid_range):
+    """Validate the user input is within the range of the presented menu.
+
+    :param user_input: integer-validated user input.
+    :param valid_range: the valid range presented on the user's menu.
+    :return range_validation: true or false
+    """
+    range_validation = False
+    if int(user_input) in range(0, valid_range):
+        range_validation = True
+    else:
+        logger.debug(f"Valid range is {valid_range}")
+        logger.error("Value is not in within the selection range.")
+    return range_validation
+
+
+def check_integer(value):
+    """Validate integer.
+
+    :param value: value to be validated.
+    :return: True when the number is a positive integer, false otherwise.
+    """
+    integer_validation = False
+    if str(value).isdigit():
+        integer_validation = True
+    else:
+        logger.error("Please enter a valid integer.")
+
+    return integer_validation
+
+
+def validate_input(value, valid_range):
+    """Validate user input is an integer and within menu range.
+
+    :param value: user input
+    :param valid_range: valid range based on how many menu options available to user.
+    """
+    integer_validation = check_integer(value)
+    if integer_validation and valid_range:
+        integer_validation = check_within_range(value, valid_range)
+    return integer_validation
+
+
+def get_input(prompt="-> "):
     """Collect user input for TOTP.
 
     :param prompt: optional string with prompt.
     :return user_input: raw from user.
     """
-    user_input = Prompt.ask(f"[bold]{prompt}[/bold]")
-    logger.debug(f"User input [{user_input}]")
+    user_input = input(f"{prompt}")
+    logger.debug(f"User input: {user_input}")
 
     return user_input
 
@@ -1031,8 +1027,14 @@ def collect_integer(valid_range=0):
     :param valid_range: number of menu options available to user.
     :return user_input: validated, casted integer from user.
     """
-    prompt_choices = [f"{x}" for x in range(valid_range)]
-    user_input = IntPrompt.ask("[bold]Enter your selection[/bold]", choices=prompt_choices)
+    user_input = None
+    while True:
+        user_input = get_input()
+        valid_input = validate_input(user_input, valid_range)
+        logger.debug(f"User input validation status is {valid_input}")
+        if valid_input:
+            user_input = int(user_input)
+            break
     return user_input
 
 
@@ -1067,8 +1069,8 @@ def process_options(args):
     logger.debug(f"Final configuration is {config}")
 
 
-def validate_configuration(config):
-    """Ensure that minimum configuration values are sane.
+def validate_basic_configuration(config):
+    """Ensure that basic configuration values are sane.
 
     :param config: Config element with final configuration.
     :return: message with validation issues.
@@ -1095,6 +1097,38 @@ def validate_configuration(config):
         )
 
     return message
+
+
+def validate_quiet_configuration(config):
+    """Ensure that minimum configuration settings for running quietly are met.
+
+    This is kept separately from validate_basic_configuration to avoid complexity
+    and avoid testability. These functions should always be used together.
+
+    :param config: Config element with final configuration.
+    :return: message with validation issues.
+    """
+    message = []
+    if "quiet" in config.user and config.user["quiet"] is not False:
+        if not config.aws["role_arn"]:
+            message.append("AWS role ARN not set")
+        if not config.okta["mfa_method"]:
+            message.append("MFA Method not set")
+        if not config.okta["mfa_response"] and config.okta["mfa_method"] != "push":
+            message.append("MFA Response not set")
+
+    return message
+
+
+def validate_configuration(config):
+    """
+    Ensure that configuration settings are appropriate before contacting the Okta endpoint.
+
+    :param config: Config element with final configuration.
+    :return: message with validation issues.
+    """
+    messages = validate_basic_configuration(config) + validate_quiet_configuration(config)
+    return messages
 
 
 def sanitize_config_values(config):

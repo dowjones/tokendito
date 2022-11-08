@@ -209,7 +209,7 @@ def parse_challenge(verify_mfa, challenge_result):
     challenge_reason = None
 
     if "status" in verify_mfa:
-        user.print(f"[bold]{verify_mfa['status']}[/bold]")
+        user.print(f"{verify_mfa['status']}")
 
     if "reason" in verify_mfa:
         challenge_reason = verify_mfa["reason"]
@@ -293,7 +293,7 @@ def set_passcode(mfa_option):
     """
     passcode = None
     if mfa_option["factor"].lower() == "passcode":
-        user.print("[bold]Type your TOTP and press Enter[/bold]")
+        user.print("Type your TOTP and press Enter:")
         passcode = user.get_input()
     return passcode
 

@@ -4,8 +4,6 @@
 """tokendito module entry point."""
 import sys
 
-from rich import print
-
 
 def main(args=None):  # needed for console script
     """Packge entry point."""
@@ -19,7 +17,7 @@ def main(args=None):  # needed for console script
     try:
         return cli(args)
     except KeyboardInterrupt:
-        print("\n[bold red]Interrupted[/bold red]")
+        print("\nInterrupted")
         sys.exit(1)
 
 
