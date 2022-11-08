@@ -8,7 +8,6 @@ from unittest.mock import Mock
 
 import pytest
 import requests_mock
-import rich
 import semver
 
 
@@ -65,7 +64,7 @@ def test_get_username(mocker):
     """Test whether data sent is the same as data returned."""
     from tokendito import user
 
-    mocker.patch("rich.prompt.Prompt.ask", return_value="pytest_patched")
+    mocker.patch("tokendito.user.input", return_value="pytest_patched")
     val = user.get_username()
 
     assert val == "pytest_patched"
@@ -75,7 +74,7 @@ def test_get_password(mocker):
     """Test whether data sent is the same as data returned."""
     from tokendito import user
 
-    mocker.patch("rich.prompt.Prompt.ask", return_value="pytest_patched")
+    mocker.patch("getpass.getpass", return_value="pytest_patched")
     val = user.get_password()
 
     assert val == "pytest_patched"
@@ -127,22 +126,6 @@ def test_setup_early_logging(monkeypatch, tmpdir):
     assert "TOKENDITO_USER_PYTEST_EXPECTED_FAILURE" not in ret
 
 
-def test_setup_console(monkeypatch):
-    """Test the console."""
-    from tokendito import user
-    from argparse import Namespace
-
-    args = dict(user_no_color=False, user_quiet=False)
-
-    env_keys = dict(
-        TOKENDITO_USER_QUIET="true",
-        TOKENDITO_USER_NO_COLOR="true",
-    )
-    monkeypatch.setattr(os, "environ", {**env_keys})
-    ret = user.setup_console(Namespace(**args))
-    assert ret.quiet is True and ret.no_color is True
-
-
 def test_get_interactive_config(mocker):
     """Test if interactive configuration is collected correctly."""
     from tokendito import user
@@ -171,17 +154,13 @@ def test_get_interactive_config(mocker):
     assert ret["okta_username"] == "pytests"
 
 
-def test_collect_integer(mocker):
+@pytest.mark.parametrize("value,expected", [("00", 0), ("01", 1), ("5", 5)])
+def test_collect_integer(mocker, value, expected):
     """Test whether integers from the user are retrieved."""
     from tokendito import user
 
-    mocker.patch("tokendito.user.IntPrompt.ask", return_value=[])
-    ret = user.collect_integer()
-    assert ret == []
-
-    mocker.patch("tokendito.user.IntPrompt.ask", return_value=0)
-    ret = user.collect_integer()
-    assert ret == 0
+    mocker.patch("tokendito.user.input", return_value=value)
+    assert user.collect_integer(10) == expected
 
 
 @pytest.mark.parametrize(
@@ -196,7 +175,7 @@ def test_get_org_url(mocker, url, expected):
     """Test Org URL."""
     from tokendito import user
 
-    mocker.patch("rich.prompt.Prompt.ask", return_value=url)
+    mocker.patch("tokendito.user.input", return_value=url)
     assert user.get_org_url() == expected
 
 
@@ -218,8 +197,60 @@ def test_get_app_url(mocker, url, expected):
     """Test get App URL."""
     from tokendito import user
 
-    mocker.patch("rich.prompt.Prompt.ask", return_value=url)
+    mocker.patch("tokendito.user.input", return_value=url)
     assert user.get_app_url() == expected
+
+
+@pytest.mark.parametrize(
+    "test,limit,expected",
+    [(0, 10, True), (5, 10, True), (10, 10, False), (-1, 10, False), (1, 0, False)],
+)
+def test_check_within_range(test, limit, expected):
+    """Test whether a given number is in the range 0 >= num < limit."""
+    from tokendito import user
+
+    assert user.check_within_range(test, limit) is expected
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        ("-1", False),
+        ("0", True),
+        ("1", True),
+        (-1, False),
+        (0, True),
+        (1, True),
+        (3.7, False),
+        ("3.7", False),
+        ("seven", False),
+        ("0xff", False),
+        (None, False),
+    ],
+)
+def test_check_integer(value, expected):
+    """Test whether the integer testing function works within boundaries."""
+    from tokendito import user
+
+    assert user.check_integer(value) is expected
+
+
+@pytest.mark.parametrize(
+    "test,limit,expected", [(1, 10, True), (-1, 10, False), ("pytest", 10, False)]
+)
+def test_validate_input(test, limit, expected):
+    """Check if a given input is within the 0 >= num < limit range."""
+    from tokendito import user
+
+    assert user.validate_input(test, limit) is expected
+
+
+def test_get_input(mocker):
+    """Check if provided input is return unmodified."""
+    from tokendito import user
+
+    mocker.patch("tokendito.user.input", return_value="pytest_patched")
+    assert user.get_input() == "pytest_patched"
 
 
 def test_update_ini(tmpdir):
@@ -373,15 +404,6 @@ def test_validate_app_url(url, expected):
     assert user.validate_okta_app_url(input_url=url) is expected
 
 
-def test_get_input(mocker):
-    """Check if provided input is return unmodified."""
-    from tokendito import user
-
-    # mocker.patch("tokendito.user.input", return_value="pytest_patched")
-    mocker.patch("rich.prompt.Prompt.ask", return_value="pytest_patched")
-    assert user.get_input() == "pytest_patched"
-
-
 def test_utc_to_local():
     """Check if passed utc datestamp becomes local one."""
     from tokendito import user
@@ -402,7 +424,7 @@ def test_set_passcode(mocker):
     """Check if numerical passcode can handle leading zero values."""
     from tokendito import duo
 
-    mocker.patch("rich.prompt.Prompt.ask", return_value="0123456")
+    mocker.patch("tokendito.user.input", return_value="0123456")
     assert duo.set_passcode({"factor": "passcode"}) == "0123456"
 
 
@@ -718,29 +740,35 @@ def test_select_preferred_mfa_index(mocker, sample_json_response):
         assert select_preferred_mfa_index(mfa_options) == output
 
 
-def test_select_preferred_mfa_index_output(capsys, mocker, sample_json_response):
+@pytest.mark.parametrize(
+    "email",
+    [
+        ("First.Last@acme.org"),
+    ],
+)
+def test_select_preferred_mfa_index_output(email, capsys, mocker, sample_json_response):
     """Test whether the function gives correct output."""
     from tokendito.user import select_preferred_mfa_index
+    from tokendito import config
 
+    # For this test, ensure that quiet is never true
+    config.user["quiet"] = False
     primary_auth = sample_json_response
     mfa_options = primary_auth["okta_response_mfa"]["_embedded"]["factors"]
 
-    # We only test a specific porttion of each string since if there is no terminal present
-    # the line wraps at 80 characters, and new lines are intermixed with the output
-    correct_output = [
-        "Select your preferred MFA method and press Enter",
-        "Id: opfrar9yi4bKJNH2WEW",
-        "Id: FfdskljfdsS1ljUT0r8",
-        "Id: fdsfsd6ewREr8",
-    ]
+    correct_output = (
+        "\nSelect your preferred MFA method and press Enter:\n"
+        "[0]  OKTA    push                Redmi 6 Pro         Id: opfrar9yi4bKJNH2WEW\n"
+        f"[1]  GOOGLE  token:software:totp {email} Id: FfdskljfdsS1ljUT0r8\n"
+        f"[2]  OKTA    token:software:totp {email} Id: fdsfsd6ewREr8\n"
+        f"[3]  GOOGLE  pytest_dupe         Not Presented       Id: fdsfsd6ewREr0\n"
+        f"[4]  OKTA    pytest_dupe         Not Presented       Id: fdsfsd6ewREr1\n"
+    )
 
-    # tox -> pytest/capsys -> rich don't play well together, they add a TTY when there is none.
-    rich.reconfigure(force_interactive=False, highlight=False)
     mocker.patch("tokendito.user.collect_integer", return_value=1)
     select_preferred_mfa_index(mfa_options)
     captured = capsys.readouterr()
-    for elem in correct_output:
-        assert elem in captured.out
+    assert captured.out == correct_output
 
 
 def test_user_mfa_options(sample_headers, sample_json_response, mocker):
@@ -763,7 +791,7 @@ def test_user_mfa_options(sample_headers, sample_json_response, mocker):
     selected_mfa_option = {"factorType": "token:software:totp"}
     primary_auth["stateToken"] = "pytest"
     mfa_verify = {"sessionToken": "pytest"}
-    mocker.patch("rich.prompt.Prompt.ask", return_value="012345")
+    mocker.patch("tokendito.user.get_input", return_value="012345")
     mocker.patch("tokendito.okta.api_wrapper", return_value=mfa_verify)
     ret = user_mfa_options(
         selected_mfa_option, sample_headers, mfa_challenge_url, payload, primary_auth
@@ -1056,18 +1084,25 @@ def test_process_interactive_input(mocker):
     from tokendito import user, Config
 
     # Check that a good object retrieves an interactive password
-    mocker.patch("rich.prompt.Prompt.ask", return_value="pytest_password")
+    mocker.patch("getpass.getpass", return_value="pytest_password")
 
-    config = dict(okta=dict())
-    pytest_config = Config(**config)
+    pytest_config = Config()
     pytest_config.okta["app_url"] = "https://pytest/appurl"
     pytest_config.okta["org"] = "https://pytest/"
     pytest_config.okta["username"] = "pytest"
     ret = user.process_interactive_input(pytest_config)
-    assert ret.okta["password"] == "pytest_password"
+    pytest_config.update(ret)
+    assert pytest_config.okta["password"] == "pytest_password"
+
+    # Check that quiet mode does not retrieve a username
+    pytest_config.user["quiet"] = True
+    pytest_config.okta["username"] = ""
+    ret = user.process_interactive_input(pytest_config)
+    pytest_config.update(ret)
+    assert pytest_config.okta["username"] == ""
 
     # Check that a bad object raises an exception
-    with pytest.raises(SystemExit) as error:
+    with pytest.raises(AttributeError) as error:
         assert user.process_interactive_input({"pytest": "pytest"}) == error
 
 
@@ -1167,6 +1202,52 @@ def test_set_role_name(value, submit, expected):
                 }
             },
             ["Org URL pytest_deadbeef is not valid"],
+        ),
+        (
+            {
+                "okta": {
+                    "username": "pytest",
+                    "password": "pytest",
+                    "org": "https://acme.okta.org",
+                    "app_url": None,
+                },
+                "user": {"quiet": False},
+            },
+            [],
+        ),
+        (
+            {
+                "user": {"quiet": True},
+                "okta": {
+                    "username": "pytest",
+                    "password": "pytest",
+                    "org": "https://acme.okta.org",
+                    "app_url": None,
+                    "mfa_method": "push",
+                    "mfa_response": None,
+                },
+                "aws": {
+                    "role_arn": None,
+                },
+            },
+            ["AWS role ARN not set"],
+        ),
+        (
+            {
+                "user": {"quiet": True},
+                "okta": {
+                    "username": "pytest",
+                    "password": "pytest",
+                    "org": "https://acme.okta.org",
+                    "app_url": None,
+                    "mfa_method": None,
+                    "mfa_response": None,
+                },
+                "aws": {
+                    "role_arn": "arn:aws:iam::123456789000:role/test-role",
+                },
+            },
+            ["MFA Method not set", "MFA Response not set"],
         ),
     ],
 )

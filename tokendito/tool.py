@@ -16,8 +16,6 @@ logger = logging.getLogger(__name__)
 def cli(args):
     """Tokendito retrieves AWS credentials after authenticating with Okta."""
     args = user.parse_cli_args(args)
-    # Set up colors and command-line editing
-    user.setup_console(args)
 
     # Early logging, in case the user requests debugging via env/CLI
     user.setup_early_logging(args)
@@ -31,7 +29,13 @@ def cli(args):
     # Validate configuration
     message = user.validate_configuration(config)
     if message:
-        logger.error(f"Could not validate configuration: {' '.join(message)}")
+        quiet_msg = ""
+        if config.user["quiet"] is not False:
+            quiet_msg = " to run in quiet mode"
+        logger.error(
+            f"Could not validate configuration{quiet_msg}: {'. '.join(message)}. "
+            "Please check your settings, and try again."
+        )
         sys.exit(1)
 
     # Authenticate okta and AWS also use assumerole to assign the role

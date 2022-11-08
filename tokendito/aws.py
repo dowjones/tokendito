@@ -17,7 +17,6 @@ from botocore.client import Config
 from botocore.exceptions import ClientError
 import botocore.session
 import requests
-from rich.progress import track
 from tokendito import user
 
 
@@ -65,9 +64,8 @@ def authenticate_to_roles(secret_session_token, urls, cookies=None):
     if tile_count > 1:
         plural = "s"
 
-    for url, label in track(
-        url_list, description=f"Discovering roles in {tile_count} tile{plural}:"
-    ):
+    logger.info(f"Discovering roles in {tile_count} tile{plural}.")
+    for url, label in url_list:
         try:
             logger.debug(f"Performing role discovery in {url}")
 
