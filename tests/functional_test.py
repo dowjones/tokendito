@@ -88,6 +88,13 @@ def custom_args(request):
     return arg_list
 
 
+@pytest.fixture(scope="session")
+def config_file(tmp_path_factory):
+    """Generate a path for a temporary ini file that multiple tests can share."""
+    path = tmp_path_factory.mktemp("pytest") / "pytest.ini"
+    return path
+
+
 @pytest.mark.run("first")
 def test_package_uninstall():
     """Uninstall tokendito if it is already installed."""
@@ -135,8 +142,9 @@ def test_version(package_version, package_regex, runnable):
 def test_parameter_collection(monkeypatch, tmpdir):
     """Ensure that the order of arguments has the correct behavior."""
     from argparse import Namespace
-    from tokendito import user, config
+    from tokendito import user, Config
 
+    config = Config()
     data = "[default]\n"
     data += "okta_username = pytest_ini\n"
     data += "aws_region = pytest_ini\n"
@@ -166,15 +174,61 @@ def test_parameter_collection(monkeypatch, tmpdir):
     assert config.okta["app_url"] == "https://acme.okta.org/_arg"
 
 
+def test_quiet_failure():
+    """Ensure we exit without all the necessary arguments."""
+    args = ["--quiet"]
+    executable = [sys.executable, "-m", "tokendito"]
+    runnable = executable + args
+    proc = run_process(runnable)
+    assert proc["exit_status"] == 1
+    assert "Could not validate configuration to run in quiet mode" in proc["stderr"]
+
+
+def test_generate_config(custom_args, config_file):
+    """Test writing to a config file."""
+    from tokendito import user, Config
+
+    pytest_cfg = Config()
+    tool_args = user.parse_cli_args(custom_args)
+    config_arg = user.process_arguments(tool_args)
+    pytest_cfg.update(config_arg)
+
+    if (
+        pytest_cfg.okta["app_url"] is None
+        or pytest_cfg.okta["mfa_method"] is None
+        or not pytest_cfg.okta["username"]
+    ):
+        pytest_cfg.okta["app_url"] = "https://pytest/home/amazon_aws/0123456789abcdef0123/456"
+        pytest_cfg.okta["mfa_method"] = "push"
+        pytest_cfg.okta["username"] = "pytest"
+
+    # Rebuild argument list
+    args = [
+        "--configure",
+        "--config-file",
+        f"{config_file}",
+        "--okta-app-url",
+        f"{pytest_cfg.okta['app_url']}",
+        "--okta-mfa-method",
+        f"{pytest_cfg.okta['mfa_method']}",
+        "--username",
+        f"{pytest_cfg.okta['username']}",
+    ]
+    executable = [sys.executable, "-m", "tokendito"]
+    runnable = executable + args
+    proc = run_process(runnable)
+    assert proc["exit_status"] == 0
+
+
 @pytest.mark.run("second-to-last")
-def test_generate_credentials(custom_args):
+def test_generate_credentials(custom_args, config_file):
     """Run the tool and generate credentials."""
     from tokendito import user, config
     import pyotp
 
     # Emulate helpers.process_options() bypassing interactive portions.
     tool_args = user.parse_cli_args(custom_args)
-    config_ini = user.process_ini_file(tool_args.user_config_file, "default")
+    config_ini = user.process_ini_file(config_file, "default")
     config_env = user.process_environment()
     config_arg = user.process_arguments(tool_args)
 
