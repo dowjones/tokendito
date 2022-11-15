@@ -20,8 +20,11 @@ with open("requirements.txt") as f:
     required = f.read().splitlines()
 
 about = {}
-with open(os.path.join(here, "tokendito", "__init__.py"), "r") as f:
-    exec(f.read(), about)
+with open(os.path.join(here, "tokendito", "__init__.py")) as f:
+    for line in f:
+        if line.startswith("__"):
+            split_line = line.strip().split(" = ")
+            about[split_line[0]] = "".join(split_line[1:]).replace('"', "")
 
 if "DEVBUILD" in os.environ:
     now = datetime.datetime.now()

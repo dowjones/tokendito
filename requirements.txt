@@ -1,3 +1,4 @@
-botocore>=1.12.36
-requests>=2.19.0
 beautifulsoup4>=4.6.0
+botocore>=1.12.36
+platformdirs>=2.4.0 # This can be bumped after Python 3.6 is deprecated.
+requests>=2.19.0

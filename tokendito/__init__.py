@@ -6,6 +6,8 @@ import os
 from os.path import expanduser
 import sys
 
+from platformdirs import user_config_dir
+
 __version__ = "2.0.0"
 __title__ = "tokendito"
 __description__ = "Get AWS STS tokens from Okta SSO"
@@ -22,8 +24,10 @@ class Config(object):
     # Instantiated objects can get Class defaults with get_defaults()
     _defaults = dict(
         user=dict(
-            config_dir=os.path.join(expanduser("~"), ".aws"),
-            config_file=os.path.join(expanduser("~"), ".aws", "okta_auth"),
+            config_dir=user_config_dir(appname=__title__, appauthor=False),
+            config_file=os.path.join(
+                user_config_dir(appname=__title__, appauthor=False), f"{__title__}.ini"
+            ),
             config_profile="default",
             encoding=sys.stdin.encoding,
             loglevel="INFO",
