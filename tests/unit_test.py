@@ -266,6 +266,15 @@ def test_update_ini(tmpdir):
     assert ret.get(profile, "key_pytest_2") == "val_pytest_2"
 
 
+def test_validate_saml_response():
+    """Test for failures on SAML response."""
+    from tokendito import user
+
+    with pytest.raises(SystemExit) as err:
+        user.validate_saml_response("")
+    assert err.value.code == 1
+
+
 def test_assert_credentials():
     """Test whether getting credentials works as expeted."""
     from moto import mock_sts
@@ -466,8 +475,35 @@ def test_process_arguments():
     assert "pytest" not in ret.__dict__
 
 
+def test_update_configuration(tmpdir):
+    """Test writing and reading to a configuration file."""
+    from tokendito import user, Config
+
+    path = tmpdir.mkdir("pytest").join("pytest_tokendito.ini")
+    pytest_config = Config(
+        okta={
+            "username": "pytest",
+            "app_url": "https://acme.okta.org/home/amazon_aws/0123456789abcdef0123/456",
+            "org": "https://acme.okta.org/",
+            "mfa_method": "pytest",
+        },
+        user={"config_file": path, "config_profile": "pytest"},
+    )
+
+    # Write out a config file via configure() and ensure it's functional
+    user.update_configuration(pytest_config)
+    ret = user.process_ini_file(path, "pytest")
+    assert ret.okta["username"] == "pytest"
+    assert ret.okta["app_url"] == "https://acme.okta.org/home/amazon_aws/0123456789abcdef0123/456"
+    assert ret.okta["org"] == "https://acme.okta.org/"
+    assert ret.okta["mfa_method"] == "pytest"
+
+
 def test_process_ini_file(tmpdir):
-    """Test whether ini config elements are set correctly."""
+    """Test whether ini config elements are set correctly.
+
+    All this testing is in the same function as they share an ini file.
+    """
     from tokendito import user
 
     valid_settings = dict(
@@ -476,31 +512,23 @@ def test_process_ini_file(tmpdir):
     )
     invalid_settings = dict(user_pytest_expected_failure="pytest")
 
-    # Create a mock config file
-    data = "[default]\nokta_username = pytest\n\n[pytest]\n"
-    data += "".join(f"{key} = {val}\n" for key, val in valid_settings.items())
-    data += "\n[pytest_expected_element_failure]\n"
-    data += "".join(f"{key} = {val}\n" for key, val in invalid_settings.items())
-
-    # Python 3.7 supports patching builtins.open(), which gives us the ability
-    # to bypass file creation with:
-    # mocker.patch('builtins.open', mocker.mock_open(read_data=data), create=True)
-    # There is no (easy) way to achieve the same on earlier versions, so we create
-    # an actual file instead. tmpdir keeps the last 3 files/dirs behind for inspection
+    # Write out a config file and esure it's functional
     path = tmpdir.mkdir("pytest").join("pytest_tokendito.ini")
-    path.write(data)
-
-    # Ensure we fail if the section is not found
-    with pytest.raises(SystemExit) as err:
-        user.process_ini_file(path, "pytest_expected_failure")
-    assert err.value.code == 2
-
+    user.update_ini("pytest", path, **valid_settings)
     ret = user.process_ini_file(path, "pytest")
     assert ret.okta["username"] == "pytest"
     assert ret.okta["password"] == "pytest_password"
 
+    # Ensure we fail if the section is not found
+    user.update_ini("pytest", path, **valid_settings)
     with pytest.raises(SystemExit) as err:
-        user.process_ini_file(path, "pytest_expected_element_failure")
+        user.process_ini_file(path, "pytest_expected_failure")
+    assert err.value.code == 2
+
+    # Ensure we fail if there's a bad element
+    user.update_ini("pytest", path, **invalid_settings)
+    with pytest.raises(SystemExit) as err:
+        user.process_ini_file(path, "pytest")
     assert err.value.code == 1
 
 
@@ -1133,9 +1161,9 @@ def test_set_role_name(value, submit, expected):
         (
             {"okta": {"username": "", "password": "", "org": None, "app_url": None}},
             [
-                "Username not set.",
-                "Password not set.",
-                "Either Okta Org or App URL must be defined.",
+                "Username not set",
+                "Password not set",
+                "Either Okta Org or App URL must be defined",
             ],
         ),
         (
@@ -1159,9 +1187,9 @@ def test_set_role_name(value, submit, expected):
                 }
             },
             [
-                "Tile URL https://badurl_pytest.org is not valid.",
+                "Tile URL https://badurl_pytest.org is not valid",
                 "Org URL https://acme.okta.org and Tile URL "
-                "https://badurl_pytest.org must be in the same domain.",
+                "https://badurl_pytest.org must be in the same domain",
             ],
         ),
         (
@@ -1189,7 +1217,7 @@ def test_set_role_name(value, submit, expected):
             [
                 "Org URL https://acme.okta.com/ and Tile URL "
                 "https://acme.okta.org/home/amazon_aws/"
-                "0123456789abcdef0123/456?fromHome=true must be in the same domain."
+                "0123456789abcdef0123/456?fromHome=true must be in the same domain"
             ],
         ),
         (

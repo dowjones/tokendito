@@ -333,13 +333,11 @@ def mfa_option_info(mfa_option):
              otherwise.
     """
     logger.debug(f"Building info for: {json.dumps(mfa_option)}")
-    factor_info = None
+    factor_info = "Not Presented"
     if "factorType" in mfa_option:
         factor_type = mfa_option["factorType"]
         factor_info = factor_type_info(factor_type, mfa_option)
 
-    if not factor_info:
-        factor_info = "Not Presented"
     return factor_info
 
 
@@ -657,7 +655,7 @@ def process_arguments(args):
         config_args = Config(**res)
 
     except (AttributeError, KeyError, ValueError) as err:
-        logger.critical(
+        logger.error(
             f"Command line arguments not correct: {err}"
             ". This should not happen, please contact the package maintainers."
         )
@@ -696,11 +694,12 @@ def process_environment(prefix="tokendito"):
     return config_env
 
 
-def process_interactive_input(config):
+def process_interactive_input(config, skip_password=False):
     """
     Request input interactively interactively for elements that are not proesent.
 
-    :param config: Config object with some values set
+    :param config: Config object with some values set.
+    :param skip_password: Whether or not ask the user for a password.
     :returns: Config object with necessary values set.
     """
     # Return quickly if the user attempts to run in quiet (non-interactive) mode.
@@ -729,7 +728,7 @@ def process_interactive_input(config):
     if "okta_username" in details:
         res["okta"]["username"] = details["okta_username"]
 
-    if "password" not in config.okta or config.okta["password"] == "":
+    if ("password" not in config.okta or config.okta["password"] == "") and not skip_password:
         logger.debug("No password set, will try to get one interactively")
         res["okta"]["password"] = get_password()
         add_sensitive_value_to_be_masked(res["okta"]["password"])
@@ -749,7 +748,7 @@ def get_interactive_config(app_url=None, org_url=None, username=""):
     details = {}
 
     # We need either one of these two:
-    while org_url is None and app_url is None:
+    while not validate_okta_org_url(org_url) and not validate_okta_app_url(app_url):
         print("\n\nPlease enter either your Organization URL, a tile (app) URL, or both.")
         org_url = get_org_url()
         app_url = get_app_url()
@@ -877,7 +876,7 @@ def set_role_name(config_obj, name):
     return config_obj
 
 
-def update_configuration(ini_file, profile):
+def update_configuration(config):
     """Update configuration file on local system.
 
     :param ini_file: Configuration file
@@ -885,10 +884,22 @@ def update_configuration(ini_file, profile):
     :return: None
     """
     logger.debug("Update configuration file on local system.")
+    ini_file = config.user["config_file"]
+    profile = config.user["config_profile"]
 
-    results = get_interactive_config()
-
-    update_ini(profile=profile, ini_file=ini_file, **results)
+    contents = {}
+    # Copy relevant parts of the configuration into an dictionary that
+    # will be written out to disk
+    if "org" in config.okta and config.okta["org"] is not None:
+        contents["okta_org"] = config.okta["org"]
+    if "app_url" in config.okta and config.okta["app_url"] is not None:
+        contents["okta_app_url"] = config.okta["app_url"]
+    if "mfa_method" in config.okta and config.okta["mfa_method"] is not None:
+        contents["okta_mfa_method"] = config.okta["mfa_method"]
+    if "username" in config.okta and config.okta["username"] != "":
+        contents["okta_username"] = config.okta["username"]
+    logger.debug(f"Adding {contents} to config file.")
+    update_ini(profile=profile, ini_file=ini_file, **contents)
     logger.info(f"Updated {ini_file} with profile {profile}")
 
 
@@ -928,9 +939,9 @@ def set_local_credentials(response={}, role="default", region="us-east-1", outpu
 
 
 def update_ini(profile="", ini_file="", **kwargs):
-    """Update AWS credentials in ~/.aws/credentials default file.
+    """Update a generic INI file.
 
-    :param profile: AWS profile name
+    :param profile: Profile name
     :param ini_file: File to write to.
     :param **kwargs: key/value pairs to write to the ini file
     :return: ConfigParser object written
@@ -1044,12 +1055,10 @@ def process_options(args):
         display_version()
         sys.exit(0)
 
-    if args.configure:
-        update_configuration(args.user_config_file, args.user_config_profile)
-        sys.exit(0)
-
     # 1: read ini file (if it exists)
-    config_ini = process_ini_file(args.user_config_file, args.user_config_profile)
+    config_ini = Config()
+    if not args.configure:
+        config_ini = process_ini_file(args.user_config_file, args.user_config_profile)
 
     # 2: override with ENV
     config_env = process_environment()
@@ -1062,11 +1071,15 @@ def process_options(args):
     config.update(config_args)
 
     # 4: Get missing data from the user, if necessary
-    config_int = process_interactive_input(config)
+    config_int = process_interactive_input(config, args.configure)
     config.update(config_int)
 
     sanitize_config_values(config)
     logger.debug(f"Final configuration is {config}")
+
+    if args.configure:
+        update_configuration(config)
+        sys.exit(0)
 
 
 def validate_basic_configuration(config):
@@ -1077,13 +1090,13 @@ def validate_basic_configuration(config):
     """
     message = []
     if not config.okta["username"] or config.okta["username"] == "":
-        message.append("Username not set.")
+        message.append("Username not set")
     if not config.okta["password"] or config.okta["password"] == "":
-        message.append("Password not set.")
+        message.append("Password not set")
     if not config.okta["org"] and not config.okta["app_url"]:
-        message.append("Either Okta Org or App URL must be defined.")
+        message.append("Either Okta Org or App URL must be defined")
     if config.okta["app_url"] and not validate_okta_app_url(config.okta["app_url"]):
-        message.append(f"Tile URL {config.okta['app_url']} is not valid.")
+        message.append(f"Tile URL {config.okta['app_url']} is not valid")
     if config.okta["org"] and not validate_okta_org_url(config.okta["org"]):
         message.append(f"Org URL {config.okta['org']} is not valid")
     if (
@@ -1093,7 +1106,7 @@ def validate_basic_configuration(config):
     ):
         message.append(
             f"Org URL {config.okta['org']} and Tile URL"
-            f" {config.okta['app_url']} must be in the same domain."
+            f" {config.okta['app_url']} must be in the same domain"
         )
 
     return message
