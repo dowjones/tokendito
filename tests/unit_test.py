@@ -132,24 +132,24 @@ def test_get_interactive_config(mocker):
 
     # test that all values return correctly
     ret = user.get_interactive_config(
-        app_url="https://pytest/pytest", org_url="https://pytest", username="pytest"
+        tile="https://pytest/pytest", org="https://pytest", username="pytest"
     )
     assert (
         ret["okta_username"] == "pytest"
         and ret["okta_org"] == "https://pytest"
-        and ret["okta_app_url"] == "https://pytest/pytest"
+        and ret["okta_tile"] == "https://pytest/pytest"
     )
 
     # test that interactive values are handled correctly
-    mocker.patch("tokendito.user.get_org_url", return_value="https://pytest")
-    mocker.patch("tokendito.user.get_app_url", return_value="https://pytest")
-    ret = user.get_interactive_config(app_url=None, org_url=None, username="pytest")
+    mocker.patch("tokendito.user.get_org", return_value="https://pytest")
+    mocker.patch("tokendito.user.get_tile", return_value="https://pytest")
+    ret = user.get_interactive_config(tile=None, org=None, username="pytest")
     assert ret["okta_username"] == "pytest" and ret["okta_org"] == "https://pytest"
 
     # test that a username is collected
     mocker.patch("tokendito.user.get_username", return_value="pytests")
     ret = user.get_interactive_config(
-        app_url="https://pytest/pytest", org_url="https://pytest/", username=""
+        tile="https://pytest/pytest", org="https://pytest/", username=""
     )
     assert ret["okta_username"] == "pytests"
 
@@ -171,12 +171,12 @@ def test_collect_integer(mocker, value, expected):
         ("acme.okta.org", "https://acme.okta.org"),
     ],
 )
-def test_get_org_url(mocker, url, expected):
+def test_get_org(mocker, url, expected):
     """Test Org URL."""
     from tokendito import user
 
     mocker.patch("tokendito.user.input", return_value=url)
-    assert user.get_org_url() == expected
+    assert user.get_org() == expected
 
 
 @pytest.mark.parametrize(
@@ -193,12 +193,12 @@ def test_get_org_url(mocker, url, expected):
         ),
     ],
 )
-def test_get_app_url(mocker, url, expected):
-    """Test get App URL."""
+def test_get_tile(mocker, url, expected):
+    """Test get tile URL."""
     from tokendito import user
 
     mocker.patch("tokendito.user.input", return_value=url)
-    assert user.get_app_url() == expected
+    assert user.get_tile() == expected
 
 
 @pytest.mark.parametrize(
@@ -385,11 +385,11 @@ def test_display_selected_role():
         ("https://acme.okta.org/", True),
     ],
 )
-def test_validate_org_url(url, expected):
+def test_validate_org(url, expected):
     """Test whether the Okta Org URL is parsed correctly."""
     from tokendito import user
 
-    assert user.validate_okta_org_url(input_url=url) is expected
+    assert user.validate_okta_org(input_url=url) is expected
 
 
 @pytest.mark.parametrize(
@@ -406,11 +406,11 @@ def test_validate_org_url(url, expected):
         ),
     ],
 )
-def test_validate_app_url(url, expected):
-    """Test whether the Okta App URL is parsed correctly."""
+def test_validate_tile(url, expected):
+    """Test whether the Okta tile URL is parsed correctly."""
     from tokendito import user
 
-    assert user.validate_okta_app_url(input_url=url) is expected
+    assert user.validate_okta_tile(input_url=url) is expected
 
 
 def test_utc_to_local():
@@ -483,9 +483,9 @@ def test_update_configuration(tmpdir):
     pytest_config = Config(
         okta={
             "username": "pytest",
-            "app_url": "https://acme.okta.org/home/amazon_aws/0123456789abcdef0123/456",
+            "tile": "https://acme.okta.org/home/amazon_aws/0123456789abcdef0123/456",
             "org": "https://acme.okta.org/",
-            "mfa_method": "pytest",
+            "mfa": "pytest",
         },
         user={"config_file": path, "config_profile": "pytest"},
     )
@@ -494,9 +494,9 @@ def test_update_configuration(tmpdir):
     user.update_configuration(pytest_config)
     ret = user.process_ini_file(path, "pytest")
     assert ret.okta["username"] == "pytest"
-    assert ret.okta["app_url"] == "https://acme.okta.org/home/amazon_aws/0123456789abcdef0123/456"
+    assert ret.okta["tile"] == "https://acme.okta.org/home/amazon_aws/0123456789abcdef0123/456"
     assert ret.okta["org"] == "https://acme.okta.org/"
-    assert ret.okta["mfa_method"] == "pytest"
+    assert ret.okta["mfa"] == "pytest"
 
 
 def test_process_ini_file(tmpdir):
@@ -740,7 +740,7 @@ def test_mfa_option_info(factor_type, output):
     [("push", 0), (None, 1), ("0xdeadbeef", 1), ("opfrar9yi4bKJNH2WEW", 0), ("pytest_dupe", 1)],
 )
 def test_user_mfa_index(preset_mfa, output, mocker, sample_json_response):
-    """Test whether the function returns correct mfa method index."""
+    """Test whether the function returns correct mfa index."""
     from tokendito.okta import user_mfa_index
 
     primary_auth = sample_json_response["okta_response_mfa"]
@@ -827,8 +827,8 @@ def test_user_mfa_options(sample_headers, sample_json_response, mocker):
     assert ret == mfa_verify
 
 
-def test_user_mfa_challenge_with_no_mfa_methods(sample_headers, sample_json_response):
-    """Test whether okta response has mfa methods."""
+def test_user_mfa_challenge_with_no_mfas(sample_headers, sample_json_response):
+    """Test whether okta response has mfas."""
     from tokendito.okta import user_mfa_challenge
 
     primary_auth = sample_json_response["okta_response_no_auth_methods"]
@@ -880,10 +880,10 @@ def test_correct_role_selection(mocker, selected_role):
         "arn:aws:iam::124356789012:role/pytest",
     ]
 
-    authenticated_aps = {"url": {"roles": role_arns}}
+    authenticated_tiles = {"url": {"roles": role_arns}}
 
     mocker.patch("tokendito.user.prompt_role_choices", return_value=selected_role)
-    assert select_role_arn(authenticated_aps) == selected_role
+    assert select_role_arn(authenticated_tiles) == selected_role
 
 
 def test_repeated_line_select_role_arn():
@@ -898,10 +898,10 @@ def test_repeated_line_select_role_arn():
         "arn:aws:iam::123456789012:role/pytest",
     ]
 
-    authenticated_aps = {"url": {"roles": role_arns}}
+    authenticated_tiles = {"url": {"roles": role_arns}}
 
     with pytest.raises(SystemExit) as error:
-        assert select_role_arn(authenticated_aps) == error
+        assert select_role_arn(authenticated_tiles) == error
 
 
 def test_incorrect_role_arn():
@@ -917,10 +917,10 @@ def test_incorrect_role_arn():
         "arn:aws:iam::124356789012:role/pytest",
     ]
 
-    authenticated_aps = {"url": {"roles": role_arns}}
+    authenticated_tiles = {"url": {"roles": role_arns}}
 
     with pytest.raises(SystemExit) as error:
-        assert select_role_arn(authenticated_aps) == error
+        assert select_role_arn(authenticated_tiles) == error
 
 
 def test_prepare_duo_info():
@@ -953,7 +953,7 @@ def test_prepare_duo_info():
         "state_token": 12345,
         "okta_callback_url": "http://test.okta.href",
         "tx": "fdsafdsa",
-        "app_sig": "fdsfdfds",
+        "tile_sig": "fdsfdfds",
         "parent": f"{config.okta['org']}/signin/verify/duo/web",
         "host": "test_host",
         "sid": "",
@@ -973,7 +973,7 @@ def test_get_duo_sid(mocker):
         "state_token": 12345,
         "okta_callback_url": "http://test.okta.href",
         "tx": "fdsafdsa",
-        "app_sig": "fdsfdfds",
+        "tile_sig": "fdsfdfds",
         "parent": f"{config.okta['org']}/signin/verify/duo/web",
         "host": "test_host",
         "sid": "",
@@ -1069,7 +1069,7 @@ def test_loglevel_collected_from_env(monkeypatch):
 
     args = {
         "okta_username": "pytest_arg",
-        "okta_app_url": "https://acme.okta.org/_arg",
+        "okta_tile": "https://acme.okta.org/_arg",
         "version": None,
         "configure": False,
         "user_config_file": None,
@@ -1115,7 +1115,7 @@ def test_process_interactive_input(mocker):
     mocker.patch("getpass.getpass", return_value="pytest_password")
 
     pytest_config = Config()
-    pytest_config.okta["app_url"] = "https://pytest/appurl"
+    pytest_config.okta["tile"] = "https://pytest/tile"
     pytest_config.okta["org"] = "https://pytest/"
     pytest_config.okta["username"] = "pytest"
     ret = user.process_interactive_input(pytest_config)
@@ -1159,11 +1159,11 @@ def test_set_role_name(value, submit, expected):
     "config,expected",
     [
         (
-            {"okta": {"username": "", "password": "", "org": None, "app_url": None}},
+            {"okta": {"username": "", "password": "", "org": None, "tile": None}},
             [
                 "Username not set",
                 "Password not set",
-                "Either Okta Org or App URL must be defined",
+                "Either Okta Org or tile URL must be defined",
             ],
         ),
         (
@@ -1172,7 +1172,7 @@ def test_set_role_name(value, submit, expected):
                     "username": "pytest",
                     "password": "pytest",
                     "org": "https://acme.okta.org",
-                    "app_url": None,
+                    "tile": None,
                 }
             },
             [],
@@ -1183,7 +1183,7 @@ def test_set_role_name(value, submit, expected):
                     "username": "pytest",
                     "password": "pytest",
                     "org": "https://acme.okta.org",
-                    "app_url": "https://badurl_pytest.org",
+                    "tile": "https://badurl_pytest.org",
                 }
             },
             [
@@ -1198,7 +1198,7 @@ def test_set_role_name(value, submit, expected):
                     "username": "pytest",
                     "password": "pytest",
                     "org": "https://acme.okta.org",
-                    "app_url": "https://acme.okta.org/home/amazon_aws/"
+                    "tile": "https://acme.okta.org/home/amazon_aws/"
                     "0123456789abcdef0123/456?fromHome=true",
                 }
             },
@@ -1210,7 +1210,7 @@ def test_set_role_name(value, submit, expected):
                     "username": "pytest",
                     "password": "pytest",
                     "org": "https://acme.okta.com/",
-                    "app_url": "https://acme.okta.org/home/amazon_aws/"
+                    "tile": "https://acme.okta.org/home/amazon_aws/"
                     "0123456789abcdef0123/456?fromHome=true",
                 }
             },
@@ -1226,7 +1226,7 @@ def test_set_role_name(value, submit, expected):
                     "username": "pytest",
                     "password": "pytest",
                     "org": "pytest_deadbeef",
-                    "app_url": None,
+                    "tile": None,
                 }
             },
             ["Org URL pytest_deadbeef is not valid"],
@@ -1237,7 +1237,7 @@ def test_set_role_name(value, submit, expected):
                     "username": "pytest",
                     "password": "pytest",
                     "org": "https://acme.okta.org",
-                    "app_url": None,
+                    "tile": None,
                 },
                 "user": {"quiet": False},
             },
@@ -1250,8 +1250,8 @@ def test_set_role_name(value, submit, expected):
                     "username": "pytest",
                     "password": "pytest",
                     "org": "https://acme.okta.org",
-                    "app_url": None,
-                    "mfa_method": "push",
+                    "tile": None,
+                    "mfa": "push",
                     "mfa_response": None,
                 },
                 "aws": {
@@ -1267,8 +1267,8 @@ def test_set_role_name(value, submit, expected):
                     "username": "pytest",
                     "password": "pytest",
                     "org": "https://acme.okta.org",
-                    "app_url": None,
-                    "mfa_method": None,
+                    "tile": None,
+                    "mfa": None,
                     "mfa_response": None,
                 },
                 "aws": {
@@ -1293,12 +1293,12 @@ def test_sanitize_config_values():
 
     pytest_config = Config(
         aws=dict(output="pytest", region="pytest"),
-        okta=dict(app_url="https://pytest_org", org="https://pytest_bar/"),
+        okta=dict(tile="https://pytest_org", org="https://pytest_bar/"),
     )
     ret = user.sanitize_config_values(pytest_config)
     assert ret.aws["region"] == pytest_config.get_defaults()["aws"]["region"]
     assert ret.aws["output"] == pytest_config.get_defaults()["aws"]["output"]
-    assert ret.okta["app_url"].startswith(ret.okta["org"])
+    assert ret.okta["tile"].startswith(ret.okta["org"])
 
 
 def test_get_regions():

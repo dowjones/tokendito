@@ -43,18 +43,18 @@ def cli(args):
 
     session_cookies = None
 
-    if config.okta["app_url"]:
-        app_label = ""
-        config.okta["app_url"] = (config.okta["app_url"], app_label)
+    if config.okta["tile"]:
+        tile_label = ""
+        config.okta["tile"] = (config.okta["tile"], tile_label)
     else:
         session_cookies = user.request_cookies(config.okta["org"], session_token)
-        config.okta["app_url"] = user.discover_app_url(config.okta["org"], session_cookies)
+        config.okta["tile"] = user.discover_tile(config.okta["org"], session_cookies)
 
-    auth_apps = aws.authenticate_to_roles(
-        session_token, config.okta["app_url"], cookies=session_cookies
+    auth_tiles = aws.authenticate_to_roles(
+        session_token, config.okta["tile"], cookies=session_cookies
     )
 
-    (role_response, role_name) = aws.select_assumeable_role(auth_apps)
+    (role_response, role_name) = aws.select_assumeable_role(auth_tiles)
 
     identity = aws.assert_credentials(role_response=role_response)
     if "Arn" not in identity and "UserId" not in identity:

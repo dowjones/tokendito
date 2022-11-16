@@ -123,15 +123,15 @@ def parse_cli_args(args):
 
     okta_me_group = parser.add_mutually_exclusive_group()
     okta_me_group.add_argument(
-        "--okta-org-url",
+        "--okta-org",
         dest="okta_org",
         help="Set the Okta Org base URL. This enables role auto-discovery",
     )
     okta_me_group.add_argument(
-        "--okta-app-url",
-        help="Okta App URL to use.",
+        "--okta-tile",
+        help="Okta tile URL to use.",
     )
-    parser.add_argument("--okta-mfa-method", help="Sets the MFA method")
+    parser.add_argument("--okta-mfa", help="Sets the MFA method")
     parser.add_argument(
         "--okta-mfa-response",
         help="Sets the MFA response to a challenge",
@@ -257,18 +257,18 @@ def print(args):
     return args
 
 
-def select_role_arn(authenticated_aps):
+def select_role_arn(authenticated_tiles):
     """Select the role user wants to pick.
 
-    :param: authenticated_aps, mapping of authenticated apps metadata, dict
+    :param: authenticated_tiles, mapping of authenticated tiles metadata, dict
     :return: user role and associated url, tuple
     """
     selected_role = None
 
-    for url, app in authenticated_aps.items():
-        logger.debug(f"Select the role user wants to pick [{app['roles']}]")
-        role_names = dict((role.split("/")[-1], role) for role in app["roles"])
-        roles = [role.split("/")[-1] for role in app["roles"]]
+    for url, tile in authenticated_tiles.items():
+        logger.debug(f"Select the role user wants to pick [{tile['roles']}]")
+        role_names = dict((role.split("/")[-1], role) for role in tile["roles"])
+        roles = [role.split("/")[-1] for role in tile["roles"]]
 
         if roles.count(config.aws["profile"]) > 1:
             logger.error(
@@ -281,13 +281,13 @@ def select_role_arn(authenticated_aps):
             selected_role = (role_names[config.aws["profile"]], url)
             logger.debug(f"Using aws_profile env var for role: [{config.aws['profile']}]")
             break
-        elif config.aws["role_arn"] in app["roles"]:
+        elif config.aws["role_arn"] in tile["roles"]:
             selected_role = (config.aws["role_arn"], url)
             break
 
     if selected_role is None:
         if config.aws["role_arn"] is None:
-            selected_role = prompt_role_choices(authenticated_aps)
+            selected_role = prompt_role_choices(authenticated_tiles)
         else:
             logger.error(f"User provided rolename does not exist [{config.aws['role_arn']}]")
             sys.exit(2)
@@ -300,9 +300,9 @@ def select_role_arn(authenticated_aps):
 def factor_type_info(factor_type, mfa_option):
     """Get factor info from okta reply.
 
-    :param factor_type: mfa_method
+    :param factor_type: mfa
     :param mfa_option: mfa_option
-    :return: info about mfa_method
+    :return: info about mfa
     """
     logger.debug("Choose factor info depending on factor type.")
     factor_info = "Not Presented"
@@ -359,12 +359,12 @@ def select_preferred_mfa_index(mfa_options, factor_key="provider", subfactor_key
     for (i, mfa_option) in enumerate(mfa_options):
         factor_id = mfa_option.get("id", "Not presented")
         factor_info = mfa_option_info(mfa_option)
-        mfa_method = mfa_option.get(subfactor_key, "Not presented")
+        mfa = mfa_option.get(subfactor_key, "Not presented")
         provider = mfa_option.get(factor_key, "Not presented")
         print(
             f"[{i: >{longest_index}}]  "
             f"{provider: <{longest_factor_name}}  "
-            f"{mfa_method: <{longest_subfactor_name}} "
+            f"{mfa: <{longest_subfactor_name}} "
             f"{factor_info: <{factor_info_indent}} "
             f"Id: {factor_id}"
         )
@@ -374,24 +374,24 @@ def select_preferred_mfa_index(mfa_options, factor_key="provider", subfactor_key
     return user_input
 
 
-def prompt_role_choices(aut_aps):
+def prompt_role_choices(aut_tiles):
     """Ask user to select role.
 
-    :param aut_aps: mapping of authenticated apps metadata, dict
+    :param aut_tiles: mapping of authenticated tiles metadata, dict
     :return: user's role and associated url, tuple
     """
     aliases_mapping = []
 
-    for url, app in aut_aps.items():
+    for url, tile in aut_tiles.items():
         logger.debug(f"Getting aliases for {url}")
-        alias_table = get_account_aliases(app["saml"], app["saml_response_string"])
+        alias_table = get_account_aliases(tile["saml"], tile["saml_response_string"])
 
-        for role in app["roles"]:
+        for role in tile["roles"]:
             if alias_table:
-                aliases_mapping.append((app["label"], alias_table[role.split(":")[4]], role, url))
+                aliases_mapping.append((tile["label"], alias_table[role.split(":")[4]], role, url))
             else:
                 logger.debug(f"There were no labels in {url}. Using account ID")
-                aliases_mapping.append((app["label"], role.split(":")[4], role, url))
+                aliases_mapping.append((tile["label"], role.split(":")[4], role, url))
 
     logger.debug("Ask user to select role")
     print("\nPlease select one of the following:")
@@ -491,7 +491,7 @@ def validate_saml_response(html):
     return xml
 
 
-def validate_okta_org_url(input_url=None):
+def validate_okta_org(input_url=None):
     """Validate whether a given URL is a valid AWS Org URL in Okta.
 
     :param input_url: string
@@ -514,8 +514,8 @@ def validate_okta_org_url(input_url=None):
     return False
 
 
-def validate_okta_app_url(input_url=None):
-    """Validate whether a given URL is a valid AWS app URL in Okta.
+def validate_okta_tile(input_url=None):
+    """Validate whether a given URL is a valid AWS tile URL in Okta.
 
     :param input_url: string
     :return: bool. True if valid, False otherwise
@@ -710,8 +710,8 @@ def process_interactive_input(config, skip_password=False):
     # Reuse interactive config. It will only request the portions needed.
     try:
         details = get_interactive_config(
-            app_url=config.okta["app_url"],
-            org_url=config.okta["org"],
+            tile=config.okta["tile"],
+            org=config.okta["org"],
             username=config.okta["username"],
         )
     except (AttributeError, KeyError, ValueError) as err:
@@ -721,8 +721,8 @@ def process_interactive_input(config, skip_password=False):
     # Create a dict that can be passed to Config later
     res = dict(okta=dict())
     # Copy the values set by get_interactive_config
-    if "okta_app_url" in details:
-        res["okta"]["app_url"] = details["okta_app_url"]
+    if "okta_tile" in details:
+        res["okta"]["tile"] = details["okta_tile"]
     if "okta_org" in details:
         res["okta"]["org"] = details["okta_org"]
     if "okta_username" in details:
@@ -739,7 +739,7 @@ def process_interactive_input(config, skip_password=False):
     return config_int
 
 
-def get_interactive_config(app_url=None, org_url=None, username=""):
+def get_interactive_config(tile=None, org=None, username=""):
     """Obtain user input from the user.
 
     :return: dictionary with values
@@ -748,18 +748,18 @@ def get_interactive_config(app_url=None, org_url=None, username=""):
     details = {}
 
     # We need either one of these two:
-    while not validate_okta_org_url(org_url) and not validate_okta_app_url(app_url):
-        print("\n\nPlease enter either your Organization URL, a tile (app) URL, or both.")
-        org_url = get_org_url()
-        app_url = get_app_url()
+    while not validate_okta_org(org) and not validate_okta_tile(tile):
+        print("\n\nPlease enter either your Organization URL, a tileURL, or both.")
+        org = get_org()
+        tile = get_tile()
 
     while username == "":
         username = get_username()
 
-    if org_url is not None:
-        details["okta_org"] = org_url
-    if app_url is not None:
-        details["okta_app_url"] = app_url
+    if org is not None:
+        details["okta_org"] = org
+    if tile is not None:
+        details["okta_tile"] = tile
     details["okta_username"] = username
 
     logger.debug(f"Details: {details}")
@@ -778,7 +778,7 @@ def get_base_url(urlstring):
     return baseurl
 
 
-def get_org_url():
+def get_org():
     """Get Org URL from user.
 
     :return: string with sanitized value, or the empty string.
@@ -793,7 +793,7 @@ def get_org_url():
             break
         if not user_data.startswith("https://"):
             user_data = f"https://{user_data}"
-        if validate_okta_org_url(user_data):
+        if validate_okta_org(user_data):
             res = user_data
         else:
             print("Invalid input, try again.")
@@ -801,13 +801,13 @@ def get_org_url():
     return res
 
 
-def get_app_url():
-    """Get App URL from user.
+def get_tile():
+    """Get tile URL from user.
 
     :return: string with sanitized value, or the empty string.
     """
     message = (
-        "Okta App URL. E.g. https://acme.okta.com/home/" "amazon_aws/b07384d113edec49eaa6/123: "
+        "Okta tile URL. E.g. https://acme.okta.com/home/" "amazon_aws/b07384d113edec49eaa6/123: "
     )
     res = ""
 
@@ -818,7 +818,7 @@ def get_app_url():
             break
         if not user_data.startswith("https://"):
             user_data = f"https://{user_data}"
-        if validate_okta_app_url(user_data):
+        if validate_okta_tile(user_data):
             res = user_data
         else:
             print("Invalid input, try again.")
@@ -892,10 +892,10 @@ def update_configuration(config):
     # will be written out to disk
     if "org" in config.okta and config.okta["org"] is not None:
         contents["okta_org"] = config.okta["org"]
-    if "app_url" in config.okta and config.okta["app_url"] is not None:
-        contents["okta_app_url"] = config.okta["app_url"]
-    if "mfa_method" in config.okta and config.okta["mfa_method"] is not None:
-        contents["okta_mfa_method"] = config.okta["mfa_method"]
+    if "tile" in config.okta and config.okta["tile"] is not None:
+        contents["okta_tile"] = config.okta["tile"]
+    if "mfa" in config.okta and config.okta["mfa"] is not None:
+        contents["okta_mfa"] = config.okta["mfa"]
     if "username" in config.okta and config.okta["username"] != "":
         contents["okta_username"] = config.okta["username"]
     logger.debug(f"Adding {contents} to config file.")
@@ -1093,20 +1093,20 @@ def validate_basic_configuration(config):
         message.append("Username not set")
     if not config.okta["password"] or config.okta["password"] == "":
         message.append("Password not set")
-    if not config.okta["org"] and not config.okta["app_url"]:
-        message.append("Either Okta Org or App URL must be defined")
-    if config.okta["app_url"] and not validate_okta_app_url(config.okta["app_url"]):
-        message.append(f"Tile URL {config.okta['app_url']} is not valid")
-    if config.okta["org"] and not validate_okta_org_url(config.okta["org"]):
+    if not config.okta["org"] and not config.okta["tile"]:
+        message.append("Either Okta Org or tile URL must be defined")
+    if config.okta["tile"] and not validate_okta_tile(config.okta["tile"]):
+        message.append(f"Tile URL {config.okta['tile']} is not valid")
+    if config.okta["org"] and not validate_okta_org(config.okta["org"]):
         message.append(f"Org URL {config.okta['org']} is not valid")
     if (
         config.okta["org"]
-        and config.okta["app_url"]
-        and not config.okta["app_url"].startswith(config.okta["org"])
+        and config.okta["tile"]
+        and not config.okta["tile"].startswith(config.okta["org"])
     ):
         message.append(
             f"Org URL {config.okta['org']} and Tile URL"
-            f" {config.okta['app_url']} must be in the same domain"
+            f" {config.okta['tile']} must be in the same domain"
         )
 
     return message
@@ -1125,9 +1125,9 @@ def validate_quiet_configuration(config):
     if "quiet" in config.user and config.user["quiet"] is not False:
         if not config.aws["role_arn"]:
             message.append("AWS role ARN not set")
-        if not config.okta["mfa_method"]:
+        if not config.okta["mfa"]:
             message.append("MFA Method not set")
-        if not config.okta["mfa_response"] and config.okta["mfa_method"] != "push":
+        if not config.okta["mfa_response"] and config.okta["mfa"] != "push":
             message.append("MFA Response not set")
 
     return message
@@ -1150,8 +1150,8 @@ def sanitize_config_values(config):
     :param config: Config object to adjust
     :returns: modified object.
     """
-    if config.okta["app_url"]:
-        base_url = get_base_url(config.okta["app_url"])
+    if config.okta["tile"]:
+        base_url = get_base_url(config.okta["tile"])
         config.okta["org"] = base_url
 
     if config.aws["output"] not in aws.get_output_types():
@@ -1187,13 +1187,13 @@ def request_cookies(url, session_token):
     return cookies
 
 
-def discover_app_url(url, cookies):
+def discover_tile(url, cookies):
     """
-    Discover aws app url on user's okta dashboard.
+    Discover aws tile url on user's okta dashboard.
 
     :param url: okta org url
     :param cookies: HTML cookies
-    :returns: aws app url. str
+    :returns: aws tile url. str
     """
     url = f"{url}/api/v1/users/me/home/tabs"
     params = {
@@ -1204,24 +1204,24 @@ def discover_app_url(url, cookies):
     response_with_tabs = make_request(method="GET", url=url, cookies=cookies, params=params)
     tabs = response_with_tabs.json()
 
-    aws_apps = []
+    aws_tiles = []
     for tab in tabs:
-        for app in tab["_embedded"]["items"]:
-            if "amazon_aws" in app["_embedded"]["resource"]["linkUrl"]:
-                aws_apps.append(app["_embedded"]["resource"])
+        for tile in tab["_embedded"]["items"]:
+            if "amazon_aws" in tile["_embedded"]["resource"]["linkUrl"]:
+                aws_tiles.append(tile["_embedded"]["resource"])
 
-    if not aws_apps:
-        logger.error("AWS app url not found please set url and try again")
+    if not aws_tiles:
+        logger.error("AWS tile url not found please set url and try again")
         sys.exit(2)
 
-    app_url = (
-        {(url["linkUrl"], url["label"]) for url in aws_apps}
-        if len(aws_apps) > 1
-        else (aws_apps[0]["linkUrl"], aws_apps[0]["label"])
+    tile = (
+        {(url["linkUrl"], url["label"]) for url in aws_tiles}
+        if len(aws_tiles) > 1
+        else (aws_tiles[0]["linkUrl"], aws_tiles[0]["label"])
     )
-    logger.debug(f"Discovered {len(app_url)} URLs.")
+    logger.debug(f"Discovered {len(tile)} URLs.")
 
-    return app_url
+    return tile
 
 
 def make_request(method, url, headers=None, **kwargs):

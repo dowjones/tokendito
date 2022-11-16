@@ -30,7 +30,7 @@ def prepare_duo_info(selected_okta_factor):
     duo_info["state_token"] = selected_okta_factor["stateToken"]
     duo_info["okta_callback_url"] = okta_factor["_links"]["complete"]["href"]
     duo_info["tx"] = okta_factor["signature"].split(":")[0]
-    duo_info["app_sig"] = okta_factor["signature"].split(":")[1]
+    duo_info["tile_sig"] = okta_factor["signature"].split(":")[1]
     duo_info["parent"] = f"{config.okta['org']}/signin/verify/duo/web"
     duo_info["host"] = okta_factor["host"]
     duo_info["sid"] = ""
@@ -271,7 +271,7 @@ def duo_factor_callback(duo_info, verify_mfa):
     factor_callback = duo_api_post(factor_callback_url, payload={"sid": duo_info["sid"]})
 
     try:
-        sig_response = f"{factor_callback.json()['response']['cookie']}:{duo_info['app_sig']}"
+        sig_response = f"{factor_callback.json()['response']['cookie']}:{duo_info['tile_sig']}"
     except Exception as sig_error:
         logger.error(
             "There was an error getting your application signature "

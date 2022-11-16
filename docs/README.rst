@@ -36,8 +36,8 @@ You can just pass in your information at runtime:
 
     tokendito --username prod_service_user@company.com \
     --role-arn arn:aws:iam::123456789000:role/dowjones-hammer-engineer \
-    --mfa-method push \
-    --okta-aws-app-url https://acme.oktapreview.com/home/amazon_aws/b07384d113edec49eaa6/123 \
+    --mfa push \
+    --okta-aws-tile https://acme.oktapreview.com/home/amazon_aws/b07384d113edec49eaa6/123 \
 
 
 Or you can put your parameters into a single `profile <okta_auth.example>`_ in ``$HOME/.aws/okta_auth`` and reference that profile.
@@ -45,9 +45,9 @@ Or you can put your parameters into a single `profile <okta_auth.example>`_ in `
 .. code-block:: txt
 
     [hammer-engineer]
-    okta_aws_app_url = https://acme.oktapreview.com/home/amazon_aws/b07384d113edec49eaa6/123
+    okta_aws_tile = https://acme.oktapreview.com/home/amazon_aws/b07384d113edec49eaa6/123
     okta_username = jane.doe@acme.com
-    mfa_method = push
+    mfa = push
     role_arn = arn:aws:iam::123456789000:role/dowjones-hammer-engineer
 
 
@@ -66,10 +66,10 @@ Additional Usage Reference
 
     usage: tokendito  [-h] [--version] [--configure] [--username USERNAME]
                       [--password PASSWORD] [--config-file CONFIG_FILE]
-                      [--okta-aws-app-url OKTA_AWS_APP_URL]
+                      [--okta-aws-tile OKTA_AWS_APP_URL]
                       [--okta-profile OKTA_PROFILE] [--aws-region AWS_REGION]
                       [--aws-output AWS_OUTPUT] [--aws-profile AWS_PROFILE]
-                      [--mfa-method MFA_METHOD] [--mfa-response MFA_RESPONSE]
+                      [--mfa MFA_METHOD] [--mfa-response MFA_RESPONSE]
                       [--role-arn ROLE_ARN] [--output-file OUTPUT_FILE]
                       [--loglevel {DEBUG,INFO,WARN,ERROR}]
 
@@ -87,7 +87,7 @@ Additional Usage Reference
                             OKTA_PASSWORD environment variable.
       --config-file CONFIG_FILE, -C CONFIG_FILE
                             Use an alternative configuration file
-      --okta-aws-app-url OKTA_AWS_APP_URL, -ou OKTA_AWS_APP_URL
+      --okta-aws-tile OKTA_AWS_APP_URL, -ou OKTA_AWS_APP_URL
                             Okta App URL to use.
       --okta-profile OKTA_PROFILE, -op OKTA_PROFILE
                             Okta configuration profile to use.
@@ -98,7 +98,7 @@ Additional Usage Reference
       --aws-profile AWS_PROFILE, -ap AWS_PROFILE
                             Override AWS profile to save as in the credentials
                             file.
-      --mfa-method MFA_METHOD, -mm MFA_METHOD
+      --mfa MFA_METHOD, -mm MFA_METHOD
                             Sets the MFA method
       --mfa-response MFA_RESPONSE, -mr MFA_RESPONSE
                             Sets the MFA response to a challenge
@@ -155,6 +155,6 @@ Configuration settings and precedence
 
 The TOKENDITO uses credentials and configuration settings located in multiple places, such as the system or user environment variables, local configuration files, or explicitly declared on the command line as a parameter. Certain locations take precedence over others. The AWS CLI credentials and configuration settings take precedence in the following order:
 
-1) Command line options – Overrides settings in any other location. You can specify --username, --role-arn, --okta-aws-app-url, and --mfa-method as parameters on the command line.
+1) Command line options – Overrides settings in any other location. You can specify --username, --role-arn, --okta-aws-tile, and --mfa as parameters on the command line.
 2) Environment variables – You can store values in your system's environment variables.
 3) CLI credentials file – The credentials and config file are updated when you run the command tokendito --configure. The credentials file is located at ~/.aws/okta_auth on Linux or macOS, or at C:/Users/USERNAME/.aws/okta_auth on Windows. This file can contain the credential details for the default profile and any named profiles.
