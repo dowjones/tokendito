@@ -83,9 +83,9 @@ jobs:
         env:
           TOKENDITO_OKTA_USERNAME: ${{ secrets.TOXTEST_OKTA_USERNAME }}
           TOKENDITO_OKTA_PASSWORD: ${{ secrets.TOXTEST_OKTA_PASSWORD }}
-          TOKENDITO_OKTA_MFA_METHOD: ${{ secrets.TOXTEST_MFA_METHOD }}
+          TOKENDITO_OKTA_MFA: ${{ secrets.TOXTEST_MFA }}
           TOKENDITO_OKTA_MFA_RESPONSE: ${{ secrets.TOXTEST_MFA_RESPONSE }}
-          TOKENDITO_OKTA_APP_URL: ${{ secrets.TOXTEST_OKTA_AWS_APP_URL }}
+          TOKENDITO_OKTA_TILE: ${{ secrets.TOXTEST_OKTA_TILE }}
           TOKENDITO_AWS_ROLE_ARN: ${{ secrets.TOXTEST_ROLE_ARN }}
       - name: Generate Coverage reports
         run: |
