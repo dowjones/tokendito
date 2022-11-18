@@ -7,8 +7,8 @@ def pytest_addoption(parser):
     """Add command-line options for running functional tests with credentials."""
     parser.addoption("--username", default="", help="username to login to Okta")
     parser.addoption("--password", default="", help="password to login to Okta.")
-    parser.addoption("--okta-app-url", default=None, help="Okta App URL to use.")
-    parser.addoption("--okta-mfa-method", default=None, help="Sets the MFA method")
+    parser.addoption("--okta-tile", default=None, help="Okta tile URL to use.")
+    parser.addoption("--okta-mfa", default=None, help="Sets the MFA method")
     parser.addoption(
         "--okta-mfa-response", default=None, help="Sets the MFA response to a challenge"
     )

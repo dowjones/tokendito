@@ -73,8 +73,8 @@ def custom_args(request):
     options = [
         "--username",
         "--password",
-        "--okta-app-url",
-        "--okta-mfa-method",
+        "--okta-tile",
+        "--okta-mfa",
         "--okta-mfa-response",
         "--aws-role-arn",
         "--config-file",
@@ -155,14 +155,14 @@ def test_parameter_collection(monkeypatch, tmpdir):
 
     env = {
         "TOKENDITO_OKTA_ORG": "pytest_env",
-        "okta_app_url": "https://acme.okta.org/_env",
+        "okta_tile": "https://acme.okta.org/_env",
     }
     monkeypatch.setattr(os, "environ", env)
     config_env = user.process_environment()
 
     args = {
         "okta_username": "pytest_arg",
-        "okta_app_url": "https://acme.okta.org/_arg",
+        "okta_tile": "https://acme.okta.org/_arg",
     }
     config_arg = user.process_arguments(Namespace(**args))
     config.update(config_ini)
@@ -171,7 +171,7 @@ def test_parameter_collection(monkeypatch, tmpdir):
     assert config.aws["region"] == "pytest_ini"
     assert config.okta["org"] == "pytest_env"
     assert config.okta["username"] == "pytest_arg"
-    assert config.okta["app_url"] == "https://acme.okta.org/_arg"
+    assert config.okta["tile"] == "https://acme.okta.org/_arg"
 
 
 def test_quiet_failure():
@@ -194,12 +194,12 @@ def test_generate_config(custom_args, config_file):
     pytest_cfg.update(config_arg)
 
     if (
-        pytest_cfg.okta["app_url"] is None
-        or pytest_cfg.okta["mfa_method"] is None
+        pytest_cfg.okta["tile"] is None
+        or pytest_cfg.okta["mfa"] is None
         or not pytest_cfg.okta["username"]
     ):
-        pytest_cfg.okta["app_url"] = "https://pytest/home/amazon_aws/0123456789abcdef0123/456"
-        pytest_cfg.okta["mfa_method"] = "push"
+        pytest_cfg.okta["tile"] = "https://pytest/home/amazon_aws/0123456789abcdef0123/456"
+        pytest_cfg.okta["mfa"] = "push"
         pytest_cfg.okta["username"] = "pytest"
 
     # Rebuild argument list
@@ -207,10 +207,10 @@ def test_generate_config(custom_args, config_file):
         "--configure",
         "--config-file",
         f"{config_file}",
-        "--okta-app-url",
-        f"{pytest_cfg.okta['app_url']}",
-        "--okta-mfa-method",
-        f"{pytest_cfg.okta['mfa_method']}",
+        "--okta-tile",
+        f"{pytest_cfg.okta['tile']}",
+        "--okta-mfa",
+        f"{pytest_cfg.okta['mfa']}",
         "--username",
         f"{pytest_cfg.okta['username']}",
     ]
@@ -238,8 +238,8 @@ def test_generate_credentials(custom_args, config_file):
 
     if (
         config.aws["role_arn"] is None
-        or config.okta["app_url"] is None
-        or config.okta["mfa_method"] is None
+        or config.okta["tile"] is None
+        or config.okta["mfa"] is None
         or not config.okta["username"]
         or not config.okta["password"]
     ):
@@ -268,10 +268,10 @@ def test_generate_credentials(custom_args, config_file):
         f"{config.aws['role_arn']}",
         "--aws-profile",
         f"{config.aws['profile']}",
-        "--okta-app-url",
-        f"{config.okta['app_url']}",
-        "--okta-mfa-method",
-        f"{config.okta['mfa_method']}",
+        "--okta-tile",
+        f"{config.okta['tile']}",
+        "--okta-mfa",
+        f"{config.okta['mfa']}",
         "--okta-mfa-response",
         f"{config.okta['mfa_response']}",
         "--username",

@@ -51,7 +51,7 @@ def authenticate_to_roles(secret_session_token, urls, cookies=None):
     """Authenticate AWS user with saml.
 
     :param secret_session_token: secret session token
-    :param urls: list of tuples or tuple, with apps info
+    :param urls: list of tuples or tuple, with tiles info
     :param cookies: html cookies
     :return: response text
 
@@ -193,16 +193,16 @@ def assert_credentials(role_response={}):
     return identity
 
 
-def select_assumeable_role(apps):
+def select_assumeable_role(tiles):
     """Select the role to perform the AssumeRoleWithSaml.
 
-    :param apps: apps metadata, list of tuples
+    :param tiles: tiles metadata, list of tuples
     :return: tuple with AWS AssumeRoleWithSaml response and role name
     """
-    authenticated_aps = {}
-    for url, saml_response, saml, label in apps:
+    authenticated_tiles = {}
+    for url, saml_response, saml, label in tiles:
         roles_and_providers = user.extract_arns(saml)
-        authenticated_aps[url] = {
+        authenticated_tiles[url] = {
             "roles": list(roles_and_providers.keys()),
             "saml": saml,
             "saml_response_string": saml_response,
@@ -210,13 +210,13 @@ def select_assumeable_role(apps):
             "label": label,
         }
 
-    role_arn, _id = user.select_role_arn(authenticated_aps)
+    role_arn, _id = user.select_role_arn(authenticated_tiles)
     role_name = role_arn.split("/")[-1]
 
     assume_role_response = assume_role(
         role_arn,
-        authenticated_aps[_id]["roles_and_providers"][role_arn],
-        authenticated_aps[_id]["saml"],
+        authenticated_tiles[_id]["roles_and_providers"][role_arn],
+        authenticated_tiles[_id]["saml"],
     )
 
     return (assume_role_response, role_name)

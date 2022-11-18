@@ -42,9 +42,9 @@ class Config(object):
         okta=dict(
             username="",
             password="",
-            mfa_method=None,
+            mfa=None,
             mfa_response=None,
-            app_url=None,
+            tile=None,
             org=None,
         ),
     )

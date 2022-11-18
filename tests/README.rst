@@ -12,7 +12,7 @@ other arguments can be provided so that the tool can run in non-interactive mode
 config file, arguments, and environment variables (mix and match) are supported. The syntax is
 the same as for ``tokendito``.
 
-If all of username, password, mfa method, app url, and role ARN are passed to ``py.test``, then
+If all of username, password, mfa, tile url, and role ARN are passed to ``py.test``, then
 two other tests are kicked off. The first will execute ``tokendito`` and try to obtain STS
 tokens the same way that a normal user would. The second will run ``sts get-caller-identity``
 and validate the credentials.
@@ -33,8 +33,8 @@ Example 2
   py.test -v -rA -k 'functional' -s tests \
     --username=jane.doe@mycompany.com \
     --password=mysecretpass \
-    --okta-mfa-method=push \
-    --okta-app-url='https://acme.oktapreview.com/home/amazon_aws/b07384d113edec49eaa6/123' \
+    --okta-mfa=push \
+    --okta-tile='https://acme.oktapreview.com/home/amazon_aws/b07384d113edec49eaa6/123' \
     --aws-role-arn=arn:aws:iam::123456789000:role/dowjones-hammer-engineer
 
 This triggers the tests ``test_generate_credentials`` and ``test_aws_credentials`` that are

@@ -163,16 +163,16 @@ def mfa_provider_type(
 
 
 def user_mfa_index(preset_mfa, available_mfas, mfa_options):
-    """Get mfa method index in request.
+    """Get mfa index in request.
 
-    :param preset_mfa: preset mfa method from settings
-    :param available_mfas: available mfa method ids
-    :param mfa_options: available mfa methods
+    :param preset_mfa: preset mfa from settings
+    :param available_mfas: available mfa ids
+    :param mfa_options: available mfas
     """
     indices = []
     # Gets the index number from each preset MFA in the list of avaliable ones.
     if preset_mfa:
-        logger.debug(f"Get mfa method from {available_mfas}.")
+        logger.debug(f"Get mfa from {available_mfas}.")
         indices = [i for i, elem in enumerate(available_mfas) if preset_mfa in elem]
 
     mfa_index = None
@@ -205,7 +205,7 @@ def user_mfa_challenge(headers, primary_auth):
         logger.error(f"There was a wrong response structure: \n{error}")
         sys.exit(1)
 
-    preset_mfa = config.okta["mfa_method"]
+    preset_mfa = config.okta["mfa"]
 
     # This creates a list where each elements looks like provider_factor_id.
     # For example, OKTA_push_9yi4bKJNH2WEWQ0x8, GOOGLE_token:software:totp_9yi4bKJNH2WEWQ
@@ -264,7 +264,7 @@ def user_mfa_options(selected_mfa_option, headers, mfa_challenge_url, payload, p
         config.okta["mfa_response"] = user.get_input("Enter your verification code:")
         user.add_sensitive_value_to_be_masked(config.okta["mfa_response"])
 
-    # time to verify the mfa method
+    # time to verify the mfa
     payload = {"stateToken": primary_auth["stateToken"], "passCode": config.okta["mfa_response"]}
     mfa_verify = api_wrapper(mfa_challenge_url, payload, headers)
     if "sessionToken" in mfa_verify:
