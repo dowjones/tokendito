@@ -90,7 +90,7 @@ def parse_cli_args(args):
         "--config-file",
         dest="user_config_file",
         default=config.user["config_file"],
-        help="Use an alternative configuration file",
+        help=f"Use an alternative configuration file. Defaults to {config.user['config_file']}",
     )
     parser.add_argument(
         "--loglevel",
