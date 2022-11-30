@@ -6,7 +6,7 @@ Generate temporary AWS credentials via Okta.
 .. image:: https://github.com/dowjones/tokendito/workflows/Lint%20and%20Test/badge.svg
     :target: https://github.com/dowjones/tokendito/actions
 
-.. image:: https://img.shields.io/badge/python-3.6%2C%203.7%2C%203.8%2C%203.9%2C%203.10-blueviolet
+.. image:: https://img.shields.io/badge/python-3.7%2C%203.8%2C%203.9%2C%203.10%2C%203.11-blueviolet
     :target: https://pypi.org/project/tokendito/
 
 .. image:: https://github.com/dowjones/tokendito/workflows/Woke/badge.svg
@@ -36,7 +36,7 @@ Use tokendito to generate temporary AWS credentials via Okta for programmatic au
 Requirements
 ------------
 
-* Python 3.6+
+* Python 3.7+
 * Your AWS account is federated in Okta
 
 tokendito is compatible with python 3, and can be installed with either pip or pip3.

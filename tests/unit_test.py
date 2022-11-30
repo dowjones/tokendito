@@ -935,7 +935,7 @@ def test_prepare_duo_info():
                     "verification": {
                         "_links": {
                             "complete": {"href": "http://test.okta.href"},
-                            "script": {"href": "python-v3.6"},
+                            "script": {"href": "python-v3.7"},
                         },
                         "signature": "fdsafdsa:fdsfdfds:fdsfdsfds",
                         "host": "test_host",
@@ -957,7 +957,7 @@ def test_prepare_duo_info():
         "parent": f"{config.okta['org']}/signin/verify/duo/web",
         "host": "test_host",
         "sid": "",
-        "version": "3.6",
+        "version": "3.7",
     }
     assert prepare_duo_info(selected_okta_factor) == expected_duo_info
 
@@ -977,7 +977,7 @@ def test_get_duo_sid(mocker):
         "parent": f"{config.okta['org']}/signin/verify/duo/web",
         "host": "test_host",
         "sid": "",
-        "version": "3.6",
+        "version": "3.7",
     }
 
     test_url = "http://test.token.dito?sid=testval"
