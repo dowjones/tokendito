@@ -30,7 +30,7 @@ class Config(object):
             ),
             config_profile="default",
             encoding=sys.stdin.encoding,
-            loglevel="INFO",
+            loglevel="ERROR",
             log_output_file="",
             mask_items=[],
             quiet=False,
