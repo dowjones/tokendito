@@ -11,7 +11,7 @@ from platformdirs import user_config_dir
 __version__ = "2.0.0"
 __title__ = "tokendito"
 __description__ = "Get AWS STS tokens from Okta SSO"
-__long_description_content_type__ = "text/x-rst"
+__long_description_content_type__ = "text/markdown"
 __url__ = "https://github.com/dowjones/tokendito"
 __author__ = "tokendito"
 __author_email__ = "tokendito@dowjones.com"
