@@ -117,7 +117,8 @@ options:
   --okta-mfa OKTA_MFA   Sets the MFA method
   --okta-mfa-response OKTA_MFA_RESPONSE
                         Sets the MFA response to a challenge
-  --quiet               Suppress output```
+  --quiet               Suppress output
+  ```
 
 ## Supported MFA Options
 
