@@ -1,1 +1,1 @@
-include MANIFEST.in README.rst requirements.txt requirements-dev.txt
+include MANIFEST.in README.md requirements.txt requirements-dev.txt

@@ -4,12 +4,10 @@ on:
   push:
     branches:
       - main
-      - master
       - development/2.0.0
   pull_request:
     branches:
       - main
-      - master
       - feature/2.0.0
     paths-ignore:
       - '**.md'
