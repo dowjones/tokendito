@@ -2,12 +2,10 @@ name: Lint and Test
 on:
   push:
     branches:
-      - master
       - main
       - development/2.0.0
   pull_request:
     branches:
-      - master
       - main
       - development/2.0.0
 

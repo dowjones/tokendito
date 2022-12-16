@@ -3,11 +3,9 @@ on:
   push:
     branches:
       - main
-      - master
   pull_request:
     branches:
       - main
-      - master
       - development/2.0.0
 
 jobs:
