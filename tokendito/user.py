@@ -306,23 +306,27 @@ def factor_type_info(factor_type, mfa_option):
     """
     logger.debug("Choose factor info depending on factor type.")
     factor_info = "Not Presented"
+    default_value = "Unknown"
 
     if factor_type in ["token", "token:software:totp", "token:hardware"]:
-        factor_info = mfa_option.get("profile").get("credentialId")
+        factor_info = mfa_option.get("profile").get("credentialId", default_value)
     elif factor_type == "push":
-        factor_info = mfa_option.get("profile").get("name")
+        factor_info = mfa_option.get("profile").get("name", default_value)
     elif factor_type == "sms" or factor_type == "call":
-        factor_info = mfa_option.get("profile").get("phoneNumber")
+        factor_info = mfa_option.get("profile").get("phoneNumber", default_value)
     elif factor_type == "webauthn":
-        factor_info = mfa_option.get("profile").get("authenticatorName")
+        factor_info = mfa_option.get("profile").get("authenticatorName", default_value)
     elif factor_type in ["web", "u2f", "token:hotp"]:
-        factor_info = mfa_option.get("vendorName")
+        factor_info = mfa_option.get("vendorName", default_value)
     elif factor_type == "question":
-        factor_info = mfa_option.get("profile").get("question")
+        factor_info = mfa_option.get("profile").get("question", default_value)
     elif factor_type == "email":
-        factor_info = mfa_option.get("profile").get("email")
+        factor_info = mfa_option.get("profile").get("email", default_value)
 
-    return factor_info
+    # We return the string representation of the value retrieved. There are cases where
+    # .get() will retrieve `None` as a value (this is somehow valid). When that happens,
+    # the caller function cannot sort the list of values.
+    return str(factor_info)
 
 
 def mfa_option_info(mfa_option):
@@ -337,7 +341,6 @@ def mfa_option_info(mfa_option):
     if "factorType" in mfa_option:
         factor_type = mfa_option["factorType"]
         factor_info = factor_type_info(factor_type, mfa_option)
-
     return factor_info
 
 
