@@ -714,6 +714,7 @@ def test_api_error_code_parser():
         ("question", "xyz"),
         ("email", "Firstname.Lastname@acme.org"),
         ("bad_data", "Not Presented"),
+        (None, "Not Presented"),
     ],
 )
 def test_mfa_option_info(factor_type, output):
