@@ -3,13 +3,11 @@ on:
   push:
     branches:
       - main
-      - development/2.0.0
     tags:
       - '[0-9]+.[0-9]+.[0-9]+'
   pull_request:
     branches:
       - main
-      - development/2.0.0
 
 jobs:
   testpypipublish:
@@ -17,9 +15,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     - name: Set up Python
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v4
       with:
         python-version: '3.x'
     - name: Install dependencies
@@ -44,9 +42,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     - name: Set up Python
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v4
       with:
         python-version: '3.x'
     - name: Install dependencies

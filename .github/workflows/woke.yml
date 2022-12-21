@@ -6,7 +6,6 @@ on:
   pull_request:
     branches:
       - main
-      - development/2.0.0
 
 jobs:
   woke:
@@ -14,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: woke
         uses: get-woke/woke-action@v0

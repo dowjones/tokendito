@@ -3,11 +3,9 @@ on:
   push:
     branches:
       - main
-      - development/2.0.0
   pull_request:
     branches:
       - main
-      - development/2.0.0
 
 jobs:
   lint:
@@ -49,10 +47,10 @@ jobs:
     - name: Test with tox
       run: tox
     - name: Convert coverage to LCOV format
-      if: matrix.python-version == '3.10'
+      if: matrix.python-version == '3.11'
       run: tox -e coverage
     - name: Upload coverage in Parallel
-      if: matrix.python-version == '3.10'
+      if: matrix.python-version == '3.11'
       uses: coverallsapp/github-action@master
       with:
         github-token: ${{ secrets.github_token }}
@@ -66,9 +64,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: '3.11'
       - name: Install dependencies
