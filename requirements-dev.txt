@@ -1,7 +1,6 @@
 -r ./requirements.txt
 black>=22.1.0
-coverage<7.0.0 # See https://github.com/chaychoong/coveragepy-lcov/issues/5
-coveragepy-lcov; python_version >= '3.8'
+coverage>=7.0.0,<8.0.0
 docutils
 flake8>=5.0.0
 flake8-black
