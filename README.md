@@ -23,7 +23,7 @@ your AWS accounts, returning
 tokens into your local `~/.aws/credentials` file.
 
 ## What's new
-With the release of tokendito 2.0, many changes and fixes. It is a breaking release: your configuration needs to be updated, the command-line arguments have changed, and support for python < 3.7 has been removed.
+With the release of tokendito 2.0, many changes and fixes were introduced. It is a breaking release: your configuration needs to be updated, the command line arguments have changed, and support for python < 3.7 has been removed.
 The following changes are part of this release:
 - Set the config file to be platform dependent, and follow the XDG standard.
 - Extend configuration capabilities.

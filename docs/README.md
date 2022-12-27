@@ -1,24 +1,26 @@
 ## Table of Contents
 
-* [Usage Examples](#usage-examples)
+* [Command line Usage](#command-line-usage)
     * [Default usage](#default-usage)
     * [Multi-tile-Guide](#multi-tile-guide) 
     * [Single-command usage](#single-command-usage)
-* [Additional Usage Reference](#additional-usage=reference)
-    * [Supported MFA Options](#supported-mfa-options)
-    * [To upgrade](#to-upgrade)
-    * [Installing from github](#installing-from-github) 
+    * [Additional command line reference](#additional-command-line-reference)
+* [Environment variables and user configuration](#environment-variables-and-user-configuration)
+    * [Precedence](#precedence)
+    * [Environment variables and user configuration table](#environment-variables-and-user-configuration-table)
+* [AWS Roles Discovery](#aws-roles-discovery)
+* [Supported MFAs](#supported-mfas)
+* [To upgrade](#to-upgrade)
+* [Installing from github](#installing-from-github) 
 * [Troubleshooting](#troubleshooting)
 * [Design and Limitations](#design-and-limitations)
-* [Configuration settings and precedence](#configuration-settings-and-precedence)
 
-
-
-# Usage Examples  
+# Command line Usage  
 
 ## Default usage
 
 Configure your profile by running tokendito with the `--configure` flag, or by populating your `tokendito.ini` file as [here](tokendito.ini.md).
+Using --configure will only set the okta_username, okta_todo
 
 Then execute: `tokendito` in your command line.
 
@@ -31,8 +33,6 @@ clicking on the tile in Okta and selecting \"Copy Link URL.\" This file
 supports multiple profiles, in case there is a need to connect with
 different Okta Orgs and tiles. tokendito can access the profiles by
 name, by passing in the `--profile` parameter.
-
-ex: `tokendito --profile my_prod_okta_tile`
 
 Without specifying a specific profile, tokendito will look for a default
 profile within that file.
@@ -68,12 +68,7 @@ And execute:
 tokendito --profile engineer
 ```
 
-Regarding the Okta password, we are fans of automation but do not
-recommend passing in the password to tokendito via plaintext or storing
-it in your environment locally.
-
-
-# Additional Usage Reference
+## Additional command line reference 
 
 ``` txt
 usage: tokendito [-h] [--version] [--configure] [--username OKTA_USERNAME] [--password OKTA_PASSWORD] [--profile USER_CONFIG_PROFILE] [--config-file USER_CONFIG_FILE]
@@ -94,7 +89,7 @@ options:
   --profile USER_CONFIG_PROFILE
                         Tokendito configuration profile to use.
   --config-file USER_CONFIG_FILE
-                        Use an alternative configuration file. Defaults to ~/.local/share/tokendito/tokendito.ini 
+                        Use an alternative configuration file. Defaults to tokendito.ini with location depending on the OS.
   --loglevel {DEBUG,INFO,WARN,ERROR}, -l {DEBUG,INFO,WARN,ERROR}
                         [DEBUG|INFO|WARN|ERROR], default loglevel is WARNING.
   --log-output-file USER_LOG_OUTPUT_FILE
@@ -119,19 +114,58 @@ options:
                         Sets the MFA response to a challenge
   --quiet               Suppress output```
 ```
+Regarding the Okta password, we are fans of automation but do not
+recommend passing in the password to tokendito via plaintext or storing
+it in your environment locally.
 
-## Supported MFA Options
 
--   Native Okta factors (push, call, sms, TOTP) except Biometrics (FIDO
-    webauthn)
+# Environment variables and user configuration
+tokendito supports the use of environment variables and user configuration equivalent to specify the default values for most options.
+
+## Precedence
+Credentials and configuration settings take precedence in the following order:  
+1) Command line options -- Overrides settings in any other location. You can specify \--username, \--role-arn, \--okta-aws-tile, and \--mfa as parameters on the command line.  
+2) Environment variables -- You can store values in your system\'s environment variables. It overrides the configuration file.  
+3) User configuration file -- The user configuration file is updated when you run the command tokendito \--configure. tokendito uses [platformdirs](https://github.com/platformdirs/platformdirs) to store user configuration in the [tokendito.ini](tokendito.ini.md) file. This file can contain the credential details for the default profile and any named profiles.   
+
+## Environment variables and user configuration table
+
+The following table lists the environment variable and user configuration entry equivalent for the given command line option.
+| Command line option | Environment variable | User configuration |
+| ------------------- | -------------------- | ------------------ |
+| --username | TOKENDITO_OKTA_USERNAME        | okta_username | 
+| --password | TOKENDITO_OKTA_PASSWORD |   | 
+| --profile  | TOKENDITO_USER_CONFIG_PROFILE | profile |
+| --config-file | TOKENDITO_USER_CONFIG_FILE | | 
+| --loglevel | TOKENDITO_USER_LOGLEVEL | loglevel | 
+| --log-output-file | TOKENDITO_USER_LOG_OUTPUT_FILE        | log_output_file | 
+| --aws-config-file | TOKENDITO_AWS_CONFIG_FILE        | aws_config_file | 
+| --aws-output | TOKENDITO_AWS_OUTPUT        | aws_output | 
+| --aws-profile | TOKENDITO_AWS_PROFILE        | aws_profile | 
+| --aws-region | TOKENDITO_AWS_REGION       | aws_region | 
+| --aws-role-arn | TOKENDITO_AWS_ROLE_ARN       | aws_role_arn | 
+| --aws-shared-credentials-file | TOKENDITO_AWS_SHARED_CREDENTIALS_FILE        | aws_shared_credentials_file | 
+| --okta-org | TOKENDITO_OKTA_ORG        | okta_org | 
+| --okta-tile | TOKENDITO_OKTA_TILE        | okta_tile | 
+| --okta-mfa | TOKENDITO_OKTA_MFA        | okta_mfa | 
+| --okta-mfa-response | TOKENDITO_OKTA_MFA-RESPONSE        | okta_mfa_response | 
+| --quiet | TOKENDITO_USER_QUIET        | quiet | 
+
+# AWS Roles Discovery
+tokendito will discover all your available AWS Roles configured in Okta, returning a list for you to select from, simply by calling:
+```tokendito --okta-org ${YOUR ORG OKTA URL}```
+
+# Supported MFAs
+
+-   Native Okta factors (push, call, sms, TOTP) except Biometrics (FIDO webauthn)
 -   Google Authenticator TOTP
 -   Duo (push, call, sms, TOTP)
 
-## To upgrade
+# To upgrade
 
 `pip install --upgrade tokendito`
 
-## Installing from github
+# Installing from github
 
 `pip install git+ssh://git@github.com/dowjones/tokendito.git@<version>`
 
@@ -152,19 +186,5 @@ validating your environment\'s AWS configuration profile(s) located at:
 # Design and Limitations
 
 -   This tool does not cache and reuse Okta session IDs
-
-
-# Configuration settings and precedence
-
-Tokendito uses credentials and configuration settings located in
-multiple places, such as the system or user environment variables, local
-configuration files, or explicitly declared on the command line as a
-parameter. Certain locations take precedence over others. The AWS CLI
-credentials and configuration settings take precedence in the following
-order:
-
-1)  Command line options -- Overrides settings in any other location. You can specify \--username, \--role-arn, \--okta-aws-tile, and \--mfa as parameters on the command line.
-1)  Environment variables -- You can store values in your system\'s environment variables. It overrides the configuration file.
-3)  User configuration file -- The user configuration file is updated when you run the command tokendito \--configure. tokendito uses [platformdirs](https://github.com/platformdirs/platformdirs) to store user configuration in the [tokendito.ini](tokendito.ini.md)file. This file can contain the credential details for the default profile and any named profiles.
 
 [Pull requests welcome](CONTRIBUTING.md)!
