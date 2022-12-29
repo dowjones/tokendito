@@ -148,7 +148,7 @@ The following table lists the environment variable and user configuration entry 
 | --okta-org | TOKENDITO_OKTA_ORG        | okta_org | 
 | --okta-tile | TOKENDITO_OKTA_TILE        | okta_tile | 
 | --okta-mfa | TOKENDITO_OKTA_MFA        | okta_mfa | 
-| --okta-mfa-response | TOKENDITO_OKTA_MFA-RESPONSE        | okta_mfa_response | 
+| --okta-mfa-response | TOKENDITO_OKTA_MFA_RESPONSE        | okta_mfa_response | 
 | --quiet | TOKENDITO_USER_QUIET        | quiet | 
 
 # AWS Roles Discovery
