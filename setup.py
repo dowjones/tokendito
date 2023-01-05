@@ -28,7 +28,7 @@ with open(os.path.join(here, "tokendito", "__init__.py")) as f:
 
 if "DEVBUILD" in os.environ:
     now = datetime.datetime.now()
-    about["__version__"] = about["__version__"] + ".dev" + now.strftime("%Y%m%d%H%M%S")
+    about["__version__"] = about["__version__"] + "-dev." + now.strftime("%Y%m%d%H%M%S")
 
 setup(
     name="tokendito",
