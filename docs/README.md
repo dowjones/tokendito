@@ -48,7 +48,7 @@ You can just pass in your information at runtime:
 ``` sh
 tokendito --username prod_service_user@company.com \
 --role-arn arn:aws:iam::123456789000:role/dowjones-hammer-engineer \
---mfa push \
+--okta-mfa push \
 --okta-aws-tile https://acme.oktapreview.com/home/amazon_aws/b07384d113edec49eaa6/123 \
 ```
 
@@ -58,7 +58,7 @@ Or you can put your parameters into a single [profile](tokendito.ini.md) and ref
 [engineer]
 okta_aws_tile = https://acme.oktapreview.com/home/amazon_aws/b07384d113edec49eaa6/123
 okta_username = jane.doe@acme.com
-mfa = push
+okta_mfa = push
 role_arn = arn:aws:iam::123456789000:role/engineer
 ```
 
@@ -124,7 +124,7 @@ tokendito supports the use of environment variables and user configuration equiv
 
 ## Precedence
 Credentials and configuration settings take precedence in the following order:  
-1) Command line options -- Overrides settings in any other location. You can specify \--username, \--role-arn, \--okta-aws-tile, and \--mfa as parameters on the command line.  
+1) Command line options -- Overrides settings in any other location. You can specify \--username, \--role-arn, \--okta-aws-tile, and \--okta-mfa as parameters on the command line.  
 2) Environment variables -- You can store values in your system\'s environment variables. It overrides the configuration file.  
 3) User configuration file -- The user configuration file is updated when you run the command tokendito \--configure. tokendito uses [platformdirs](https://github.com/platformdirs/platformdirs) to store user configuration in the [tokendito.ini](tokendito.ini.md) file. This file can contain the credential details for the default profile and any named profiles.   
 
