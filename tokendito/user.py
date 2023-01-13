@@ -60,7 +60,7 @@ def parse_cli_args(args):
     :return: args parse object
     """
     parser = argparse.ArgumentParser(
-        prog="tokendito", description="Gets a STS token to use with the AWS CLI and SDK."
+        prog="tokendito", description="Gets an STS token to use with the AWS CLI and SDK."
     )
     parser.add_argument("--version", action="store_true", help="Displays version and exit")
     parser.add_argument(
@@ -71,14 +71,14 @@ def parse_cli_args(args):
     parser.add_argument(
         "--username",
         dest="okta_username",
-        help="username to login to Okta. You can "
+        help="username to log in to Okta. You can "
         "also use the OKTA_USERNAME environment variable.",
     )
     parser.add_argument(
         "--password",
         dest="okta_password",
-        help="password to login to Okta. You "
-        "can also user the OKTA_PASSWORD environment variable.",
+        help="password to log in to Okta. You "
+        "can also use the OKTA_PASSWORD environment variable.",
     )
     parser.add_argument(
         "--profile",
@@ -752,7 +752,7 @@ def get_interactive_config(tile=None, org=None, username=""):
 
     # We need either one of these two:
     while not validate_okta_org(org) and not validate_okta_tile(tile):
-        print("\n\nPlease enter either your Organization URL, a tileURL, or both.")
+        print("\n\nPlease enter either your Organization URL, a tile URL, or both.")
         org = get_org()
         tile = get_tile()
 
