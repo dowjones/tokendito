@@ -4,12 +4,12 @@
 
 ## Generate temporary AWS credentials via Okta.
 
-[![image](https://github.com/dowjones/tokendito/workflows/Lint%20and%20Test/badge.svg)](https://github.com/dowjones/tokendito/actions)
-[![image](https://img.shields.io/badge/python-3.7%2C%203.8%2C%203.9%2C%203.10%2C%203.11-blueviolet)](https://pypi.org/project/tokendito/)
-[![image](https://github.com/dowjones/tokendito/workflows/Woke/badge.svg)](https://github.com/dowjones/tokendito/actions)
+[![image](https://img.shields.io/github/actions/workflow/status/dowjones/tokendito/test.yml)](https://github.com/dowjones/tokendito/actions)
+[![image](https://img.shields.io/pypi/pyversions/tokendito?color=blueviolet)](https://pypi.org/project/tokendito/)
+[![image](https://img.shields.io/github/actions/workflow/status/dowjones/tokendito/woke.yml?label=woke)](https://github.com/dowjones/tokendito/actions)
 [![image](https://img.shields.io/badge/license-Apache%202.0-ff69b4)](https://github.com/dowjones/tokendito/blob/main/LICENSE.txt)
 [![image](https://img.shields.io/badge/OS-Mac%2C%20Windows%2C%20Linux-9cf)](https://github.com/dowjones/tokendito/)
-[![image](https://coveralls.io/repos/github/dowjones/tokendito/badge.svg)](https://coveralls.io/github/dowjones/tokendito)
+[![image](https://img.shields.io/coverallsCoverage/github/dowjones/tokendito)](https://coveralls.io/github/dowjones/tokendito) [![image](https://img.shields.io/pypi/dm/tokendito)](https://pypistats.org/packages/tokendito)
 
 #
 
@@ -28,11 +28,11 @@ The following changes are part of this release:
 - Set the config file to be platform dependent, and follow the XDG standard.
 - Extend configuration capabilities.
 - Modernize output.
-- Change mfa method from strict match to partial match. 
+- Change the MFA method from strict match to partial match.
 - Mask secrets from output logs.
 - Automatically discover AWS URLs.
 - Fix authentication with DUO.
-- Add support for setting loglevel via ini file and env vars.
+- Add support for setting the logging level via both the INI file and ENV vars.
 - Add support for Python 3.9 and 3.10.
 - And many fixes.
 
@@ -43,7 +43,7 @@ Consult [additional notes](docs/README.md) for how to use tokendito.
 -   Python 3.7+
 -   AWS account(s) federated with Okta
 
-Tokendito is compatible with python 3, and can be installed with either
+Tokendito is compatible with Python 3 and can be installed with either
 pip or pip3.
 
 ## Getting started
