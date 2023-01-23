@@ -33,10 +33,10 @@ The following changes are part of this release:
 - Automatically discover AWS URLs.
 - Fix authentication with DUO.
 - Add support for setting the logging level via both the INI file and ENV vars.
-- Add support for Python 3.9 and 3.10.
+- Add support for Python 3.9, 3.10, and 3.11.
 - And many fixes.
 
-Consult [additional notes](docs/README.md) for how to use tokendito. 
+Consult [additional notes](https://github.com/dowjones/tokendito/blob/main/docs/README.md) for how to use tokendito. 
 
 ## Requirements
 
@@ -53,9 +53,10 @@ pip or pip3.
 3.  Run `tokendito`.
 
 **NOTE**: Advanced users may shorten the `tokendito` interaction to a [single
-command](docs/README.md#single-command-usage).
+command](https://github.com/dowjones/tokendito/blob/main/docs/README.md#single-command-usage).
 
 Have multiple Okta tiles to switch between? View our [multi-tile
-guide](docs/README.md#multi-tile-guide).
+guide](https://github.com/dowjones/tokendito/blob/main/docs/README.md#multi-tile-guide).
 
-### Tips, tricks, troubleshooting, examples, and more docs are [here](docs/README.md)! Also, [contributions are welcome](docs/CONTRIBUTING.md)!
+### Tips, tricks, troubleshooting, examples, and more docs are [here]()https://github.com/dowjones/tokendito/blob/main/docs/README.md!
+[Contributions are welcome](https://github.com/dowjones/tokendito/blob/main/docs/CONTRIBUTING.md)!

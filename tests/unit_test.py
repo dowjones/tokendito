@@ -839,26 +839,64 @@ def test_user_mfa_challenge_with_no_mfas(sample_headers, sample_json_response):
 
 
 @pytest.mark.parametrize(
-    "wrapper_return,expected",
+    "return_value,side_effect,expected",
     [
-        ({"factorResult": "REJECTED", "status": "FAILED"}, 2),
-        ({"factorResult": "TIMEOUT", "status": "FAILED"}, 2),
-        ({"status": "FAILED"}, 1),
-        ({}, 1),
-        ({"factorResult": "SUCCESS", "status": "SUCCESS"}, 0),
+        ({"status": "SUCCESS", "sessionToken": "pytest"}, None, 0),
+        ({"status": "SUCCESS", "sessionToken": "pytest", "factorResult": "SUCCESS"}, None, 0),
+        ({"status": "MFA_CHALLENGE", "factorResult": "REJECTED"}, None, 2),
+        ({"status": "MFA_CHALLENGE", "factorResult": "TIMEOUT"}, None, 2),
+        ({"status": "UNKNOWN", "factorResult": "UNKNOWN"}, None, 2),
+        (
+            {
+                "status": "MFA_CHALLENGE",
+                "factorResult": "WAITING",
+                "_links": {"next": {"href": None}},
+            },
+            [
+                {
+                    "status": "MFA_CHALLENGE",
+                    "factorResult": "WAITING",
+                    "_links": {"next": {"href": None}},
+                },
+                {"status": "SUCCESS", "sessionToken": "pytest", "factorResult": "SUCCESS"},
+            ],
+            0,
+        ),
+        (
+            {
+                "status": "MFA_CHALLENGE",
+                "factorResult": "WAITING",
+                "_embedded": {"factor": {"_embedded": {"challenge": {"correctAnswer": 100}}}},
+                "_links": {"next": {"href": None}},
+            },
+            [
+                {
+                    "status": "MFA_CHALLENGE",
+                    "factorResult": "WAITING",
+                    "_embedded": {"factor": {"_embedded": {"challenge": {"correctAnswer": 100}}}},
+                    "_links": {"next": {"href": None}},
+                },
+                {"status": "SUCCESS", "sessionToken": "pytest", "factorResult": "SUCCESS"},
+            ],
+            0,
+        ),
     ],
 )
-def test_push_approval(mocker, sample_headers, wrapper_return, expected):
+def test_push_approval(mocker, sample_headers, return_value, side_effect, expected):
     """Test push approval."""
     from tokendito import okta
 
     challenge_url = "https://pytest/api/v1/authn/factors/factorid/verify"
 
-    mocker.patch("tokendito.okta.api_wrapper", return_value=wrapper_return)
+    mocker.patch("tokendito.okta.api_wrapper", return_value=return_value, side_effect=side_effect)
+    mocker.patch("time.sleep", return_value=0)
 
-    if "status" in wrapper_return and wrapper_return["status"] == "SUCCESS":
+    if "status" in return_value and return_value["status"] == "SUCCESS":
         ret = okta.push_approval(sample_headers, challenge_url, None)
-        assert ret["status"] == "SUCCESS" and ret["factorResult"] == "SUCCESS"
+        assert ret["status"] == "SUCCESS"
+    elif "factorResult" in return_value and return_value["factorResult"] == "WAITING":
+        ret = okta.push_approval(sample_headers, challenge_url, None)
+        assert ret["status"] == "SUCCESS"
     else:
         with pytest.raises(SystemExit) as err:
             okta.push_approval(sample_headers, challenge_url, None)
