@@ -283,36 +283,56 @@ def push_approval(headers, mfa_challenge_url, payload):
     :return: Session Token if succeeded or terminates if user wait goes 5 min
 
     """
-    logger.debug(
-        f"Handle push approval from the user headers:{headers} challenge_url:{mfa_challenge_url}"
-    )
+    logger.debug(f"Push approval with headers:{headers} challenge_url:{mfa_challenge_url}")
 
     user.print("Waiting for an approval from the device...")
-    mfa_status = "WAITING"
-    mfa_verify = {}
-    while mfa_status == "WAITING":
-        mfa_verify = api_wrapper(mfa_challenge_url, payload, headers)
+    status = "MFA_CHALLENGE"
+    result = "WAITING"
+    response = {}
+    challenge_displayed = False
 
-        logger.debug(f"MFA Response:\n{json.dumps(mfa_verify)}")
+    while status == "MFA_CHALLENGE" and result == "WAITING":
+        response = api_wrapper(mfa_challenge_url, payload, headers)
+        if "sessionToken" in response:
+            user.add_sensitive_value_to_be_masked(response["sessionToken"])
 
-        if "factorResult" in mfa_verify:
-            mfa_status = mfa_verify["factorResult"]
-        elif "status" in mfa_verify and mfa_verify["status"] == "SUCCESS":
-            break
-        else:
-            logger.error("There was an error getting your MFA status.")
-            logger.debug(f"{mfa_verify}")
-            if "status" in mfa_verify:
-                logger.error(f"Exiting due to error: {mfa_verify['status']}")
-            sys.exit(1)
+        logger.debug(f"MFA Response:\n{json.dumps(response)}")
+        # Retrieve these values from the object, and set a sensible default if they do not
+        # exist.
+        status = response.get("status", "UNKNOWN")
+        result = response.get("factorResult", "UNKNOWN")
 
-        if mfa_status == "REJECTED":
-            logger.error("The Okta Verify push has been denied. Please retry later.")
-            sys.exit(2)
-        elif mfa_status == "TIMEOUT":
-            logger.error("Device approval window has expired.")
-            sys.exit(2)
-
+        # The docs at https://developer.okta.com/docs/reference/api/authn/#verify-push-factor
+        # state that the call will return a factorResult in [ SUCCESS, REJECTED, TIMEOUT,
+        # WAITING]. However, on success, SUCCESS is not set and we have to rely on the
+        # response["status"] instead
+        answer = (
+            response.get("_embedded", {})
+            .get("factor", {})
+            .get("_embedded", {})
+            .get("challenge", {})
+            .get("correctAnswer", None)
+        )
+        if answer and not challenge_displayed:
+            # If a Number Challenge response exists, retrieve it from this deeply nested path,
+            # otherwise set to None.
+            user.print(f"Number Challenge response is {answer}")
+            challenge_displayed = True
         time.sleep(1)
 
-    return mfa_verify
+    if status == "SUCCESS" and "sessionToken" in response:
+        # noop, we will return the variable later
+        pass
+    # Everything else should have a status of "MFA_CHALLENGE", and the result provides a
+    # hint on why the challenge failed.
+    elif result == "REJECTED":
+        logger.error("The Okta Verify push has been denied.")
+        sys.exit(2)
+    elif result == "TIMEOUT":
+        logger.error("Device approval window has expired.")
+        sys.exit(2)
+    else:
+        logger.error(f"Push response type {result} for {status} not implemented.")
+        sys.exit(2)
+
+    return response
