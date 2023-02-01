@@ -70,3 +70,32 @@ Using Docker eliminates the need to install tokendito and its requirements.
 ``` bash
 docker image build --pull --tag "tokendito:latest" .
 ```
+
+### Running the container image
+
+Run tokendito with the `docker run` command
+
+``` bash
+docker run tokendito --version
+```
+
+You must map a volume in the Docker command to allow tokendito to write AWS credentials to your local system for use.  This is done with the `-v` flag.  See [Docker documentation](https://docs.docker.com/engine/reference/commandline/run/#-mount-volume--v---read-only) for help setting the syntax.  The destination in the container should be `/home/appuser/.aws`.
+
+Be sure to set the `-ti` flags to enable an interactive terminal session.
+
+``` pwsh
+docker run -ti -v ${home}\.aws:/home/appuser/.aws tokendito
+```
+
+Tokendito command line arguments are supported as well.
+
+``` pwsh
+docker run -ti -v ${home}\.aws:/home/appuser/.aws tokendito `
+  --okta-tile https://acme.okta.com/home/amazon_aws/000000000000000000x0/123 `
+  --username username@example.com `
+  --okta-mfa push `
+  --aws-output json `
+  --aws-region us-east-1 `
+  --aws-profile my-profile-name `
+  --aws-role-arn arn:aws:iam::000000000000:role/role-name
+```
