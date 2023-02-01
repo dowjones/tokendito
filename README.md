@@ -36,7 +36,7 @@ The following changes are part of this release:
 - Add support for Python 3.9, 3.10, and 3.11.
 - And many fixes.
 
-Consult [additional notes](https://github.com/dowjones/tokendito/blob/main/docs/README.md) for how to use tokendito. 
+Consult [additional notes](https://github.com/dowjones/tokendito/blob/main/docs/README.md) for how to use tokendito.
 
 ## Requirements
 
@@ -60,3 +60,13 @@ guide](https://github.com/dowjones/tokendito/blob/main/docs/README.md#multi-tile
 
 ### Tips, tricks, troubleshooting, examples, and more docs are [here]()https://github.com/dowjones/tokendito/blob/main/docs/README.md!
 [Contributions are welcome](https://github.com/dowjones/tokendito/blob/main/docs/CONTRIBUTING.md)!
+
+## Docker
+
+Using Docker eliminates the need to install tokendito and its requirements.
+
+### Building the container image
+
+``` bash
+docker image build --pull --tag "tokendito:latest" .
+```
