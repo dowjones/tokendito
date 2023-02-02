@@ -7,17 +7,19 @@ This module handles the all Okta operations.
 2. Update Okta Config File
 
 """
+import codecs
 import json
 import logging
+import re
 import sys
 import time
 
-
+import bs4
+from bs4 import BeautifulSoup
 import requests
 from tokendito import config
 from tokendito import duo
 from tokendito import user
-
 
 logger = logging.getLogger(__name__)
 
@@ -80,23 +82,19 @@ def api_error_code_parser(status=None):
     return message
 
 
-def user_session_token(primary_auth, headers):
+def get_session_token(primary_auth, headers):
     """Get session_token.
 
     param headers: Headers of the request
     param primary_auth: Primary authentication
     return session_token: Session Token from JSON response
     """
-    status = None
-    try:
-        status = primary_auth.get("status", None)
-    except AttributeError:
-        pass
+    status = primary_auth.get("status", None)
 
     if status == "SUCCESS" and "sessionToken" in primary_auth:
         session_token = primary_auth.get("sessionToken")
     elif status == "MFA_REQUIRED":
-        session_token = user_mfa_challenge(headers, primary_auth)
+        session_token = mfa_challenge(headers, primary_auth)
     else:
         logger.debug(f"Error parsing response: {json.dumps(primary_auth)}")
         logger.error("Okta auth failed: unknown status.")
@@ -107,12 +105,13 @@ def user_session_token(primary_auth, headers):
     return session_token
 
 
-def authenticate_user(config):
+def authenticate(config):
     """Authenticate user with okta credential.
 
     :param config: Config object
     :return: MFA session with options
     """
+    session_token = None
     headers = {"content-type": "application/json", "accept": "application/json"}
     payload = {"username": config.okta["username"], "password": config.okta["password"]}
 
@@ -120,9 +119,47 @@ def authenticate_user(config):
     logger.debug(f"Sending {headers}, {payload} to {config.okta['org']}")
     primary_auth = api_wrapper(f"{config.okta['org']}/api/v1/authn", payload, headers)
 
-    session_token = user_session_token(primary_auth, headers)
+    while session_token is None:
+        session_token = get_session_token(primary_auth, headers)
     logger.info("User has been succesfully authenticated.")
     return session_token
+
+
+def extract_saml_response(html):
+    """Parse html, and extract a SAML document.
+
+    :param html: String with HTML document.
+    :return: XML Document, or None
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    xml = None
+
+    elem = soup.find("input", attrs={"name": "SAMLResponse"})
+    if type(elem) is bs4.element.Tag:
+        saml_base64 = str(elem.get("value"))
+        xml = codecs.decode(saml_base64.encode("ascii"), "base64").decode("utf-8")
+
+    return xml
+
+
+def extract_state_token(html):
+    """Parse an HTML document, and extract a state token.
+
+    :param html: String with HTML document
+    :return: string with state token, or None
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    state_token = None
+    pattern = re.compile(r"var stateToken = '(?P<stateToken>.*)';", re.MULTILINE)
+
+    script = soup.find("script", text=pattern)
+    if type(script) is bs4.element.Tag:
+        match = pattern.search(script.text)
+        if match:
+            encoded_token = match.group("stateToken")
+            state_token = codecs.decode(encoded_token, "unicode-escape")
+
+    return state_token
 
 
 def mfa_provider_type(
@@ -145,24 +182,33 @@ def mfa_provider_type(
 
     """
     mfa_verify = dict()
-    if mfa_provider == "duo":
+    factor_type = selected_factor["_embedded"]["factor"]["factorType"]
+
+    if mfa_provider == "DUO":
         payload, headers, callback_url = duo.authenticate_duo(selected_factor)
         duo.duo_api_post(callback_url, payload=payload)
         mfa_verify = api_wrapper(mfa_challenge_url, payload, headers)
-    elif mfa_provider == "okta" or mfa_provider == "google":
-        mfa_verify = user_mfa_options(
+    elif mfa_provider == "OKTA" and factor_type == "push":
+        mfa_verify = push_approval(headers, mfa_challenge_url, payload)
+    elif mfa_provider in ["OKTA", "GOOGLE"] and factor_type in ["token:software:totp", "sms"]:
+        mfa_verify = totp_approval(
             selected_mfa_option, headers, mfa_challenge_url, payload, primary_auth
         )
     else:
         logger.error(
-            f"Sorry, the MFA provider '{mfa_provider}' is not yet supported."
+            f"Sorry, the MFA provider '{mfa_provider} {factor_type}' is not yet supported."
             " Please retry with another option."
         )
         exit(1)
+
+    if "sessionToken" not in mfa_verify:
+        logger.error(
+            f"Could not verify MFA Challenge with {mfa_provider} {primary_auth['factorType']}"
+        )
     return mfa_verify["sessionToken"]
 
 
-def user_mfa_index(preset_mfa, available_mfas, mfa_options):
+def mfa_index(preset_mfa, available_mfas, mfa_options):
     """Get mfa index in request.
 
     :param preset_mfa: preset mfa from settings
@@ -175,23 +221,23 @@ def user_mfa_index(preset_mfa, available_mfas, mfa_options):
         logger.debug(f"Get mfa from {available_mfas}.")
         indices = [i for i, elem in enumerate(available_mfas) if preset_mfa in elem]
 
-    mfa_index = None
+    index = None
     if len(indices) == 0:
         logger.debug(f"No matches with {preset_mfa}, going to get user input")
-        mfa_index = user.select_preferred_mfa_index(mfa_options)
+        index = user.select_preferred_mfa_index(mfa_options)
     elif len(indices) == 1:
         logger.debug(f"One match: {preset_mfa} in {indices}")
-        mfa_index = indices[0]
+        index = indices[0]
     else:
         logger.error(
             f"{preset_mfa} is not unique in {available_mfas}. Please check your configuration."
         )
         sys.exit(1)
 
-    return mfa_index
+    return index
 
 
-def user_mfa_challenge(headers, primary_auth):
+def mfa_challenge(headers, primary_auth):
     """Handle user mfa challenges.
 
     :param headers: headers what needs to be sent to api
@@ -211,10 +257,10 @@ def user_mfa_challenge(headers, primary_auth):
     # For example, OKTA_push_9yi4bKJNH2WEWQ0x8, GOOGLE_token:software:totp_9yi4bKJNH2WEWQ
     available_mfas = [f"{d['provider']}_{d['factorType']}_{d['id']}" for d in mfa_options]
 
-    mfa_index = user_mfa_index(preset_mfa, available_mfas, mfa_options)
+    index = mfa_index(preset_mfa, available_mfas, mfa_options)
 
     # time to challenge the mfa option
-    selected_mfa_option = mfa_options[mfa_index]
+    selected_mfa_option = mfa_options[index]
     logger.debug(f"Selected MFA is [{selected_mfa_option}]")
 
     mfa_challenge_url = selected_mfa_option["_links"]["verify"]["href"]
@@ -227,7 +273,7 @@ def user_mfa_challenge(headers, primary_auth):
     }
     selected_factor = api_wrapper(mfa_challenge_url, payload, headers)
 
-    mfa_provider = selected_factor["_embedded"]["factor"]["provider"].lower()
+    mfa_provider = selected_factor["_embedded"]["factor"]["provider"]
     logger.debug(f"MFA Challenge URL: [{mfa_challenge_url}] headers: {headers}")
     mfa_session_token = mfa_provider_type(
         mfa_provider,
@@ -242,7 +288,7 @@ def user_mfa_challenge(headers, primary_auth):
     return mfa_session_token
 
 
-def user_mfa_options(selected_mfa_option, headers, mfa_challenge_url, payload, primary_auth):
+def totp_approval(selected_mfa_option, headers, mfa_challenge_url, payload, primary_auth):
     """Handle user mfa options.
 
     :param selected_mfa_option: Selected MFA option (SMS, push, etc)
@@ -253,12 +299,7 @@ def user_mfa_options(selected_mfa_option, headers, mfa_challenge_url, payload, p
     :return: payload data
 
     """
-    logger.debug("Handle user MFA options")
-
     logger.debug(f"User MFA options selected: [{selected_mfa_option['factorType']}]")
-    if selected_mfa_option["factorType"] == "push":
-        return push_approval(headers, mfa_challenge_url, payload)
-
     if config.okta["mfa_response"] is None:
         logger.debug("Getting verification code from user.")
         config.okta["mfa_response"] = user.get_input("Enter your verification code: ")
@@ -266,6 +307,7 @@ def user_mfa_options(selected_mfa_option, headers, mfa_challenge_url, payload, p
 
     # time to verify the mfa
     payload = {"stateToken": primary_auth["stateToken"], "passCode": config.okta["mfa_response"]}
+    # FIXME: This call needs to catch a 403 coming from a bad token
     mfa_verify = api_wrapper(mfa_challenge_url, payload, headers)
     if "sessionToken" in mfa_verify:
         user.add_sensitive_value_to_be_masked(mfa_verify["sessionToken"])

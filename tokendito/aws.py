@@ -17,8 +17,8 @@ from botocore.client import Config
 from botocore.exceptions import ClientError
 import botocore.session
 import requests
+from tokendito import okta
 from tokendito import user
-
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +76,19 @@ def authenticate_to_roles(secret_session_token, urls, cookies=None):
             logger.error(f"There was an error with the call to {url}: {err}")
             sys.exit(1)
 
-        saml_xml = user.validate_saml_response(saml_response_string)
+        saml_xml = okta.extract_saml_response(saml_response_string)
+        if not saml_xml:
+            if "Extra Verification" in saml_response_string:
+                logger.error("Step-Up Authentication required, but not supported.")
+            elif "App Access Locked" in saml_response_string:
+                logger.error(
+                    "Access to this application is not allowed at this time."
+                    " Please contact your administrator for details."
+                )
+            else:
+                logger.error("Invalid data detected in SAML response. Aborting.")
+            logger.debug(saml_response_string)
+            sys.exit(1)
         responses.append((url, saml_response_string, saml_xml, label))
 
     return responses

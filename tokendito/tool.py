@@ -9,7 +9,6 @@ from tokendito import config
 from tokendito import okta
 from tokendito import user
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -39,7 +38,7 @@ def cli(args):
         sys.exit(1)
 
     # Authenticate okta and AWS also use assumerole to assign the role
-    session_token = okta.authenticate_user(config)
+    session_token = okta.authenticate(config)
 
     session_cookies = None
 

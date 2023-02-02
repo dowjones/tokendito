@@ -473,25 +473,6 @@ def extract_arns(saml):
     return roles_and_providers
 
 
-def validate_saml_response(html):
-    """Parse html to validate that saml a saml response was returned."""
-    soup = BeautifulSoup(html, "html.parser")
-
-    xml = None
-    for elem in soup.find_all("input", attrs={"name": "SAMLResponse"}):
-        saml_base64 = elem.get("value")
-        xml = codecs.decode(saml_base64.encode("ascii"), "base64").decode("utf-8")
-
-    if xml is None:
-        logger.error(
-            "Invalid data detected in SAML response. View the response with the DEBUG loglevel."
-        )
-        logger.debug(html)
-        sys.exit(1)
-
-    return xml
-
-
 def validate_okta_org(input_url=None):
     """Validate whether a given URL is a valid AWS Org URL in Okta.
 

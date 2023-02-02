@@ -5,13 +5,13 @@ import json
 import logging
 import sys
 import time
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote
+from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
 import requests
 from tokendito import config
 from tokendito import user
-
 
 logger = logging.getLogger(__name__)
 

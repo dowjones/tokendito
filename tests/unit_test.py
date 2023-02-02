@@ -10,18 +10,17 @@ import pytest
 import requests_mock
 import semver
 
-
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 @pytest.fixture
 def sample_json_response():
     """Return a response from okta server."""
-    from okta_response_simulation import no_mfa_no_session_token
-    from okta_response_simulation import no_mfa
-    from okta_response_simulation import error_dict
     from okta_response_simulation import empty_dict
+    from okta_response_simulation import error_dict
     from okta_response_simulation import no_auth_methods
+    from okta_response_simulation import no_mfa
+    from okta_response_simulation import no_mfa_no_session_token
     from okta_response_simulation import with_mfa
 
     okta_fixture_data = {
@@ -116,8 +115,9 @@ def test_get_password(mocker):
 
 def test_setup_logging():
     """Test logging setup."""
-    from tokendito import user
     import logging
+
+    from tokendito import user
 
     # test that a default level is set on a bad level
     ret = user.setup_logging({"loglevel": "pytest"})
@@ -130,8 +130,9 @@ def test_setup_logging():
 
 def test_setup_early_logging(monkeypatch, tmpdir):
     """Test early logging."""
-    from tokendito import user
     from argparse import Namespace
+
+    from tokendito import user
 
     path = tmpdir.mkdir("pytest")
     logfile = f"{path}/pytest_log"
@@ -316,6 +317,7 @@ def test_validate_saml_response():
 def test_assert_credentials():
     """Test whether getting credentials works as expeted."""
     from moto import mock_sts
+
     from tokendito import aws
 
     with pytest.raises(SystemExit) as err:
@@ -377,8 +379,9 @@ def test_add_sensitive_value_to_be_masked():
 
 def test_logger_mask(caplog):
     """Test that masking data in loggger works as expected."""
-    from tokendito import user
     import logging
+
+    from tokendito import user
 
     logger = logging.getLogger(__name__)
     logger.addFilter(user.MaskLoggerSecret())
@@ -397,6 +400,7 @@ def test_logger_mask(caplog):
 def test_display_selected_role():
     """Test that role is printed correctly."""
     from datetime import timezone
+
     from tokendito import user
 
     now = datetime.now()
@@ -453,8 +457,9 @@ def test_validate_tile(url, expected):
 
 def test_utc_to_local():
     """Check if passed utc datestamp becomes local one."""
-    from tokendito import user
     from datetime import timezone
+
+    from tokendito import user
 
     utc = datetime.utcnow()
     local_time = utc.replace(tzinfo=timezone.utc).astimezone(tz=None)
@@ -499,8 +504,9 @@ def test_process_environment(monkeypatch):
 
 def test_process_arguments():
     """Test whether arguments are set correctly."""
-    from tokendito import user
     from argparse import Namespace
+
+    from tokendito import user
 
     valid_settings = dict(okta_username="pytest", okta_password="pytest_password")
     invalid_settings = dict(pytest_expected_failure="pytest_failure")
@@ -516,7 +522,8 @@ def test_process_arguments():
 
 def test_update_configuration(tmpdir):
     """Test writing and reading to a configuration file."""
-    from tokendito import user, Config
+    from tokendito import Config
+    from tokendito import user
 
     path = tmpdir.mkdir("pytest").join("pytest_tokendito.ini")
     pytest_config = Config(
@@ -724,7 +731,8 @@ def test_api_wrapper():
 
 def test_api_error_code_parser():
     """Test whether message on specific status equal."""
-    from tokendito.okta import api_error_code_parser, _status_dict
+    from tokendito.okta import _status_dict
+    from tokendito.okta import api_error_code_parser
 
     okta_status_dict = _status_dict
 
@@ -815,8 +823,8 @@ def test_select_preferred_mfa_index(mocker, sample_json_response):
 )
 def test_select_preferred_mfa_index_output(email, capsys, mocker, sample_json_response):
     """Test whether the function gives correct output."""
-    from tokendito.user import select_preferred_mfa_index
     from tokendito import config
+    from tokendito.user import select_preferred_mfa_index
 
     # For this test, ensure that quiet is never true
     config.user["quiet"] = False
@@ -1002,8 +1010,8 @@ def test_incorrect_role_arn():
 
 def test_prepare_duo_info():
     """Test behaviour empty return duo info."""
-    from tokendito.duo import prepare_duo_info
     from tokendito import config
+    from tokendito.duo import prepare_duo_info
 
     selected_okta_factor = {
         "_embedded": {
@@ -1072,8 +1080,9 @@ def test_get_duo_sid(mocker):
 @pytest.mark.parametrize("status_code", [(400), (401), (404), (500), (503)])
 def test_authenticate_to_roles(status_code, monkeypatch):
     """Test if function return correct response."""
-    from tokendito.aws import authenticate_to_roles
     import requests
+
+    from tokendito.aws import authenticate_to_roles
 
     mock_get = {"status_code": status_code, "text": "response"}
     monkeypatch.setattr(requests, "get", mock_get)
@@ -1148,6 +1157,7 @@ def test_loglevel_collected_from_env(monkeypatch):
     """Ensure that the loglevel collected from env vars."""
     from argparse import Namespace
     import logging
+
     from tokendito import user
 
     args = {
@@ -1192,7 +1202,8 @@ def test_get_submodules_names(mocker):
 
 def test_process_interactive_input(mocker):
     """Test interactive input processor."""
-    from tokendito import user, Config
+    from tokendito import Config
+    from tokendito import user
 
     # Check that a good object retrieves an interactive password
     mocker.patch("getpass.getpass", return_value="pytest_password")
@@ -1259,9 +1270,10 @@ def test_get_interactive_profile_name_invalid_input(mocker, monkeypatch):
         (None, "user_input", "user_input"),
     ],
 )
-def test_set_profile_name(mocker, value, submit, expected):
-    """Test setting the AWS Profile name."""
-    from tokendito import user, Config
+def test_set_role_name(value, submit, expected):
+    """Test setting the AWS Role (profile) name."""
+    from tokendito import Config
+    from tokendito import user
 
     pytest_config = Config(aws=dict(profile=value))
 
@@ -1397,7 +1409,8 @@ def test_set_profile_name(mocker, value, submit, expected):
 )
 def test_validate_configuration(config, expected):
     """Test configuration validator."""
-    from tokendito import user, Config
+    from tokendito import Config
+    from tokendito import user
 
     pytest_config = Config(**config)
     assert user.validate_configuration(pytest_config) == expected
@@ -1405,7 +1418,8 @@ def test_validate_configuration(config, expected):
 
 def test_sanitize_config_values():
     """Test configuration sanitizer method."""
-    from tokendito import user, Config
+    from tokendito import Config
+    from tokendito import user
 
     pytest_config = Config(
         aws=dict(output="pytest", region="pytest"),
