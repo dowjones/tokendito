@@ -1173,6 +1173,22 @@ def test_process_interactive_input(mocker):
 
 
 @pytest.mark.parametrize(
+    "role_name,user_input,expected",
+    [
+        ("role_name", "", "role_name"),
+        ("role_name", "different_name", "different_name"),
+        ("role_name", "role_name", "different_name"),
+    ],
+)
+def test_get_profile_name(mocker, role_name, user_input, expected):
+    """Test get tile URL."""
+    from tokendito import user
+
+    mocker.patch("tokendito.user.input", return_value=user_input)
+    assert user.get_profile_name(role_name) == expected
+
+
+@pytest.mark.parametrize(
     "value,submit,expected",
     [
         ("pytest", None, "pytest"),
@@ -1183,13 +1199,13 @@ def test_process_interactive_input(mocker):
         (None, 0xDEADBEEF, str(0xDEADBEEF)),
     ],
 )
-def test_set_role_name(value, submit, expected):
-    """Test setting the AWS Role (profile) name."""
+def test_set_profile_name(value, submit, expected):
+    """Test setting the AWS Profile name."""
     from tokendito import user, Config
 
     pytest_config = Config(aws=dict(profile=value))
 
-    ret = user.set_role_name(pytest_config, submit)
+    ret = user.set_profile_name(pytest_config, submit)
     assert ret.aws["profile"] == expected
 
 

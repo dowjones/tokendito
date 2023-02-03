@@ -864,7 +864,30 @@ def get_password():
     return res
 
 
-def set_role_name(config_obj, name):
+def get_profile_name(name):
+    """Get AWS profile name from user.
+
+    :return: string with sanitized value, or the empty string.
+    """
+    message = (
+        f"Enter a profile name or leave blank to use '{name}': "
+    )
+    res = ""
+
+    while res == "":
+        user_data = get_input(prompt=message)
+        user_data = user_data.strip()
+        if user_data == "":
+            break
+        if len(user_data.split()) == 1:
+            res = user_data
+        else:
+            print("Invalid input, try again.")
+    logger.debug(f"Profile name is: {res}")
+    return res
+
+
+def set_profile_name(config_obj, name):
     """Set AWS Role alias name based on user preferences.
 
     :param config: Config object.
