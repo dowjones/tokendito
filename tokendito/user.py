@@ -879,7 +879,7 @@ def get_profile_name(name):
         user_data = user_data.strip()
         if user_data == "":
             break
-        if len(user_data.split()) == 1:
+        if re.fullmatch("[a-zA-Z][a-zA-Z0-9_-]*", user_data):
             res = user_data
         else:
             print("Invalid input, try again.")

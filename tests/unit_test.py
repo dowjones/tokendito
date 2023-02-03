@@ -1175,9 +1175,10 @@ def test_process_interactive_input(mocker):
 @pytest.mark.parametrize(
     "role_name,user_input,expected",
     [
+        ("", "", ""),
         ("role_name", "", "role_name"),
         ("role_name", "different_name", "different_name"),
-        ("role_name", "role_name", "different_name"),
+        ("role_name", "role_name", "role_name"),
     ],
 )
 def test_get_profile_name(mocker, role_name, user_input, expected):
