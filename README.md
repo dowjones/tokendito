@@ -84,13 +84,13 @@ You must map a volume in the Docker command to allow tokendito to write AWS cred
 Be sure to set the `-ti` flags to enable an interactive terminal session.
 
 ``` pwsh
-docker run -ti -v ${home}\.aws:/home/appuser/.aws tokendito
+docker run -ti -v ${home}:/home/appuser/ tokendito
 ```
 
 Tokendito command line arguments are supported as well.
 
 ``` pwsh
-docker run -ti -v ${home}\.aws:/home/appuser/.aws tokendito `
+docker run -ti -v ${home}:/home/appuser/ tokendito `
   --okta-tile https://acme.okta.com/home/amazon_aws/000000000000000000x0/123 `
   --username username@example.com `
   --okta-mfa push `
@@ -98,4 +98,10 @@ docker run -ti -v ${home}\.aws:/home/appuser/.aws tokendito `
   --aws-region us-east-1 `
   --aws-profile my-profile-name `
   --aws-role-arn arn:aws:iam::000000000000:role/role-name
+```
+
+Tokendito profiles are supported if you map your volume to your home directory.  This allows tokendito to read and write to both the AWS config files and store tokendito profiles.
+
+``` pwsh
+docker run -ti -v ${home}:/home/appuser/ tokendito --profile my-profile-name
 ```
