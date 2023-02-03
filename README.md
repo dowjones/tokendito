@@ -79,7 +79,12 @@ Run tokendito with the `docker run` command
 docker run tokendito --version
 ```
 
-You must map a volume in the Docker command to allow tokendito to write AWS credentials to your local system for use.  This is done with the `-v` flag.  See [Docker documentation](https://docs.docker.com/engine/reference/commandline/run/#-mount-volume--v---read-only) for help setting the syntax.  The destination in the container should be `/home/appuser/.aws`.
+You must map a volume in the Docker command to allow tokendito to write AWS credentials to your local system for use.  This is done with the `-v` flag.  See [Docker documentation](https://docs.docker.com/engine/reference/commandline/run/#-mount-volume--v---read-only) for help setting the syntax.  The following directories are used by tokendito and should be considered when mapping volumes:
+
+- `/home/appuser/.aws/` (AWS credential storage)
+- `/home/appuser/.config/tokendito/` (tokendito profile storage)
+
+These can be covered by mapping a single volume to both the host and container users' home directories (`/home/appuser/` is the home directory in the container and must be explicitly defined).  You may also map multiple volumes if you have custom configuration locations and require granularity.
 
 Be sure to set the `-ti` flags to enable an interactive terminal session.
 
@@ -100,7 +105,7 @@ docker run -ti -v ${home}:/home/appuser/ tokendito `
   --aws-role-arn arn:aws:iam::000000000000:role/role-name
 ```
 
-Tokendito profiles are supported if you map your volume to your home directory.  This allows tokendito to read and write to both the AWS config files and store tokendito profiles.
+Tokendito profiles are supported while using containers provided the proper volume mapping exists.
 
 ``` pwsh
 docker run -ti -v ${home}:/home/appuser/ tokendito --profile my-profile-name
