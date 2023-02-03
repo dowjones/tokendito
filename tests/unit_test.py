@@ -1181,7 +1181,7 @@ def test_process_interactive_input(mocker):
     ],
 )
 def test_get_profile_name(mocker, role_name, user_input, expected):
-    """Test get tile URL."""
+    """Test get profile name."""
     from tokendito import user
 
     mocker.patch("tokendito.user.input", return_value=user_input)
