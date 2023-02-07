@@ -359,7 +359,7 @@ def select_preferred_mfa_index(mfa_options, factor_key="provider", subfactor_key
     longest_subfactor_name = max([len(d[subfactor_key]) for d in mfa_options])
     factor_info_indent = max([len(mfa_option_info(d)) for d in mfa_options])
 
-    for (i, mfa_option) in enumerate(mfa_options):
+    for i, mfa_option in enumerate(mfa_options):
         factor_id = mfa_option.get("id", "Not presented")
         factor_info = mfa_option_info(mfa_option)
         mfa = mfa_option.get(subfactor_key, "Not presented")
@@ -609,7 +609,7 @@ def process_ini_file(file, profile):
     # Here, group(1) is the dictionary key, and group(2) the configuration element
     try:
         ini.read(file)
-        for (key, val) in ini.items(profile):
+        for key, val in ini.items(profile):
             match = re.search(pattern, key.lower())
             if match:
                 if match.group(1) not in res:
@@ -642,7 +642,7 @@ def process_arguments(args):
     res = dict()
     pattern = re.compile(r"^(.*?)_(.*)")
 
-    for (key, val) in vars(args).items():
+    for key, val in vars(args).items():
         match = re.search(pattern, key.lower())
         if match:
             if match.group(1) not in get_submodule_names():
@@ -675,7 +675,7 @@ def process_environment(prefix="tokendito"):
     pattern = re.compile(rf"^({prefix})_(.*?)_(.*)")
     # Here, group(1) is the prefix variable, group(2) is the dictionary key,
     # and group(3) the configuration element.
-    for (key, val) in os.environ.items():
+    for key, val in os.environ.items():
         match = re.search(pattern, key.lower())
         if match:
             if match.group(2) not in res:
