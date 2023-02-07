@@ -568,7 +568,6 @@ def test_bad_user_session_token(mocker, sample_json_response, sample_headers):
     okta_response_statuses = ["okta_response_error", "okta_response_empty"]
 
     for response in okta_response_statuses:
-
         primary_auth = sample_json_response[response]
 
         with pytest.raises(SystemExit) as error:
@@ -690,7 +689,7 @@ def test_api_error_code_parser():
 
     okta_status_dict = _status_dict
 
-    for (key, value) in okta_status_dict.items():
+    for key, value in okta_status_dict.items():
         assert api_error_code_parser(key) == "Okta auth failed: " + value
     unexpected_key = "UNEXPECTED_KEY"
     value = f"Okta auth failed: {unexpected_key}. Please verify your settings and try again."

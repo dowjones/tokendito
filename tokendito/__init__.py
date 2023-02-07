@@ -71,7 +71,7 @@ class Config(object):
             # Argument validation
             self._check_constraints(**kwargs)
             # We create an object that contains only the values passed in.
-            for (key, val) in kwargs.items():
+            for key, val in kwargs.items():
                 self.__dict__[key].update(val)
         else:
             self.set_defaults()
@@ -105,7 +105,7 @@ class Config(object):
         :raises KeyError: raised if the value passed for a keyword is not a dictionary.
         :raises ValueError: raised if the configuration value does not exist in the object.
         """
-        for (key, val) in kwargs.items():
+        for key, val in kwargs.items():
             # Guard against improper initialization.
             if key not in self._defaults:
                 raise AttributeError(f"'{type(self).__name__}' object has no attribute '{key}'")
