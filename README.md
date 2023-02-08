@@ -81,21 +81,21 @@ docker run tokendito --version
 
 You must map a volume in the Docker command to allow tokendito to write AWS credentials to your local system for use.  This is done with the `-v` flag.  See [Docker documentation](https://docs.docker.com/engine/reference/commandline/run/#-mount-volume--v---read-only) for help setting the syntax.  The following directories are used by tokendito and should be considered when mapping volumes:
 
-- `/home/appuser/.aws/` (AWS credential storage)
-- `/home/appuser/.config/tokendito/` (tokendito profile storage)
+- `/home/tokendito/.aws/` (AWS credential storage)
+- `/home/tokendito/.config/tokendito/` (tokendito profile storage)
 
-These can be covered by mapping a single volume to both the host and container users' home directories (`/home/appuser/` is the home directory in the container and must be explicitly defined).  You may also map multiple volumes if you have custom configuration locations and require granularity.
+These can be covered by mapping a single volume to both the host and container users' home directories (`/home/tokendito/` is the home directory in the container and must be explicitly defined).  You may also map multiple volumes if you have custom configuration locations and require granularity.
 
 Be sure to set the `-ti` flags to enable an interactive terminal session.
 
 ``` pwsh
-docker run -ti -v ${home}:/home/appuser/ tokendito
+docker run -ti -v ${home}:/home/tokendito/ tokendito
 ```
 
 Tokendito command line arguments are supported as well.
 
 ``` pwsh
-docker run -ti -v ${home}:/home/appuser/ tokendito `
+docker run -ti -v ${home}:/home/tokendito/ tokendito `
   --okta-tile https://acme.okta.com/home/amazon_aws/000000000000000000x0/123 `
   --username username@example.com `
   --okta-mfa push `
@@ -108,5 +108,5 @@ docker run -ti -v ${home}:/home/appuser/ tokendito `
 Tokendito profiles are supported while using containers provided the proper volume mapping exists.
 
 ``` pwsh
-docker run -ti -v ${home}:/home/appuser/ tokendito --profile my-profile-name
+docker run -ti -v ${home}:/home/tokendito/ tokendito --profile my-profile-name
 ```
