@@ -19,7 +19,7 @@ credentials.
 
 # Example 1
 
-``` sh
+``` txt
 py.test -v -rA -s tests --config-file=/tmp/my-tokendito-config.ini
 ```
 
@@ -27,7 +27,7 @@ Where the config file has valid configuration items for the tool.
 
 ## Example 2
 
-``` sh
+``` txt
 py.test -v -rA -k 'functional' -s tests \
   --username=jane.doe@mycompany.com \
   --password=mysecretpass \
@@ -41,7 +41,7 @@ This triggers the tests `test_generate_credentials` and
 
 ## Example 3
 
-``` sh
+``` txt
 TOKENDITO_OKTA_MFA_METHOD=push py.test -v -rA -k 'functional' -s tests --username=...
 ```
 
@@ -50,7 +50,7 @@ arguments.
 
 ## Example 4
 
-``` sh
+``` txt
 TOKENDITO_OKTA_PASSWORD='mysecretpass' tox -e auth -- --username='jane.doe@mycompany.com'
 ```
 

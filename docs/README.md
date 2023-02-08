@@ -45,7 +45,7 @@ this!
 
 You can just pass in your information at runtime:
 
-``` sh
+``` txt
 tokendito --username prod_service_user@company.com \
 --role-arn arn:aws:iam::123456789000:role/dowjones-engineer \
 --okta-mfa push \
@@ -64,7 +64,7 @@ role_arn = arn:aws:iam::123456789000:role/engineer
 
 And execute:
 
-``` sh
+``` txt
 tokendito --profile engineer
 ```
 
