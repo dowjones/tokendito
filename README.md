@@ -67,7 +67,7 @@ Using Docker eliminates the need to install tokendito and its requirements.
 
 ### Building the container image
 
-``` bash
+``` txt
 docker image build --pull --tag "tokendito:latest" .
 ```
 
@@ -75,7 +75,7 @@ docker image build --pull --tag "tokendito:latest" .
 
 Run tokendito with the `docker run` command
 
-``` bash
+``` txt
 docker run tokendito --version
 ```
 
@@ -88,13 +88,13 @@ These can be covered by mapping a single volume to both the host and container u
 
 Be sure to set the `-ti` flags to enable an interactive terminal session.
 
-``` pwsh
+``` txt
 docker run -ti -v ${home}:/home/tokendito/ tokendito
 ```
 
 Tokendito command line arguments are supported as well.
 
-``` pwsh
+``` txt
 docker run -ti -v ${home}:/home/tokendito/ tokendito `
   --okta-tile https://acme.okta.com/home/amazon_aws/000000000000000000x0/123 `
   --username username@example.com `
@@ -107,6 +107,6 @@ docker run -ti -v ${home}:/home/tokendito/ tokendito `
 
 Tokendito profiles are supported while using containers provided the proper volume mapping exists.
 
-``` pwsh
+``` txt
 docker run -ti -v ${home}:/home/tokendito/ tokendito --profile my-profile-name
 ```
