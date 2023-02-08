@@ -58,8 +58,6 @@ command](https://github.com/dowjones/tokendito/blob/main/docs/README.md#single-c
 Have multiple Okta tiles to switch between? View our [multi-tile
 guide](https://github.com/dowjones/tokendito/blob/main/docs/README.md#multi-tile-guide).
 
-### Tips, tricks, troubleshooting, examples, and more docs are [here]()https://github.com/dowjones/tokendito/blob/main/docs/README.md!
-[Contributions are welcome](https://github.com/dowjones/tokendito/blob/main/docs/CONTRIBUTING.md)!
 
 ## Docker
 
@@ -110,3 +108,7 @@ Tokendito profiles are supported while using containers provided the proper volu
 ``` txt
 docker run -ti -v ${home}:/home/tokendito/ tokendito --profile my-profile-name
 ```
+
+## Tips, tricks, troubleshooting, examples, and more docs are [here](https://github.com/dowjones/tokendito/blob/main/docs/README.md)
+
+[Contributions are welcome](https://github.com/dowjones/tokendito/blob/main/docs/CONTRIBUTING.md)!
