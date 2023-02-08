@@ -9,6 +9,7 @@
 **/.project
 **/.settings
 **/.toolstarget
+**/.tox
 **/.vs
 **/.vscode
 **/.github
