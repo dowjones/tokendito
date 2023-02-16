@@ -877,6 +877,7 @@ def get_profile_name(default):
         user_data = user_data.strip()
         if user_data == "":
             res = default
+            break
         if re.fullmatch("[a-zA-Z][a-zA-Z0-9_-]*", user_data):
             res = user_data
         else:

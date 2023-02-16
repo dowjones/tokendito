@@ -1173,7 +1173,7 @@ def test_process_interactive_input(mocker):
 
 
 @pytest.mark.parametrize(
-    "role_name,user_input,expected",
+    "default,submit,expected",
     [
         ("", "", ""),
         ("", "different_name", "different_name"),
@@ -1182,12 +1182,24 @@ def test_process_interactive_input(mocker):
         ("role_name", "role_name", "role_name"),
     ],
 )
-def test_get_profile_name(mocker, role_name, user_input, expected):
-    """Test get profile name."""
+def test_get_profile_name(mocker, default, submit, expected):
+    """Test getting the AWS profile name form user input."""
     from tokendito import user
 
-    mocker.patch("tokendito.user.input", return_value=user_input)
-    assert user.get_profile_name(role_name) == expected
+    mocker.patch("tokendito.user.input", return_value=submit)
+    assert user.get_profile_name(default) == expected
+
+
+def test_get_profile_name_invalid_input(monkeypatch):
+    """Test reprompting the AWS profile name form user on invalid input."""
+    from tokendito import user
+    # provided inputs
+    inputs = iter(["_this_is_invalid", "str with space", "1StartsWithNum", "valid"])
+
+    # using lambda statement for mocking
+    monkeypatch.setattr('builtins.input', lambda name: next(inputs))
+
+    assert user.get_profile_name("role_name") == "valid"
 
 
 @pytest.mark.parametrize(
