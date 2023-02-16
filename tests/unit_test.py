@@ -1193,11 +1193,12 @@ def test_get_profile_name(mocker, default, submit, expected):
 def test_get_profile_name_invalid_input(monkeypatch):
     """Test reprompting the AWS profile name form user on invalid input."""
     from tokendito import user
+
     # provided inputs
     inputs = iter(["_this_is_invalid", "str with space", "1StartsWithNum", "valid"])
 
     # using lambda statement for mocking
-    monkeypatch.setattr('builtins.input', lambda name: next(inputs))
+    monkeypatch.setattr("builtins.input", lambda name: next(inputs))
 
     assert user.get_profile_name("role_name") == "valid"
 
