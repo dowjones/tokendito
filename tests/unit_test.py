@@ -1176,6 +1176,7 @@ def test_process_interactive_input(mocker):
     "role_name,user_input,expected",
     [
         ("", "", ""),
+        ("", "different_name", "different_name")
         ("role_name", "", "role_name"),
         ("role_name", "different_name", "different_name"),
         ("role_name", "role_name", "role_name"),

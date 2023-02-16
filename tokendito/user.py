@@ -864,19 +864,19 @@ def get_password():
     return res
 
 
-def get_profile_name(name):
+def get_profile_name(default):
     """Get AWS profile name from user.
 
-    :return: string with sanitized value, or the empty string.
+    :return: string with sanitized value, or the default string.
     """
-    message = f"Enter a profile name or leave blank to use '{name}': "
+    message = f"Enter a profile name or leave blank to use '{default}': "
     res = ""
 
     while res == "":
         user_data = get_input(prompt=message)
         user_data = user_data.strip()
         if user_data == "":
-            break
+            res = default
         if re.fullmatch("[a-zA-Z][a-zA-Z0-9_-]*", user_data):
             res = user_data
         else:
