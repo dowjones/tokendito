@@ -63,7 +63,7 @@ def cli(args):
         )
         sys.exit(1)
 
-    user.set_role_name(config, role_name)
+    user.set_profile_name(config, role_name)
 
     user.set_local_credentials(
         response=role_response,

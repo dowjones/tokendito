@@ -864,17 +864,37 @@ def get_password():
     return res
 
 
-def set_role_name(config_obj, name):
+def get_interactive_profile_name(default):
+    """Get AWS profile name from user.
+
+    :return: string with sanitized value, or the default string.
+    """
+    message = f"Enter a profile name or leave blank to use '{default}': "
+    res = ""
+
+    while res == "":
+        user_data = get_input(prompt=message)
+        user_data = user_data.strip()
+        if user_data == "":
+            res = default
+            break
+        if re.fullmatch("[a-zA-Z][a-zA-Z0-9_-]*", user_data):
+            res = user_data
+        else:
+            print("Invalid input, try again.")
+    logger.debug(f"Profile name is: {res}")
+    return res
+
+
+def set_profile_name(config_obj, role_name):
     """Set AWS Role alias name based on user preferences.
 
     :param config: Config object.
-    :param name: Role name. Defaults to the string "default"
+    :param role_name: Role name.
     :return: Config object.
     """
-    if name is None or name == "":
-        name = "default"
-    if config_obj.aws["profile"] is None:
-        config_obj.aws["profile"] = str(name)
+    if config_obj.aws["profile"] is None or config_obj.aws["profile"] == "":
+        config_obj.aws["profile"] = get_interactive_profile_name(role_name)
 
     return config_obj
 
