@@ -1182,15 +1182,15 @@ def test_process_interactive_input(mocker):
         ("role_name", "role_name", "role_name"),
     ],
 )
-def test_get_profile_name(mocker, default, submit, expected):
+def test_get_interactive_profile_name(mocker, default, submit, expected):
     """Test getting the AWS profile name form user input."""
     from tokendito import user
 
     mocker.patch("tokendito.user.input", return_value=submit)
-    assert user.get_profile_name(default) == expected
+    assert user.get_interactive_profile_name(default) == expected
 
 
-def test_get_profile_name_invalid_input(monkeypatch):
+def test_get_interactive_profile_name_invalid_input(monkeypatch):
     """Test reprompting the AWS profile name form user on invalid input."""
     from tokendito import user
 
@@ -1200,7 +1200,7 @@ def test_get_profile_name_invalid_input(monkeypatch):
     # using lambda statement for mocking
     monkeypatch.setattr("builtins.input", lambda name: next(inputs))
 
-    assert user.get_profile_name("role_name") == "valid"
+    assert user.get_interactive_profile_name("role_name") == "valid"
 
 
 @pytest.mark.parametrize(
@@ -1209,18 +1209,18 @@ def test_get_profile_name_invalid_input(monkeypatch):
         ("pytest", None, "pytest"),
         ("pytest", "deadbeef", "pytest"),
         ("pytest", 0xDEADBEEF, "pytest"),
-        (None, None, "default"),
-        (None, "", "default"),
-        (None, 0xDEADBEEF, str(0xDEADBEEF)),
+        (None, "user_input", "user_input"),
     ],
 )
-def test_set_profile_name(value, submit, expected):
+def test_set_profile_name(mocker, value, submit, expected):
     """Test setting the AWS Profile name."""
     from tokendito import user, Config
 
     pytest_config = Config(aws=dict(profile=value))
 
-    ret = user.set_profile_name(pytest_config, submit)
+    mocker.patch("tokendito.user.get_interactive_profile_name", return_value=submit)
+
+    ret = user.set_profile_name(pytest_config, "role_name")
     assert ret.aws["profile"] == expected
 
 

@@ -864,7 +864,7 @@ def get_password():
     return res
 
 
-def get_profile_name(default):
+def get_interactive_profile_name(default):
     """Get AWS profile name from user.
 
     :return: string with sanitized value, or the default string.
@@ -886,17 +886,15 @@ def get_profile_name(default):
     return res
 
 
-def set_profile_name(config_obj, name):
+def set_profile_name(config_obj, role_name):
     """Set AWS Role alias name based on user preferences.
 
     :param config: Config object.
-    :param name: Role name. Defaults to the string "default"
+    :param role_name: Role name.
     :return: Config object.
     """
-    if name is None or name == "":
-        name = "default"
-    if config_obj.aws["profile"] is None:
-        config_obj.aws["profile"] = str(name)
+    if config_obj.aws["profile"] is None or config_obj.aws["profile"] == "":
+        config_obj.aws["profile"] = get_interactive_profile_name(role_name)
 
     return config_obj
 
