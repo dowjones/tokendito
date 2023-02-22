@@ -59,7 +59,7 @@ Or you can put your parameters into a single [profile](tokendito.ini.md) and ref
 okta_aws_tile = https://acme.oktapreview.com/home/amazon_aws/b07384d113edec49eaa6/123
 okta_username = jane.doe@acme.com
 okta_mfa = push
-role_arn = arn:aws:iam::123456789000:role/engineer
+aws_role_arn = arn:aws:iam::123456789000:role/engineer
 ```
 
 And execute:

@@ -752,7 +752,6 @@ def get_interactive_config(tile=None, org=None, username=""):
 
     # We need either one of these two:
     while not validate_okta_org(org) and not validate_okta_tile(tile):
-        print("\n\nPlease enter either your Organization URL, a tile URL, or both.")
         org = get_org()
         tile = get_tile()
 
@@ -857,6 +856,7 @@ def get_password():
     res = ""
     logger.debug("Set password.")
 
+    tty_assertion()
     while res == "":
         password = getpass.getpass()
         res = password
@@ -1041,12 +1041,26 @@ def validate_input(value, valid_range):
     return integer_validation
 
 
+def tty_assertion():
+    """Ensure that a TTY is present."""
+    try:
+        assert os.isatty(sys.stdin.fileno()) is True
+    except (AttributeError, AssertionError, EOFError, OSError, RuntimeError):
+        logger.error(
+            "sys.stdin is not available, and interactive invocation requires stdin to be present. "
+            "Please check the --help argument and documentation for more details.",
+        )
+        sys.exit(1)
+
+
 def get_input(prompt="-> "):
     """Collect user input for TOTP.
 
     :param prompt: optional string with prompt.
     :return user_input: raw from user.
     """
+    tty_assertion()
+
     user_input = input(f"{prompt}")
     logger.debug(f"User input: {user_input}")
 
