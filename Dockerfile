@@ -7,11 +7,10 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 # Install pip requirements
-COPY requirements.txt /app/requirements.txt
+COPY . /app
 RUN python -m pip install -r /app/requirements.txt
 
 WORKDIR /app
-COPY . /app
 
 # Creates a non-root user with an explicit UID and adds permission to access the /app folder
 RUN adduser -u 5678 --disabled-password --gecos "" tokendito && chown -R tokendito /app
