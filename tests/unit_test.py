@@ -53,6 +53,38 @@ def test_import_location():
     assert imported_path.startswith(local_path)
 
 
+@pytest.mark.xfail(
+    sys.platform == "win32", reason="Windows does not always handle NULL stdin correctly."
+)
+def test_tty_assertion():
+    """Test the availability of stdin."""
+    import os
+    import sys
+    from tokendito.user import tty_assertion
+
+    # Save for reuse
+    old_stdin = sys.stdin
+    # Test for NoneType
+    with pytest.raises(SystemExit) as err:
+        sys.stdin = None
+        tty_assertion()
+    assert err.value.code == 1
+
+    # Test for null descriptor
+    with pytest.raises(SystemExit) as err:
+        sys.stdin = open(os.devnull, "w")
+        tty_assertion()
+    assert err.value.code == 1
+
+    sys.stdin = old_stdin
+    # Test for closed descriptor
+    with pytest.raises(SystemExit) as err:
+        sys.stdin = old_stdin
+        os.close(sys.stdin.fileno())
+        tty_assertion()
+    assert err.value.code == 1
+
+
 def test_semver_version():
     """Ensure the package version is semver compliant."""
     from tokendito import __version__ as version
@@ -64,6 +96,7 @@ def test_get_username(mocker):
     """Test whether data sent is the same as data returned."""
     from tokendito import user
 
+    mocker.patch("tokendito.user.tty_assertion", return_value=True)
     mocker.patch("tokendito.user.input", return_value="pytest_patched")
     val = user.get_username()
 
@@ -74,6 +107,7 @@ def test_get_password(mocker):
     """Test whether data sent is the same as data returned."""
     from tokendito import user
 
+    mocker.patch("tokendito.user.tty_assertion", return_value=True)
     mocker.patch("getpass.getpass", return_value="pytest_patched")
     val = user.get_password()
 
@@ -159,6 +193,7 @@ def test_collect_integer(mocker, value, expected):
     """Test whether integers from the user are retrieved."""
     from tokendito import user
 
+    mocker.patch("tokendito.user.tty_assertion", return_value=True)
     mocker.patch("tokendito.user.input", return_value=value)
     assert user.collect_integer(10) == expected
 
@@ -175,6 +210,7 @@ def test_get_org(mocker, url, expected):
     """Test Org URL."""
     from tokendito import user
 
+    mocker.patch("tokendito.user.tty_assertion", return_value=True)
     mocker.patch("tokendito.user.input", return_value=url)
     assert user.get_org() == expected
 
@@ -197,6 +233,7 @@ def test_get_tile(mocker, url, expected):
     """Test get tile URL."""
     from tokendito import user
 
+    mocker.patch("tokendito.user.tty_assertion", return_value=True)
     mocker.patch("tokendito.user.input", return_value=url)
     assert user.get_tile() == expected
 
@@ -249,6 +286,7 @@ def test_get_input(mocker):
     """Check if provided input is return unmodified."""
     from tokendito import user
 
+    mocker.patch("tokendito.user.tty_assertion", return_value=True)
     mocker.patch("tokendito.user.input", return_value="pytest_patched")
     assert user.get_input() == "pytest_patched"
 
@@ -433,6 +471,7 @@ def test_set_passcode(mocker):
     """Check if numerical passcode can handle leading zero values."""
     from tokendito import duo
 
+    mocker.patch("tokendito.user.tty_assertion", return_value=True)
     mocker.patch("tokendito.user.input", return_value="0123456")
     assert duo.set_passcode({"factor": "passcode"}) == "0123456"
 
@@ -1055,6 +1094,7 @@ def test_get_mfa_response():
 def test_config_object():
     """Test proper initialization of the Config object."""
     import json
+    import sys
     from tokendito import Config
 
     # Test for invalid assignments to the object
@@ -1097,6 +1137,11 @@ def test_config_object():
 
     # Check that default values from the original object are kept
     assert pytest_config.get_defaults()["aws"]["region"] == pytest_config.aws["region"]
+
+    # Check that we set encoding correctly when there is no stdin
+    sys.stdin = None
+    pytest_config = Config()
+    assert pytest_config.user["encoding"] == "utf-8"
 
 
 def test_loglevel_collected_from_env(monkeypatch):
@@ -1186,14 +1231,16 @@ def test_get_interactive_profile_name(mocker, default, submit, expected):
     """Test getting the AWS profile name form user input."""
     from tokendito import user
 
+    mocker.patch("tokendito.user.tty_assertion", return_value=True)
     mocker.patch("tokendito.user.input", return_value=submit)
     assert user.get_interactive_profile_name(default) == expected
 
 
-def test_get_interactive_profile_name_invalid_input(monkeypatch):
+def test_get_interactive_profile_name_invalid_input(mocker, monkeypatch):
     """Test reprompting the AWS profile name form user on invalid input."""
     from tokendito import user
 
+    mocker.patch("tokendito.user.tty_assertion", return_value=True)
     # provided inputs
     inputs = iter(["_this_is_invalid", "str with space", "1StartsWithNum", "valid"])
 

@@ -21,6 +21,10 @@ __license__ = "Apache 2.0"
 class Config(object):
     """Creates configuration variables for the application."""
 
+    _default_encoding = "utf-8"
+    if getattr(sys, "stdin") is not None:
+        _default_encoding = sys.stdin.encoding
+
     # Instantiated objects can get Class defaults with get_defaults()
     _defaults = dict(
         user=dict(
@@ -29,7 +33,7 @@ class Config(object):
                 user_config_dir(appname=__title__, appauthor=False), f"{__title__}.ini"
             ),
             config_profile="default",
-            encoding=sys.stdin.encoding,
+            encoding=_default_encoding,
             loglevel="INFO",
             log_output_file="",
             mask_items=[],

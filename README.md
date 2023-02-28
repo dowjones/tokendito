@@ -40,7 +40,7 @@ Consult [additional notes](https://github.com/dowjones/tokendito/blob/main/docs/
 
 ## Requirements
 
--   Python 3.7+
+-   Python 3.7+, or a working Docker environment
 -   AWS account(s) federated with Okta
 
 Tokendito is compatible with Python 3 and can be installed with either
@@ -61,20 +61,20 @@ guide](https://github.com/dowjones/tokendito/blob/main/docs/README.md#multi-tile
 
 ## Docker
 
-Using Docker eliminates the need to install tokendito and its requirements.
-
-### Building the container image
-
-``` txt
-docker image build --pull --tag "tokendito:latest" .
-```
+Using Docker eliminates the need to install tokendito and its requirements. We are providing experimental Docker image support in [Dockerhub](https://hub.docker.com/r/tokendito/tokendito)
 
 ### Running the container image
 
-Run tokendito with the `docker run` command
+Run tokendito with the `docker run` command. Tokendito supports [DCT](https://docs.docker.com/engine/security/trust/), and we encourage you to enforce image signature validation before running any containers.
 
 ``` txt
-docker run tokendito --version
+export DOCKER_CONTENT_TRUST=1
+```
+
+then
+
+``` txt
+docker run --rm -it tokendito --version
 ```
 
 You must map a volume in the Docker command to allow tokendito to write AWS credentials to your local system for use.  This is done with the `-v` flag.  See [Docker documentation](https://docs.docker.com/engine/reference/commandline/run/#-mount-volume--v---read-only) for help setting the syntax.  The following directories are used by tokendito and should be considered when mapping volumes:
@@ -84,23 +84,23 @@ You must map a volume in the Docker command to allow tokendito to write AWS cred
 
 These can be covered by mapping a single volume to both the host and container users' home directories (`/home/tokendito/` is the home directory in the container and must be explicitly defined).  You may also map multiple volumes if you have custom configuration locations and require granularity.
 
-Be sure to set the `-ti` flags to enable an interactive terminal session.
+Be sure to set the `-it` flags to enable an interactive terminal session.
 
 ``` txt
-docker run -ti -v ${home}:/home/tokendito/ tokendito
+docker run --rm -it -v ${home}:/home/tokendito/ tokendito
 ```
 
 Tokendito command line arguments are supported as well.
 
 ``` txt
-docker run -ti -v ${home}:/home/tokendito/ tokendito `
-  --okta-tile https://acme.okta.com/home/amazon_aws/000000000000000000x0/123 `
-  --username username@example.com `
-  --okta-mfa push `
-  --aws-output json `
-  --aws-region us-east-1 `
-  --aws-profile my-profile-name `
-  --aws-role-arn arn:aws:iam::000000000000:role/role-name
+docker run --rm -it -v ${home}:/home/tokendito/ tokendito \
+  --okta-tile https://acme.okta.com/home/amazon_aws/000000000000000000x0/123 \
+  --username username@example.com \
+  --okta-mfa push \
+  --aws-output json \
+  --aws-region us-east-1 \
+  --aws-profile my-profile-name \
+  --aws-role-arn arn:aws:iam::000000000000:role/role-name \
 ```
 
 Tokendito profiles are supported while using containers provided the proper volume mapping exists.
