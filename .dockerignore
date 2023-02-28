@@ -6,3 +6,4 @@
 !LICENSE.txt
 !README.md
 !tokendito/*.py
+!docker-entrypoint.sh
