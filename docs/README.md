@@ -83,9 +83,9 @@ options:
   --version             Displays version and exit
   --configure           Prompt user for configuration parameters
   --username OKTA_USERNAME
-                        username to log in to Okta. You can also use the OKTA_USERNAME environment variable.
+                        username to log in to Okta. You can also use the TOKENDITO_OKTA_USERNAME environment variable.
   --password OKTA_PASSWORD
-                        password to log in to Okta. You can also use the OKTA_PASSWORD environment variable.
+                        password to log in to Okta. You can also use the TOKENDITO_OKTA_PASSWORD environment variable.
   --profile USER_CONFIG_PROFILE
                         Tokendito configuration profile to use.
   --config-file USER_CONFIG_FILE
