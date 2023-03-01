@@ -45,14 +45,19 @@ jobs:
         tags: |
           type=ref,event=branch
           type=ref,event=pr
+          type=sha,format=long
+          type=raw,value=latest,enable={{is_default_branch}}
           type=semver,pattern={{version}}
+          type=semver,pattern={{major}}
           type=semver,pattern={{major}}.{{minor}}
+          type=semver,pattern={{major}}.{{minor}}.{{patch}}
     - name: Build container
       uses: docker/build-push-action@v4
       with:
         context: .
         push: false
         load: true
+        sbom: false
         platforms: ${{ matrix.platform }}
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
@@ -60,11 +65,21 @@ jobs:
         cache-to: type=gha,mode=max
       env:
         DOCKER_CONTENT_TRUST: 1
-    - name: Sign and push container image
-      uses: sudo-bot/action-docker-sign@latest
+    - name: Sign and push container image for new releases
       if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
-      with:
-        image-ref: "${{ steps.meta.outputs.tags }}"
-        private-key-id: "${{ secrets.DOCKER_PRIVATE_KEY_ID }}"
-        private-key: "${{ secrets.DOCKER_PRIVATE_KEY }}"
-        private-key-passphrase: "${{ secrets.DOCKER_PRIVATE_KEY_PASSPHRASE }}"
+      run: |
+        mkdir -p ~/.docker/trust/private
+        echo "${DOCKER_PRIVATE_KEY}" > ~/.docker/trust/private/${DOCKER_PRIVATE_KEY_ID}.key
+        chmod 0600 ~/.docker/trust/private/${DOCKER_PRIVATE_KEY_ID}.key
+        docker trust key load ~/.docker/trust/private/${DOCKER_PRIVATE_KEY_ID}.key --name "${DOCKER_PRIVATE_KEY_ID}"
+        echo "${{ steps.meta.outputs.tags }}" |  xargs -I {} -n 1 docker push --disable-content-trust=false {}
+        rm -rf ~/.docker/trust/private
+      env:
+        DOCKER_CONTENT_TRUST: 1
+        DOCKER_PRIVATE_KEY_ID: "${{ secrets.DOCKER_PRIVATE_KEY_ID }}"
+        DOCKER_PRIVATE_KEY: "${{ secrets.DOCKER_PRIVATE_KEY }}"
+        DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE: "${{ secrets.DOCKER_PRIVATE_KEY_PASSPHRASE }}"
+    - name: Verify signatures
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+      run: |
+        echo "${{ steps.meta.outputs.tags }}" |  xargs -I {} -n 1 docker trust inspect --pretty {}
