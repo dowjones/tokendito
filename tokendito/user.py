@@ -72,13 +72,13 @@ def parse_cli_args(args):
         "--username",
         dest="okta_username",
         help="username to log in to Okta. You can "
-        "also use the OKTA_USERNAME environment variable.",
+        "also use the TOKENDITO_OKTA_USERNAME environment variable.",
     )
     parser.add_argument(
         "--password",
         dest="okta_password",
         help="password to log in to Okta. You "
-        "can also use the OKTA_PASSWORD environment variable.",
+        "can also use the TOKENDITO_OKTA_PASSWORD environment variable.",
     )
     parser.add_argument(
         "--profile",

@@ -74,7 +74,7 @@ export DOCKER_CONTENT_TRUST=1
 then
 
 ``` txt
-docker run --rm -it tokendito --version
+docker run --rm -it tokendito/tokendito  --version
 ```
 
 You must map a volume in the Docker command to allow tokendito to write AWS credentials to your local system for use.  This is done with the `-v` flag.  See [Docker documentation](https://docs.docker.com/engine/reference/commandline/run/#-mount-volume--v---read-only) for help setting the syntax.  The following directories are used by tokendito and should be considered when mapping volumes:
@@ -87,13 +87,13 @@ These can be covered by mapping a single volume to both the host and container u
 Be sure to set the `-it` flags to enable an interactive terminal session.
 
 ``` txt
-docker run --rm -it -v ${home}:/home/tokendito/ tokendito
+docker run --rm -it -v ${home}:/home/tokendito/ tokendito/tokendito
 ```
 
 Tokendito command line arguments are supported as well.
 
 ``` txt
-docker run --rm -it -v ${home}:/home/tokendito/ tokendito \
+docker run --rm -it -v ${home}:/home/tokendito/ tokendito/tokendito \
   --okta-tile https://acme.okta.com/home/amazon_aws/000000000000000000x0/123 \
   --username username@example.com \
   --okta-mfa push \
@@ -106,7 +106,7 @@ docker run --rm -it -v ${home}:/home/tokendito/ tokendito \
 Tokendito profiles are supported while using containers provided the proper volume mapping exists.
 
 ``` txt
-docker run -ti -v ${home}:/home/tokendito/ tokendito --profile my-profile-name
+docker run -ti -v ${home}:/home/tokendito/ tokendito/tokendito --profile my-profile-name
 ```
 
 ## Tips, tricks, troubleshooting, examples, and more docs are [here](https://github.com/dowjones/tokendito/blob/main/docs/README.md)
