@@ -16,11 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      max-parallel: 2
-      matrix:
-        include:
-          - { platform: "linux/arm64", platform-tag: "arm64" }
-          - { platform: "linux/amd64", platform-tag: "amd64" }
     permissions:
       contents: read
       packages: write
@@ -56,28 +51,39 @@ jobs:
       with:
         context: .
         push: false
-        load: true
-        sbom: false
-        platforms: ${{ matrix.platform }}
+        platforms: linux/amd64,linux/arm64
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
       env:
         DOCKER_CONTENT_TRUST: 1
-    - name: Sign and push container image for new releases
+    - name: Set up trust signatures for releases
       if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
       run: |
         mkdir -p ~/.docker/trust/private
         echo "${DOCKER_PRIVATE_KEY}" > ~/.docker/trust/private/${DOCKER_PRIVATE_KEY_ID}.key
         chmod 0600 ~/.docker/trust/private/${DOCKER_PRIVATE_KEY_ID}.key
         docker trust key load ~/.docker/trust/private/${DOCKER_PRIVATE_KEY_ID}.key --name "${DOCKER_PRIVATE_KEY_ID}"
-        echo "${{ steps.meta.outputs.tags }}" |  xargs -I {} -n 1 docker push --disable-content-trust=false {}
-        rm -rf ~/.docker/trust/private
       env:
         DOCKER_CONTENT_TRUST: 1
         DOCKER_PRIVATE_KEY_ID: "${{ secrets.DOCKER_PRIVATE_KEY_ID }}"
         DOCKER_PRIVATE_KEY: "${{ secrets.DOCKER_PRIVATE_KEY }}"
+        DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE: "${{ secrets.DOCKER_PRIVATE_KEY_PASSPHRASE }}"
+    - name: Build and push container for releases
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        push: true
+        sbom: true
+        platforms: linux/amd64,linux/arm64
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+      env:
+        DOCKER_CONTENT_TRUST: 1
         DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE: "${{ secrets.DOCKER_PRIVATE_KEY_PASSPHRASE }}"
     - name: Verify signatures
       if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
