@@ -67,13 +67,13 @@ Using Docker eliminates the need to install tokendito and its requirements. We a
 
 Run tokendito with the `docker run` command. Tokendito supports [DCT](https://docs.docker.com/engine/security/trust/), and we encourage you to enforce image signature validation before running any containers.
 
-``` txt
+``` shell
 export DOCKER_CONTENT_TRUST=1
 ```
 
 then
 
-``` txt
+``` shell
 docker run --rm -it tokendito/tokendito  --version
 ```
 
@@ -86,14 +86,22 @@ These can be covered by mapping a single volume to both the host and container u
 
 Be sure to set the `-it` flags to enable an interactive terminal session.
 
-``` txt
-docker run --rm -it -v ${home}:/home/tokendito/ tokendito/tokendito
+In a Linux system, you can run:
+``` shell
+docker run --rm -it -v "$HOME/.aws":/home/tokendito/.aws  -v "$HOME/.config":/home/tokendito/.config tokendito/tokendito
+```
+
+On Windows, you can do the following instead:
+``` powershell
+docker run --rm -it -v "%USERPROFILE%\.aws":/home/tokendito/.aws  -v "%USERPROFILE%\.config":/home/tokendito/.config tokendito/tokendito
 ```
 
 Tokendito command line arguments are supported as well.
 
-``` txt
-docker run --rm -it -v ${home}:/home/tokendito/ tokendito/tokendito \
+**NOTE**: In the following examples the entire home directory is exported for simplicity. This is not recommended as it exposes too much data to the running container:
+
+``` shell
+docker run --rm -it -v "$HOME":/home/tokendito/ tokendito/tokendito \
   --okta-tile https://acme.okta.com/home/amazon_aws/000000000000000000x0/123 \
   --username username@example.com \
   --okta-mfa push \
@@ -105,8 +113,9 @@ docker run --rm -it -v ${home}:/home/tokendito/ tokendito/tokendito \
 
 Tokendito profiles are supported while using containers provided the proper volume mapping exists.
 
-``` txt
-docker run -ti -v ${home}:/home/tokendito/ tokendito/tokendito --profile my-profile-name
+``` shell
+docker run --rm -ti -v "$HOME":/home/tokendito tokendito/tokendito \
+  --profile my-profile-name
 ```
 
 ## Tips, tricks, troubleshooting, examples, and more docs are [here](https://github.com/dowjones/tokendito/blob/main/docs/README.md)

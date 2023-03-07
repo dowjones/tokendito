@@ -1172,7 +1172,7 @@ def test_create_directory(tmpdir):
     from tokendito import user
 
     path = tmpdir.mkdir("pytest")
-    testdir = f"{path}/pytest"
+    testdir = f"{path}/pytest/deepdir"
 
     ret = user.create_directory(testdir)
     assert ret is None
