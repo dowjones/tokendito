@@ -168,11 +168,9 @@ def create_directory(dir_name):
     """Create directories on the local machine."""
     if os.path.isdir(dir_name) is False:
         try:
-            os.mkdir(dir_name)
+            os.makedirs(dir_name, exist_ok=True)
         except OSError as error:
-            logger.error(
-                f"Cannot continue creating directory: {config.user['config_dir']}: {error.strerror}"
-            )
+            logger.error(f"Cannot continue creating directory: {dir_name}: {error.strerror}")
             sys.exit(1)
 
 
