@@ -1270,7 +1270,7 @@ def test_get_interactive_profile_name_invalid_input(mocker, monkeypatch):
         (None, "user_input", "user_input"),
     ],
 )
-def test_set_role_name(value, submit, expected):
+def test_set_role_name(value, submit, mocker, expected):
     """Test setting the AWS Role (profile) name."""
     from tokendito import Config
     from tokendito import user

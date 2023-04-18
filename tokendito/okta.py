@@ -82,6 +82,47 @@ def api_error_code_parser(status=None):
     return message
 
 
+def get_webfinger():
+    """Make a call to the webfinger endpoint.
+
+    Determine whether or not we can authenticate a user locally.
+    """
+    logger.debug("Call out to Webfinger")
+    url = f"{config.okta['org']}/.well-known/webfinger"
+    headers = {"accept": "application/jrd+json"}
+    payload = {
+        "resource": f"okta:acct:{config.okta['username']}",
+    }
+
+    try:
+        logger.debug(f"Calling {url} with {payload} and {headers}")
+        response = requests.get(url, params=payload, headers=headers)
+        response.raise_for_status()
+    except Exception as err:
+        logger.error(f"There was an error with the call to {url}: {err}")
+        sys.exit(1)
+
+    auth_type = None
+    try:
+        ret = response.json()
+        logger.debug(f"Response is {ret}")
+        # The auth type is deeply nested.
+        # TODO: implement SAML2
+        auth_type = ret["links"][0]["properties"]["okta:idp:type"]
+    except (KeyError, ValueError) as e:
+        logger.error(
+            f"{type(e).__name__} - Failed to parse response\n"
+            f"URL: {url}\n"
+            f"Status: {response.status_code}\n"
+            f"Content: {response.content}\n"
+        )
+        sys.exit(1)
+
+    if auth_type != "OKTA":
+        logger.error(f"Authentication type {auth_type} via IdP Discovery is not curretly supported")
+        sys.exit(1)
+
+
 def get_session_token(primary_auth, headers):
     """Get session_token.
 
@@ -115,6 +156,7 @@ def authenticate(config):
     headers = {"content-type": "application/json", "accept": "application/json"}
     payload = {"username": config.okta["username"], "password": config.okta["password"]}
 
+    get_webfinger()
     logger.debug("Authenticate user to Okta")
     logger.debug(f"Sending {headers}, {payload} to {config.okta['org']}")
     primary_auth = api_wrapper(f"{config.okta['org']}/api/v1/authn", payload, headers)
