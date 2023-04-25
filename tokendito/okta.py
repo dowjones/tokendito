@@ -82,7 +82,7 @@ def api_error_code_parser(status=None):
     return message
 
 
-def get_webfinger():
+def get_auth_properties(config):
     """Make a call to the webfinger endpoint.
 
     Determine whether or not we can authenticate a user locally.
@@ -102,25 +102,85 @@ def get_webfinger():
         logger.error(f"There was an error with the call to {url}: {err}")
         sys.exit(1)
 
-    auth_type = None
+    auth_properties = dict()
     try:
         ret = response.json()
-        logger.debug(f"Response is {ret}")
-        # The auth type is deeply nested.
-        # TODO: implement SAML2
-        auth_type = ret["links"][0]["properties"]["okta:idp:type"]
+        auth_properties = ret["links"][0]["properties"]
     except (KeyError, ValueError) as e:
-        logger.error(
-            f"{type(e).__name__} - Failed to parse response\n"
-            f"URL: {url}\n"
-            f"Status: {response.status_code}\n"
-            f"Content: {response.content}\n"
-        )
+        logger.error(f"Failed to parse authentication type in {url}:{str(e)}")
+        logger.debug(f"Response: {response.text}")
         sys.exit(1)
 
-    if auth_type != "OKTA":
-        logger.error(f"Authentication type {auth_type} via IdP Discovery is not curretly supported")
+    return auth_properties
+
+
+def get_saml_request(auth_properties):
+    url = f"{config.okta['org']}/sso/idps/{auth_properties['okta:idp:id']}"
+    saml_request = None
+    try:
+        logger.debug(f"Calling {url}")
+        response = requests.get(url)
+        response.raise_for_status()
+    except Exception as err:
+        logger.error(f"There was an error with the call to {url}: {err}")
         sys.exit(1)
+
+    saml_request = {
+        "post_url": extract_form_post_url(response.text),
+        "relay_state": extract_saml_relaystate(response.text),
+        "request": extract_saml_request(response.text, raw=True),
+    }
+    return saml_request
+
+
+def get_saml_response(saml_request, cookies):
+    payload = {
+        "loginHint": config.okta["username"],
+        "relayState": saml_request["relay_state"],
+        "SAMLRequest": saml_request["request"],
+    }
+    headers = {"accept": "text/html,application/xhtml+xml,application/xml"}
+    url = saml_request["post_url"]
+    saml_response = dict()
+    try:
+        logger.debug(f"Calling {url} with {cookies}, {payload}, and {headers}")
+        response = requests.post(url=url, data=payload, headers=headers, cookies=cookies)
+        response.raise_for_status()
+    except Exception as err:
+        logger.error(f"There was an error with the call to {url}: {err}")
+        sys.exit(1)
+
+    saml_response = {
+        "response": extract_saml_response(response.text, raw=True),
+        "relay_state": extract_saml_relaystate(response.text),
+        "post_url": extract_form_post_url(response.text),
+    }
+    return saml_response
+
+
+def send_saml_response(saml_response):
+    url = saml_response["post_url"]
+    headers = {"accept": "text/html,application/xhtml+xml,application/xml"}
+    payload = {
+        "SAMLResponse": saml_response["response"],
+        "RelayState": saml_response["relay_state"],
+    }
+
+    try:
+        logger.debug(f"Calling {url} with {payload} and {headers}")
+        response = requests.post(
+            url=url,
+            data=payload,
+            headers=headers,
+        )
+        response.raise_for_status()
+    except Exception as err:
+        logger.error(f"There was an error with the call to {url}: {err}")
+        sys.exit(1)
+
+    logger.debug(f"Have session: {response.cookies['sid']}")
+    session_cookies = response.cookies
+    return session_cookies
 
 
 def get_session_token(primary_auth, headers):
@@ -147,7 +207,37 @@ def get_session_token(primary_auth, headers):
 
 
 def authenticate(config):
-    """Authenticate user with okta credential.
+    """Authenticate user.
+
+    :param config: Config object
+    :return: session token, or sid cookie.
+    """
+    auth_properties = get_auth_properties(config)
+    token = None
+    sid = None
+
+    if auth_properties["okta:idp:type"] == "OKTA":
+        token = local_auth(config)
+    elif auth_properties["okta:idp:type"] == "SAML2":
+        saml_request = get_saml_request(auth_properties)
+        url = user.get_base_url(saml_request["post_url"])
+        config.okta["org"] = url
+        session_token = local_auth(config)
+        session_cookies = user.request_cookies(url=url, session_token=session_token)
+        saml_response = get_saml_response(saml_request, session_cookies)
+        sid = send_saml_response(saml_response)
+        url = user.get_base_url(saml_response["post_url"])
+        config.okta["org"] = url
+    else:
+        logger.error(
+            f"{auth_properties['okta:idp:type']} login via IdP Discovery is not curretly supported"
+        )
+        sys.exit(1)
+    return (token, sid)
+
+
+def local_auth(config):
+    """Authenticate local user with okta credential.
 
     :param config: Config object
     :return: MFA session with options
@@ -156,7 +246,6 @@ def authenticate(config):
     headers = {"content-type": "application/json", "accept": "application/json"}
     payload = {"username": config.okta["username"], "password": config.okta["password"]}
 
-    get_webfinger()
     logger.debug("Authenticate user to Okta")
     logger.debug(f"Sending {headers}, {payload} to {config.okta['org']}")
     primary_auth = api_wrapper(f"{config.okta['org']}/api/v1/authn", payload, headers)
@@ -167,21 +256,80 @@ def authenticate(config):
     return session_token
 
 
-def extract_saml_response(html):
+def extract_saml_response(html, raw=False):
     """Parse html, and extract a SAML document.
 
     :param html: String with HTML document.
+    :param raw: Boolean that determines whether or not the response should be decoded.
     :return: XML Document, or None
     """
     soup = BeautifulSoup(html, "html.parser")
     xml = None
+    saml_base64 = None
+    retval = None
 
     elem = soup.find("input", attrs={"name": "SAMLResponse"})
     if type(elem) is bs4.element.Tag:
         saml_base64 = str(elem.get("value"))
         xml = codecs.decode(saml_base64.encode("ascii"), "base64").decode("utf-8")
 
-    return xml
+        retval = xml
+        if raw:
+            retval = saml_base64
+    return retval
+
+
+def extract_saml_request(html, raw=False):
+    """Parse html, and extract a SAML document.
+
+    :param html: String with HTML document.
+    :param raw: Boolean that determines whether or not the response should be decoded.
+    :return: XML Document, or None
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    xml = None
+    saml_base64 = None
+    retval = None
+
+    elem = soup.find("input", attrs={"name": "SAMLRequest"})
+    if type(elem) is bs4.element.Tag:
+        saml_base64 = str(elem.get("value"))
+        xml = codecs.decode(saml_base64.encode("ascii"), "base64").decode("utf-8")
+
+        retval = xml
+        if raw:
+            retval = saml_base64
+    return retval
+
+
+def extract_form_post_url(html):
+    """Parse html, and extract a Form Action POST URL.
+
+    :param html: String with HTML document.
+    :return: URL string, or None
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    post_url = None
+
+    elem = soup.find("form", attrs={"id": "appForm"})
+    if type(elem) is bs4.element.Tag:
+        post_url = elem.get("action")
+    return str(post_url)
+
+
+def extract_saml_relaystate(html):
+    """Parse html, and extract SAML relay state from a form.
+
+    :param html: String with HTML document.
+    :return: relay state value, or None
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    relay_state = None
+
+    elem = soup.find("input", attrs={"name": "RelayState"})
+    if type(elem) is bs4.element.Tag:
+        relay_state = str(elem.get("value"))
+    return relay_state
 
 
 def extract_state_token(html):
