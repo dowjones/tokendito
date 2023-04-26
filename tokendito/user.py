@@ -1253,7 +1253,7 @@ def request_wrapper(method, url, headers=None, **kwargs):
     if headers is None:
         headers = {"content-type": "application/json", "accept": "application/json"}
 
-    logger.debug(f"Issuing {method} request to {url}")
+    logger.debug(f"Issuing {method} request to {url} with {headers} and {kwargs}")
     try:
         response = requests.request(method=method, url=url, headers=headers, **kwargs)
         response.raise_for_status()

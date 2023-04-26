@@ -39,7 +39,7 @@ def api_wrapper(url, payload, headers=None):
     :param headers: Headers of the request
     :return: Dictionary with authentication response
     """
-    logger.debug(f"url is {url}")
+    logger.debug(f"Calling {url} with {headers} and {payload}")
     try:
         response = requests.request("POST", url, data=json.dumps(payload), headers=headers)
         response.raise_for_status()
@@ -47,7 +47,7 @@ def api_wrapper(url, payload, headers=None):
         logger.error(f"There was an error with the call to {url}: {err}")
         sys.exit(1)
 
-    logger.debug(f"Response is {response}")
+    logger.debug(f"{response.url} responded with status code {response.status_code}")
 
     try:
         ret = response.json()
@@ -82,19 +82,20 @@ def api_error_code_parser(status=None):
     return message
 
 
-def get_auth_properties(config):
+def get_auth_properties(userid=None, url=None):
     """Make a call to the webfinger endpoint.
 
-    :param config: Config object
+    :param userid: User for which we are requesting an auth endpoint.
+    :param url: Site where we are looking up the user.
     :returns: dictionary with authentication properties.
     """
     payload = {
-        "resource": f"okta:acct:{config.okta['username']}",
+        "resource": f"okta:acct:{userid}",
     }
     headers = {"accept": "application/jrd+json"}
-    url = f"{config.okta['org']}/.well-known/webfinger"
+    url = f"{url}/.well-known/webfinger"
 
-    logger.debug(f"Looking up auth endpoint for {config.okta['username']} in {url}")
+    logger.debug(f"Looking up auth endpoint for {userid} in {url}")
     response = user.request_wrapper("GET", url, headers=headers, params=payload)
 
     auth_properties = dict()
@@ -105,7 +106,7 @@ def get_auth_properties(config):
         logger.error(f"Failed to parse authentication type in {url}:{str(e)}")
         logger.debug(f"Response: {response.text}")
         sys.exit(1)
-
+    logger.debug(f"Auth properties are {auth_properties}")
     return auth_properties
 
 
@@ -117,7 +118,8 @@ def get_saml_request(auth_properties):
     :returns: dict with post_url, relay_state, and base64 encoded saml request.
     """
     headers = {"accept": "text/html,application/xhtml+xml,application/xml"}
-    url = f"{config.okta['org']}/sso/idps/{auth_properties['okta:idp:id']}"
+    base_url = user.get_base_url(auth_properties["okta:idp:metadata"])
+    url = f"{base_url}/sso/idps/{auth_properties['okta:idp:id']}"
 
     logger.debug(f"Getting SAML request from {url}")
     response = user.request_wrapper("GET", url, headers=headers)
@@ -126,6 +128,8 @@ def get_saml_request(auth_properties):
         "relay_state": extract_saml_relaystate(response.text),
         "request": extract_saml_request(response.text, raw=True),
     }
+    user.add_sensitive_value_to_be_masked(saml_request["request"])
+    logger.debug(f"SAML request is {saml_request}")
     return saml_request
 
 
@@ -151,6 +155,8 @@ def send_saml_request(saml_request, cookies):
         "relay_state": extract_saml_relaystate(response.text),
         "post_url": extract_form_post_url(response.text),
     }
+    user.add_sensitive_value_to_be_masked(saml_response["response"])
+    logger.debug(f"SAML response is {saml_response}")
     return saml_response
 
 
@@ -167,7 +173,7 @@ def send_saml_response(saml_response):
     headers = {"accept": "text/html,application/xhtml+xml,application/xml"}
     url = saml_response["post_url"]
 
-    logger.debug(f"Sending SAML response to {url}")
+    logger.debug(f"Sending SAML response back to {url}")
     response = user.request_wrapper("POST", url, data=payload, headers=headers)
     session_cookies = response.cookies
     sid = session_cookies.get("sid")
@@ -206,13 +212,16 @@ def authenticate(config):
     :param config: Config object
     :return: session token, or sid cookie.
     """
-    auth_properties = get_auth_properties(config)
+    auth_properties = get_auth_properties(userid=config.okta["username"], url=config.okta["org"])
     token = None
     sid = None
 
     if auth_properties["okta:idp:type"] == "OKTA":
         token = local_auth(config)
-    elif auth_properties["okta:idp:type"] == "SAML2":
+    elif (
+        auth_properties["okta:idp:type"] == "SAML2"
+        and "okta" in auth_properties["okta:idp:metadata"]
+    ):
         saml_request = get_saml_request(auth_properties)
         url = user.get_base_url(saml_request["post_url"])
         config.okta["org"] = url
@@ -307,8 +316,8 @@ def extract_form_post_url(html):
 
     elem = soup.find("form", attrs={"id": "appForm"})
     if type(elem) is bs4.element.Tag:
-        post_url = elem.get("action")
-    return str(post_url)
+        post_url = str(elem.get("action"))
+    return post_url
 
 
 def extract_saml_relaystate(html):
