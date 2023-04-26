@@ -1192,7 +1192,7 @@ def request_cookies(url, session_token):
     url = f"{url}/api/v1/sessions"
     data = json.dumps({"sessionToken": f"{session_token}"})
 
-    response_with_cookie = make_request(method="POST", url=url, data=data)
+    response_with_cookie = request_wrapper(method="POST", url=url, data=data)
     sess_id = response_with_cookie.json()["id"]
     add_sensitive_value_to_be_masked(sess_id)
 
@@ -1217,7 +1217,7 @@ def discover_tile(url, cookies):
         "expand": ["items", "items.resource"],
     }
     logger.debug(f"Performing auto-discovery on {url}.")
-    response_with_tabs = make_request(method="GET", url=url, cookies=cookies, params=params)
+    response_with_tabs = request_wrapper(method="GET", url=url, cookies=cookies, params=params)
     tabs = response_with_tabs.json()
 
     aws_tiles = []
@@ -1240,7 +1240,7 @@ def discover_tile(url, cookies):
     return tile
 
 
-def make_request(method, url, headers=None, **kwargs):
+def request_wrapper(method, url, headers=None, **kwargs):
     """
     Wrap 'requests.request' and perform response checks.
 
@@ -1253,12 +1253,18 @@ def make_request(method, url, headers=None, **kwargs):
     if headers is None:
         headers = {"content-type": "application/json", "accept": "application/json"}
 
-    response = requests.request(method=method, url=url, headers=headers, **kwargs)
-
-    if response.status_code != 200:
+    logger.debug(f"Issuing {method} request to {url}")
+    try:
+        response = requests.request(method=method, url=url, headers=headers, **kwargs)
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as err:
         logger.error(
-            f"Your {method} request failed with status_code {response.status_code}.\n"
-            f"{response.content}\n"
+            f"The {method} request to {url} failed ({err.response.status_code}): "
+            f"{err.response.text}"
         )
+        sys.exit(1)
+    except Exception as err:
+        logger.error(f"The {method} request to {url} failed with {err}")
+        sys.exit(1)
 
     return response

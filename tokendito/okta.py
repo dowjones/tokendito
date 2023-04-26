@@ -85,22 +85,17 @@ def api_error_code_parser(status=None):
 def get_auth_properties(config):
     """Make a call to the webfinger endpoint.
 
-    Determine whether or not we can authenticate a user locally.
+    :param config: Config object
+    :returns: dictionary with authentication properties.
     """
-    logger.debug("Call out to Webfinger")
-    url = f"{config.okta['org']}/.well-known/webfinger"
-    headers = {"accept": "application/jrd+json"}
     payload = {
         "resource": f"okta:acct:{config.okta['username']}",
     }
+    headers = {"accept": "application/jrd+json"}
+    url = f"{config.okta['org']}/.well-known/webfinger"
 
-    try:
-        logger.debug(f"Calling {url} with {payload} and {headers}")
-        response = requests.get(url, params=payload, headers=headers)
-        response.raise_for_status()
-    except Exception as err:
-        logger.error(f"There was an error with the call to {url}: {err}")
-        sys.exit(1)
+    logger.debug(f"Looking up auth endpoint for {config.okta['username']} in {url}")
+    response = user.request_wrapper("GET", url, headers=headers, params=payload)
 
     auth_properties = dict()
     try:
@@ -115,16 +110,17 @@ def get_auth_properties(config):
 
 
 def get_saml_request(auth_properties):
-    url = f"{config.okta['org']}/sso/idps/{auth_properties['okta:idp:id']}"
-    saml_request = None
-    try:
-        logger.debug(f"Calling {url}")
-        response = requests.get(url)
-        response.raise_for_status()
-    except Exception as err:
-        logger.error(f"There was an error with the call to {url}: {err}")
-        sys.exit(1)
+    """
+    Get a SAML Request object from the Service Provider, to be submitted to the IdP.
 
+    :param auth_properties: dict with the IdP ID and type.
+    :returns: dict with post_url, relay_state, and base64 encoded saml request.
+    """
+    headers = {"accept": "text/html,application/xhtml+xml,application/xml"}
+    url = f"{config.okta['org']}/sso/idps/{auth_properties['okta:idp:id']}"
+
+    logger.debug(f"Getting SAML request from {url}")
+    response = user.request_wrapper("GET", url, headers=headers)
     saml_request = {
         "post_url": extract_form_post_url(response.text),
         "relay_state": extract_saml_relaystate(response.text),
@@ -133,7 +129,13 @@ def get_saml_request(auth_properties):
     return saml_request
 
 
-def get_saml_response(saml_request, cookies):
+def send_saml_request(saml_request, cookies):
+    """Submit SAML request to IdP, and get the response back.
+
+    :param cookies: session cookies with `sid`
+    :param saml_request: dict with IdP post_url, relay_state, and saml_request
+    :returns: dict with with SP post_url, relay_state, and saml_response
+    """
     payload = {
         "loginHint": config.okta["username"],
         "relayState": saml_request["relay_state"],
@@ -141,15 +143,9 @@ def get_saml_response(saml_request, cookies):
     }
     headers = {"accept": "text/html,application/xhtml+xml,application/xml"}
     url = saml_request["post_url"]
-    saml_response = dict()
-    try:
-        logger.debug(f"Calling {url} with {cookies}, {payload}, and {headers}")
-        response = requests.post(url=url, data=payload, headers=headers, cookies=cookies)
-        response.raise_for_status()
-    except Exception as err:
-        logger.error(f"There was an error with the call to {url}: {err}")
-        sys.exit(1)
+    logger.debug(f"Sending SAML request to {url}")
 
+    response = user.request_wrapper("GET", url, headers=headers, data=payload, cookies=cookies)
     saml_response = {
         "response": extract_saml_response(response.text, raw=True),
         "relay_state": extract_saml_relaystate(response.text),
@@ -159,27 +155,25 @@ def get_saml_response(saml_request, cookies):
 
 
 def send_saml_response(saml_response):
-    url = saml_response["post_url"]
-    headers = {"accept": "text/html,application/xhtml+xml,application/xml"}
+    """Submit SAML response to the SP.
+
+    :param saml_response: dict with with SP post_url, relay_state, and saml_response
+    :returns: `sid` session cookie
+    """
     payload = {
         "SAMLResponse": saml_response["response"],
         "RelayState": saml_response["relay_state"],
     }
+    headers = {"accept": "text/html,application/xhtml+xml,application/xml"}
+    url = saml_response["post_url"]
 
-    try:
-        logger.debug(f"Calling {url} with {payload} and {headers}")
-        response = requests.post(
-            url=url,
-            data=payload,
-            headers=headers,
-        )
-        response.raise_for_status()
-    except Exception as err:
-        logger.error(f"There was an error with the call to {url}: {err}")
-        sys.exit(1)
-
-    logger.debug(f"Have session: {response.cookies['sid']}")
+    logger.debug(f"Sending SAML response to {url}")
+    response = user.request_wrapper("POST", url, data=payload, headers=headers)
     session_cookies = response.cookies
+    sid = session_cookies.get("sid")
+    if sid is not None:
+        user.add_sensitive_value_to_be_masked(sid)
+    logger.debug(f"Have session cookies: {session_cookies}")
     return session_cookies
 
 
@@ -224,7 +218,7 @@ def authenticate(config):
         config.okta["org"] = url
         session_token = local_auth(config)
         session_cookies = user.request_cookies(url=url, session_token=session_token)
-        saml_response = get_saml_response(saml_request, session_cookies)
+        saml_response = send_saml_request(saml_request, session_cookies)
         sid = send_saml_response(saml_response)
         url = user.get_base_url(saml_response["post_url"])
         config.okta["org"] = url
