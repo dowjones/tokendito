@@ -1203,7 +1203,7 @@ def request_cookies(url, session_token):
     return cookies
 
 
-def discover_tile(url, cookies):
+def discover_tiles(url, cookies):
     """
     Discover aws tile url on user's okta dashboard.
 

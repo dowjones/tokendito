@@ -16,7 +16,6 @@ from botocore import UNSIGNED
 from botocore.client import Config
 from botocore.exceptions import ClientError
 import botocore.session
-import requests
 from tokendito import okta
 from tokendito import user
 
@@ -47,16 +46,14 @@ def get_output_types():
     return ["json", "text", "csv", "yaml", "yaml-stream"]
 
 
-def authenticate_to_roles(secret_session_token, urls, cookies=None):
+def authenticate_to_roles(urls, cookies=None):
     """Authenticate AWS user with saml.
 
-    :param secret_session_token: secret session token
     :param urls: list of tuples or tuple, with tiles info
     :param cookies: html cookies
     :return: response text
 
     """
-    payload = {"onetimetoken": secret_session_token}
     url_list = [urls] if isinstance(urls, tuple) else urls
     responses = []
     tile_count = len(url_list)
@@ -66,15 +63,8 @@ def authenticate_to_roles(secret_session_token, urls, cookies=None):
 
     logger.info(f"Discovering roles in {tile_count} tile{plural}.")
     for url, label in url_list:
-        try:
-            logger.debug(f"Performing role discovery in {url}")
-
-            response = requests.get(url, params=payload, cookies=cookies)
-            response.raise_for_status()
-            saml_response_string = response.text
-        except Exception as err:
-            logger.error(f"There was an error with the call to {url}: {err}")
-            sys.exit(1)
+        response = user.request_wrapper("GET", url, cookies=cookies)
+        saml_response_string = response.text
 
         saml_xml = okta.extract_saml_response(saml_response_string)
         if not saml_xml:

@@ -37,20 +37,17 @@ def cli(args):
         )
         sys.exit(1)
 
-    # Authenticate okta and AWS also use assumerole to assign the role
-    (session_token, session_cookies) = okta.authenticate(config)
+    # Authenticate to okta
+    session_cookies = okta.authenticate(config)
 
     if config.okta["tile"]:
         tile_label = ""
         config.okta["tile"] = (config.okta["tile"], tile_label)
     else:
-        if not session_cookies:
-            session_cookies = user.request_cookies(config.okta["org"], session_token)
-        config.okta["tile"] = user.discover_tile(config.okta["org"], session_cookies)
+        config.okta["tile"] = user.discover_tiles(config.okta["org"], session_cookies)
 
-    auth_tiles = aws.authenticate_to_roles(
-        session_token, config.okta["tile"], cookies=session_cookies
-    )
+    # Authenticate to AWS roles
+    auth_tiles = aws.authenticate_to_roles(config.okta["tile"], cookies=session_cookies)
 
     (role_response, role_name) = aws.select_assumeable_role(auth_tiles)
 

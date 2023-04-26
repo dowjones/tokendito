@@ -210,33 +210,25 @@ def authenticate(config):
     """Authenticate user.
 
     :param config: Config object
-    :return: session token, or sid cookie.
+    :return: session ID cookie.
     """
     auth_properties = get_auth_properties(userid=config.okta["username"], url=config.okta["org"])
-    token = None
     sid = None
 
     if auth_properties["okta:idp:type"] == "OKTA":
-        token = local_auth(config)
+        session_token = local_auth(config)
+        sid = user.request_cookies(config.okta["org"], session_token)
     elif (
         auth_properties["okta:idp:type"] == "SAML2"
         and "okta" in auth_properties["okta:idp:metadata"]
     ):
-        saml_request = get_saml_request(auth_properties)
-        url = user.get_base_url(saml_request["post_url"])
-        config.okta["org"] = url
-        session_token = local_auth(config)
-        session_cookies = user.request_cookies(url=url, session_token=session_token)
-        saml_response = send_saml_request(saml_request, session_cookies)
-        sid = send_saml_response(saml_response)
-        url = user.get_base_url(saml_response["post_url"])
-        config.okta["org"] = url
+        sid = saml2_auth(config, auth_properties)
     else:
         logger.error(
             f"{auth_properties['okta:idp:type']} login via IdP Discovery is not curretly supported"
         )
         sys.exit(1)
-    return (token, sid)
+    return sid
 
 
 def local_auth(config):
@@ -257,6 +249,27 @@ def local_auth(config):
         session_token = get_session_token(primary_auth, headers)
     logger.info("User has been succesfully authenticated.")
     return session_token
+
+
+def saml2_auth(config, auth_properties):
+    """SAML2 authentication flow.
+
+    :param config: Config object
+    :param auth_properties: dict with authentication properties
+    :returns: session ID cookie, if successful.
+    """
+    session_id = None
+    saml_request = get_saml_request(auth_properties)
+    url = user.get_base_url(saml_request["post_url"])
+    config.okta["org"] = url
+    session_token = local_auth(config)
+    session_cookies = user.request_cookies(url=url, session_token=session_token)
+    saml_response = send_saml_request(saml_request, session_cookies)
+    session_id = send_saml_response(saml_response)
+    url = user.get_base_url(saml_response["post_url"])
+    config.okta["org"] = url
+
+    return session_id
 
 
 def extract_saml_response(html, raw=False):
