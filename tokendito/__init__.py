@@ -93,7 +93,7 @@ class Config(object):
         return repr(other) == repr(self)
 
     def update(self, other):
-        """Copy values from another Config object."""
+        """Update values from another Config object."""
         self._check_constraints(**other.__dict__)
         for key in other.__dict__.keys():
             self.__dict__[key].update(other.__dict__[key])

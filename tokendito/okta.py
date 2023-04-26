@@ -8,6 +8,7 @@ This module handles the all Okta operations.
 
 """
 import codecs
+from copy import deepcopy
 import json
 import logging
 import re
@@ -124,6 +125,7 @@ def get_saml_request(auth_properties):
     logger.debug(f"Getting SAML request from {url}")
     response = user.request_wrapper("GET", url, headers=headers)
     saml_request = {
+        "base_url": user.get_base_url(extract_form_post_url(response.text)),
         "post_url": extract_form_post_url(response.text),
         "relay_state": extract_saml_relaystate(response.text),
         "request": extract_saml_request(response.text, raw=True),
@@ -258,17 +260,25 @@ def saml2_auth(config, auth_properties):
     :param auth_properties: dict with authentication properties
     :returns: session ID cookie, if successful.
     """
-    session_id = None
+    # Get the SAML request details
     saml_request = get_saml_request(auth_properties)
-    url = user.get_base_url(saml_request["post_url"])
-    config.okta["org"] = url
-    session_token = local_auth(config)
-    session_cookies = user.request_cookies(url=url, session_token=session_token)
-    saml_response = send_saml_request(saml_request, session_cookies)
-    session_id = send_saml_response(saml_response)
-    url = user.get_base_url(saml_response["post_url"])
-    config.okta["org"] = url
 
+    # Create a copy of our configuration, so that we can freely reuse it
+    # without Python's pass-as-reference-value interfering with it.
+    saml2_config = deepcopy(config)
+    saml2_config.okta["org"] = saml_request["base_url"]
+
+    # Try to authenticate using the new configuration. This could cause
+    # recursive calls, which allows for IdP chaining.
+    session_cookies = authenticate(saml2_config)
+
+    # Once we are authenticated, send the SAML request to the IdP.
+    # This call requires session cookies.
+    saml_response = send_saml_request(saml_request, session_cookies)
+
+    # Send SAML response from the IdP back to the SP, which will generate new
+    # session cookies.
+    session_id = send_saml_response(saml_response)
     return session_id
 
 
