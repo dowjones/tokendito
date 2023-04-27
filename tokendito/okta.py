@@ -18,7 +18,6 @@ import time
 import bs4
 from bs4 import BeautifulSoup
 import requests
-from tokendito import config
 from tokendito import duo
 from tokendito import user
 
@@ -90,25 +89,29 @@ def get_auth_properties(userid=None, url=None):
     :param url: Site where we are looking up the user.
     :returns: dictionary with authentication properties.
     """
-    payload = {
-        "resource": f"okta:acct:{userid}",
-    }
+    payload = {"resource": f"okta:acct:{userid}", "rel": "okta:idp"}
     headers = {"accept": "application/jrd+json"}
     url = f"{url}/.well-known/webfinger"
 
     logger.debug(f"Looking up auth endpoint for {userid} in {url}")
     response = user.request_wrapper("GET", url, headers=headers, params=payload)
 
-    auth_properties = dict()
     try:
-        ret = response.json()
-        auth_properties = ret["links"][0]["properties"]
+        ret = response.json()["links"][0]["properties"]
     except (KeyError, ValueError) as e:
         logger.error(f"Failed to parse authentication type in {url}:{str(e)}")
         logger.debug(f"Response: {response.text}")
         sys.exit(1)
-    logger.debug(f"Auth properties are {auth_properties}")
-    return auth_properties
+
+    # Try to get metadata, type, and ID if available, but ensure
+    # that a dictionary with the correct keys is returned.
+    properties = {}
+    properties["metadata"] = ret.get("okta:idp:metadata", None)
+    properties["type"] = ret.get("okta:idp:type", None)
+    properties["id"] = ret.get("okta:idp:id", None)
+
+    logger.debug(f"Auth properties are {properties}")
+    return properties
 
 
 def get_saml_request(auth_properties):
@@ -119,8 +122,8 @@ def get_saml_request(auth_properties):
     :returns: dict with post_url, relay_state, and base64 encoded saml request.
     """
     headers = {"accept": "text/html,application/xhtml+xml,application/xml"}
-    base_url = user.get_base_url(auth_properties["okta:idp:metadata"])
-    url = f"{base_url}/sso/idps/{auth_properties['okta:idp:id']}"
+    base_url = user.get_base_url(auth_properties["metadata"])
+    url = f"{base_url}/sso/idps/{auth_properties['id']}"
 
     logger.debug(f"Getting SAML request from {url}")
     response = user.request_wrapper("GET", url, headers=headers)
@@ -143,7 +146,6 @@ def send_saml_request(saml_request, cookies):
     :returns: dict with with SP post_url, relay_state, and saml_response
     """
     payload = {
-        "loginHint": config.okta["username"],
         "relayState": saml_request["relay_state"],
         "SAMLRequest": saml_request["request"],
     }
@@ -185,19 +187,20 @@ def send_saml_response(saml_response):
     return session_cookies
 
 
-def get_session_token(primary_auth, headers):
+def get_session_token(config, primary_auth, headers):
     """Get session_token.
 
-    param headers: Headers of the request
-    param primary_auth: Primary authentication
-    return session_token: Session Token from JSON response
+    :param config: Configuration object
+    :param headers: Headers of the request
+    :param primary_auth: Primary authentication
+    :return: Session Token from JSON response
     """
     status = primary_auth.get("status", None)
 
     if status == "SUCCESS" and "sessionToken" in primary_auth:
         session_token = primary_auth.get("sessionToken")
     elif status == "MFA_REQUIRED":
-        session_token = mfa_challenge(headers, primary_auth)
+        session_token = mfa_challenge(config, headers, primary_auth)
     else:
         logger.debug(f"Error parsing response: {json.dumps(primary_auth)}")
         logger.error("Okta auth failed: unknown status.")
@@ -217,20 +220,43 @@ def authenticate(config):
     auth_properties = get_auth_properties(userid=config.okta["username"], url=config.okta["org"])
     sid = None
 
-    if auth_properties["okta:idp:type"] == "OKTA":
+    if is_local_auth(auth_properties):
         session_token = local_auth(config)
         sid = user.request_cookies(config.okta["org"], session_token)
-    elif (
-        auth_properties["okta:idp:type"] == "SAML2"
-        and "okta" in auth_properties["okta:idp:metadata"]
-    ):
+    elif is_saml2_okta_auth(auth_properties):
         sid = saml2_auth(config, auth_properties)
     else:
-        logger.error(
-            f"{auth_properties['okta:idp:type']} login via IdP Discovery is not curretly supported"
-        )
+        logger.error(f"{auth_properties['type']} login via IdP Discovery is not curretly supported")
         sys.exit(1)
     return sid
+
+
+def is_local_auth(auth_properties):
+    """Check whether authentication happens locally.
+
+    :param auth_properties: auth_properties dict
+    :return: True for local auth, False otherwise.
+    """
+    try:
+        if auth_properties["type"] == "OKTA":
+            return True
+    except (TypeError, KeyError):
+        pass
+    return False
+
+
+def is_saml2_okta_auth(auth_properties):
+    """Check whether authentication happens via SAML2 on a different Okta instance.
+
+    :param auth_properties: auth_properties dict
+    :return: True for SAML2 on Okta, False otherwise.
+    """
+    try:
+        if auth_properties["type"] == "SAML2" and "okta" in auth_properties["metadata"]:
+            return True
+    except (TypeError, KeyError):
+        pass
+    return False
 
 
 def local_auth(config):
@@ -243,13 +269,13 @@ def local_auth(config):
     headers = {"content-type": "application/json", "accept": "application/json"}
     payload = {"username": config.okta["username"], "password": config.okta["password"]}
 
-    logger.debug("Authenticate user to Okta")
+    logger.debug(f"Authenticate user to {config.okta['org']}")
     logger.debug(f"Sending {headers}, {payload} to {config.okta['org']}")
     primary_auth = api_wrapper(f"{config.okta['org']}/api/v1/authn", payload, headers)
 
     while session_token is None:
-        session_token = get_session_token(primary_auth, headers)
-    logger.info("User has been succesfully authenticated.")
+        session_token = get_session_token(config, primary_auth, headers)
+    logger.info(f"User has been succesfully authenticated to {config.okta['org']}.")
     return session_token
 
 
@@ -267,7 +293,7 @@ def saml2_auth(config, auth_properties):
     # without Python's pass-as-reference-value interfering with it.
     saml2_config = deepcopy(config)
     saml2_config.okta["org"] = saml_request["base_url"]
-
+    logger.info(f"Authentication is being redirected to {saml2_config.okta['org']}.")
     # Try to authenticate using the new configuration. This could cause
     # recursive calls, which allows for IdP chaining.
     session_cookies = authenticate(saml2_config)
@@ -379,6 +405,7 @@ def extract_state_token(html):
 
 
 def mfa_provider_type(
+    config,
     mfa_provider,
     selected_factor,
     mfa_challenge_url,
@@ -389,6 +416,7 @@ def mfa_provider_type(
 ):
     """Receive session key.
 
+    :param config: Config object
     :param mfa_provider: MFA provider
     :param selected_factor: Selected MFA factor
     :param mfa_challenge_url: MFA challenge url
@@ -408,7 +436,7 @@ def mfa_provider_type(
         mfa_verify = push_approval(headers, mfa_challenge_url, payload)
     elif mfa_provider in ["OKTA", "GOOGLE"] and factor_type in ["token:software:totp", "sms"]:
         mfa_verify = totp_approval(
-            selected_mfa_option, headers, mfa_challenge_url, payload, primary_auth
+            config, selected_mfa_option, headers, mfa_challenge_url, payload, primary_auth
         )
     else:
         logger.error(
@@ -453,9 +481,10 @@ def mfa_index(preset_mfa, available_mfas, mfa_options):
     return index
 
 
-def mfa_challenge(headers, primary_auth):
+def mfa_challenge(config, headers, primary_auth):
     """Handle user mfa challenges.
 
+    :param config: Config object
     :param headers: headers what needs to be sent to api
     :param primary_auth: primary authentication
     :return: Okta MFA Session token after the successful entry of the code
@@ -492,6 +521,7 @@ def mfa_challenge(headers, primary_auth):
     mfa_provider = selected_factor["_embedded"]["factor"]["provider"]
     logger.debug(f"MFA Challenge URL: [{mfa_challenge_url}] headers: {headers}")
     mfa_session_token = mfa_provider_type(
+        config,
         mfa_provider,
         selected_factor,
         mfa_challenge_url,
@@ -504,9 +534,10 @@ def mfa_challenge(headers, primary_auth):
     return mfa_session_token
 
 
-def totp_approval(selected_mfa_option, headers, mfa_challenge_url, payload, primary_auth):
+def totp_approval(config, selected_mfa_option, headers, mfa_challenge_url, payload, primary_auth):
     """Handle user mfa options.
 
+    :param config: Config object
     :param selected_mfa_option: Selected MFA option (SMS, push, etc)
     :param headers: headers
     :param mfa_challenge_url: MFA challenge URL
@@ -522,7 +553,10 @@ def totp_approval(selected_mfa_option, headers, mfa_challenge_url, payload, prim
         user.add_sensitive_value_to_be_masked(config.okta["mfa_response"])
 
     # time to verify the mfa
-    payload = {"stateToken": primary_auth["stateToken"], "passCode": config.okta["mfa_response"]}
+    payload = {
+        "stateToken": primary_auth["stateToken"],
+        "passCode": config.okta["mfa_response"],
+    }
     # FIXME: This call needs to catch a 403 coming from a bad token
     mfa_verify = api_wrapper(mfa_challenge_url, payload, headers)
     if "sessionToken" in mfa_verify:
