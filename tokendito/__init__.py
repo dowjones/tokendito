@@ -22,8 +22,9 @@ class Config(object):
     """Creates configuration variables for the application."""
 
     _default_encoding = "utf-8"
-    if getattr(sys, "stdin") is not None:
-        _default_encoding = sys.stdin.encoding
+    if hasattr(sys, "stdin") and getattr(sys, "stdin") is not None:
+        if getattr(sys.stdin, "encoding") is not None:
+            _default_encoding = sys.stdin.encoding
 
     # Instantiated objects can get Class defaults with get_defaults()
     _defaults = dict(

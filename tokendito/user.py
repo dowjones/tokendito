@@ -1179,12 +1179,16 @@ def sanitize_config_values(config):
         logger.warning(f"AWS Region reset to {config.aws['region']}")
 
     # Expand any "~", if given by the user
-    config.user["config_dir"] = os.path.expanduser(config.user["config_dir"])
-    config.user["config_file"] = os.path.expanduser(config.user["config_file"])
-    config.aws["config_file"] = os.path.expanduser(config.aws["config_file"])
-    config.aws["shared_credentials_file"] = os.path.expanduser(
-        config.aws["shared_credentials_file"]
-    )
+    if "config_dir" in config.user:
+        config.user["config_dir"] = os.path.expanduser(config.user["config_dir"])
+    if "config_file" in config.user:
+        config.user["config_file"] = os.path.expanduser(config.user["config_file"])
+    if "config_file" in config.aws:
+        config.aws["config_file"] = os.path.expanduser(config.aws["config_file"])
+    if "shared_credentials_file" in config.aws:
+        config.aws["shared_credentials_file"] = os.path.expanduser(
+            config.aws["shared_credentials_file"]
+        )
     return config
 
 

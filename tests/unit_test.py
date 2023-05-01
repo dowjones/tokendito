@@ -60,6 +60,7 @@ def test_tty_assertion():
     import os
     import sys
     from tokendito.user import tty_assertion
+    from io import UnsupportedOperation
 
     # Save for reuse
     old_stdin = sys.stdin
@@ -79,7 +80,11 @@ def test_tty_assertion():
     # Test for closed descriptor
     with pytest.raises(SystemExit) as err:
         sys.stdin = old_stdin
-        os.close(sys.stdin.fileno())
+        # This try/except block is needed for running pytest through en editor
+        try:
+            os.close(sys.stdin.fileno())
+        except UnsupportedOperation:
+            pass
         tty_assertion()
     assert err.value.code == 1
 
@@ -305,13 +310,12 @@ def test_update_ini(tmpdir):
     assert ret.get(profile, "key_pytest_2") == "val_pytest_2"
 
 
-def test_validate_saml_response():
+def test_extract_saml_response():
     """Test for failures on SAML response."""
-    from tokendito import user
+    from tokendito import okta
 
-    with pytest.raises(SystemExit) as err:
-        user.validate_saml_response("")
-    assert err.value.code == 1
+    ret = okta.extract_saml_response("")
+    assert ret == None
 
 
 def test_assert_credentials():
@@ -587,7 +591,7 @@ def test_process_ini_file(tmpdir):
         (None, None, "okta_response_no_mfa_no_session_token"),
     ],
 )
-def test_user_session_token(
+def test_get_session_token(
     sample_json_response,
     session_token,
     expected,
@@ -596,20 +600,24 @@ def test_user_session_token(
     mfa_availability,
 ):
     """Test whether function return key on specific status."""
-    from tokendito.okta import user_session_token
+    from tokendito import Config
+    from tokendito.okta import get_session_token
 
+    pytest_config = Config()
     primary_auth = sample_json_response[mfa_availability]
 
-    mocker.patch("tokendito.okta.user_mfa_challenge", return_value=session_token)
-    assert user_session_token(primary_auth, sample_headers) == expected
+    mocker.patch("tokendito.okta.mfa_challenge", return_value=session_token)
+    assert get_session_token(pytest_config, primary_auth, sample_headers) == expected
     with pytest.raises(SystemExit) as err:
-        assert user_session_token(None, sample_headers) == err
+        assert get_session_token(pytest_config, None, sample_headers) == err
 
 
-def test_bad_user_session_token(mocker, sample_json_response, sample_headers):
+def test_bad_session_token(mocker, sample_json_response, sample_headers):
     """Test whether function behave accordingly."""
-    from tokendito.okta import user_session_token
+    from tokendito import Config
+    from tokendito.okta import get_session_token
 
+    pytest_config = Config()
     mocker.patch("tokendito.okta.api_error_code_parser", return_value=None)
     okta_response_statuses = ["okta_response_error", "okta_response_empty"]
 
@@ -617,29 +625,35 @@ def test_bad_user_session_token(mocker, sample_json_response, sample_headers):
         primary_auth = sample_json_response[response]
 
         with pytest.raises(SystemExit) as error:
-            assert user_session_token(primary_auth, sample_headers) == error
+            assert get_session_token(pytest_config, primary_auth, sample_headers) == error
 
 
 @pytest.mark.parametrize(
-    "mfa_provider, session_token, expected",
-    [("duo", 123, 123), ("okta", 345, 345), ("google", 456, 456)],
+    "mfa_provider, session_token, selected_factor, expected",
+    [
+        ("duo", 123, {"_embedded": {}}, 123),
+        ("okta", 345, {"_embedded": {"factor": {"factorType": "push"}}}, 345),
+        ("google", 456, {"_embedded": {"factor": {"factorType": "sms"}}}, 456),
+    ],
 )
 def test_mfa_provider_type(
     mfa_provider,
     session_token,
+    selected_factor,
     expected,
     mocker,
     sample_headers,
 ):
     """Test whether function return key on specific MFA provider."""
     from tokendito.okta import mfa_provider_type
+    from tokendito import Config
 
     payload = {"x": "y", "t": "z"}
     callback_url = "https://www.acme.org"
     selected_mfa_option = 1
     mfa_challenge_url = 1
     primary_auth = 1
-    selected_factor = 1
+    pytest_config = Config()
 
     mfa_verify = {"sessionToken": session_token}
     mocker.patch(
@@ -647,10 +661,12 @@ def test_mfa_provider_type(
         return_value=(payload, sample_headers, callback_url),
     )
     mocker.patch("tokendito.okta.api_wrapper", return_value=mfa_verify)
-    mocker.patch("tokendito.okta.user_mfa_options", return_value=mfa_verify)
+    mocker.patch("tokendito.okta.push_approval", return_value=mfa_verify)
+    mocker.patch("tokendito.okta.totp_approval", return_value=mfa_verify)
     mocker.patch("tokendito.duo.duo_api_post")
     assert (
         mfa_provider_type(
+            pytest_config,
             mfa_provider,
             selected_factor,
             mfa_challenge_url,
@@ -666,13 +682,15 @@ def test_mfa_provider_type(
 def test_bad_mfa_provider_type(mocker, sample_headers):
     """Test whether function return key on specific MFA provider."""
     from tokendito.okta import mfa_provider_type
+    from tokendito import Config
 
+    pytest_config = Config()
     payload = {"x": "y", "t": "z"}
     callback_url = "https://www.acme.org"
     selected_mfa_option = 1
     mfa_challenge_url = 1
     primary_auth = 1
-    selected_factor = 1
+    selected_factor = {}
 
     mfa_verify = {"sessionToken": "pytest_session_token"}
     mfa_bad_provider = "bad_provider"
@@ -681,11 +699,12 @@ def test_bad_mfa_provider_type(mocker, sample_headers):
         return_value=(payload, sample_headers, callback_url),
     )
     mocker.patch("tokendito.okta.api_wrapper", return_value=mfa_verify)
-    mocker.patch("tokendito.okta.user_mfa_options", return_value=mfa_verify)
+    mocker.patch("tokendito.okta.totp_approval", return_value=mfa_verify)
 
     with pytest.raises(SystemExit) as error:
         assert (
             mfa_provider_type(
+                pytest_config,
                 mfa_bad_provider,
                 selected_factor,
                 mfa_challenge_url,
@@ -786,9 +805,9 @@ def test_mfa_option_info(factor_type, output):
     "preset_mfa, output",
     [("push", 0), (None, 1), ("0xdeadbeef", 1), ("opfrar9yi4bKJNH2WEW", 0), ("pytest_dupe", 1)],
 )
-def test_user_mfa_index(preset_mfa, output, mocker, sample_json_response):
+def test_mfa_index(preset_mfa, output, mocker, sample_json_response):
     """Test whether the function returns correct mfa index."""
-    from tokendito.okta import user_mfa_index
+    from tokendito.okta import mfa_index
 
     primary_auth = sample_json_response["okta_response_mfa"]
 
@@ -798,10 +817,10 @@ def test_user_mfa_index(preset_mfa, output, mocker, sample_json_response):
 
     if preset_mfa == "pytest_dupe":
         with pytest.raises(SystemExit) as err:
-            user_mfa_index(preset_mfa, available_mfas, mfa_options)
+            mfa_index(preset_mfa, available_mfas, mfa_options)
         assert err.value.code == output
     else:
-        assert user_mfa_index(preset_mfa, available_mfas, mfa_options) == output
+        assert mfa_index(preset_mfa, available_mfas, mfa_options) == output
 
 
 def test_select_preferred_mfa_index(mocker, sample_json_response):
@@ -846,21 +865,16 @@ def test_select_preferred_mfa_index_output(email, capsys, mocker, sample_json_re
     assert captured.out == correct_output
 
 
-def test_user_mfa_options(sample_headers, sample_json_response, mocker):
-    """Test handling of mfa options."""
-    from tokendito.okta import user_mfa_options
+def test_mfa_options(sample_headers, sample_json_response, mocker):
+    """Test handling of MFA approval."""
+    from tokendito import Config
+    from tokendito.okta import totp_approval
 
     selected_mfa_option = {"factorType": "push"}
     primary_auth = sample_json_response["okta_response_no_mfa"]
     payload = {"x": "y", "t": "z"}
     mfa_challenge_url = "https://pytest"
-
-    # Test for push_approval returning the correct value
-    mocker.patch("tokendito.okta.push_approval", return_value=primary_auth)
-    ret = user_mfa_options(
-        selected_mfa_option, sample_headers, mfa_challenge_url, payload, primary_auth
-    )
-    assert ret == primary_auth
+    pytest_config = Config(okta={"mfa_response": None})
 
     # Test that selecting software token returns a session token
     selected_mfa_option = {"factorType": "token:software:totp"}
@@ -868,20 +882,22 @@ def test_user_mfa_options(sample_headers, sample_json_response, mocker):
     mfa_verify = {"sessionToken": "pytest"}
     mocker.patch("tokendito.user.get_input", return_value="012345")
     mocker.patch("tokendito.okta.api_wrapper", return_value=mfa_verify)
-    ret = user_mfa_options(
-        selected_mfa_option, sample_headers, mfa_challenge_url, payload, primary_auth
+    ret = totp_approval(
+        selected_mfa_option, sample_headers, mfa_challenge_url, payload, primary_auth, pytest_config
     )
     assert ret == mfa_verify
 
 
-def test_user_mfa_challenge_with_no_mfas(sample_headers, sample_json_response):
+def test_mfa_challenge_with_no_mfas(sample_headers, sample_json_response):
     """Test whether okta response has mfas."""
-    from tokendito.okta import user_mfa_challenge
+    from tokendito import Config
+    from tokendito.okta import mfa_challenge
 
     primary_auth = sample_json_response["okta_response_no_auth_methods"]
+    pytest_config = Config()
 
     with pytest.raises(SystemExit) as error:
-        assert user_mfa_challenge(sample_headers, primary_auth) == error
+        assert mfa_challenge(pytest_config, sample_headers, primary_auth) == error
 
 
 @pytest.mark.parametrize(
@@ -1087,7 +1103,7 @@ def test_authenticate_to_roles(status_code, monkeypatch):
     mock_get = {"status_code": status_code, "text": "response"}
     monkeypatch.setattr(requests, "get", mock_get)
     with pytest.raises(SystemExit) as error:
-        assert authenticate_to_roles("secret_session_token", [("http://test.url.com", "")]) == error
+        assert authenticate_to_roles([("http://test.url.com", "")], "secret_session_token") == error
 
 
 def test_get_mfa_response():

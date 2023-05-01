@@ -195,7 +195,11 @@ def get_session_token(config, primary_auth, headers):
     :param primary_auth: Primary authentication
     :return: Session Token from JSON response
     """
-    status = primary_auth.get("status", None)
+    status = None
+    try:
+        status = primary_auth.get("status", None)
+    except AttributeError:
+        pass
 
     if status == "SUCCESS" and "sessionToken" in primary_auth:
         session_token = primary_auth.get("sessionToken")
@@ -426,21 +430,21 @@ def mfa_provider_type(
 
     """
     mfa_verify = dict()
-    factor_type = selected_factor["_embedded"]["factor"]["factorType"]
+    factor_type = selected_factor.get("_embedded", {}).get("factor", {}).get("factorType", None)
 
-    if mfa_provider == "DUO":
+    if mfa_provider == "duo":
         payload, headers, callback_url = duo.authenticate_duo(selected_factor)
         duo.duo_api_post(callback_url, payload=payload)
         mfa_verify = api_wrapper(mfa_challenge_url, payload, headers)
-    elif mfa_provider == "OKTA" and factor_type == "push":
+    elif mfa_provider == "okta" and factor_type == "push":
         mfa_verify = push_approval(headers, mfa_challenge_url, payload)
-    elif mfa_provider in ["OKTA", "GOOGLE"] and factor_type in ["token:software:totp", "sms"]:
+    elif mfa_provider in ["okta", "google"] and factor_type in ["token:software:totp", "sms"]:
         mfa_verify = totp_approval(
             config, selected_mfa_option, headers, mfa_challenge_url, payload, primary_auth
         )
     else:
         logger.error(
-            f"Sorry, the MFA provider '{mfa_provider} {factor_type}' is not yet supported."
+            f"Sorry, the MFA provider '{mfa_provider}:{factor_type}' is not yet supported."
             " Please retry with another option."
         )
         exit(1)
@@ -534,7 +538,7 @@ def mfa_challenge(config, headers, primary_auth):
     return mfa_session_token
 
 
-def totp_approval(config, selected_mfa_option, headers, mfa_challenge_url, payload, primary_auth):
+def totp_approval(selected_mfa_option, headers, mfa_challenge_url, payload, primary_auth, config):
     """Handle user mfa options.
 
     :param config: Config object
