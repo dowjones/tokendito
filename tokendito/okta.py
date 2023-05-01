@@ -227,7 +227,7 @@ def authenticate(config):
     if is_local_auth(auth_properties):
         session_token = local_auth(config)
         sid = user.request_cookies(config.okta["org"], session_token)
-    elif is_saml2_okta_auth(auth_properties):
+    elif is_saml2_auth(auth_properties):
         sid = saml2_auth(config, auth_properties)
     else:
         logger.error(f"{auth_properties['type']} login via IdP Discovery is not curretly supported")
@@ -249,14 +249,14 @@ def is_local_auth(auth_properties):
     return False
 
 
-def is_saml2_okta_auth(auth_properties):
-    """Check whether authentication happens via SAML2 on a different Okta instance.
+def is_saml2_auth(auth_properties):
+    """Check whether authentication happens via SAML2 on a different IdP.
 
     :param auth_properties: auth_properties dict
     :return: True for SAML2 on Okta, False otherwise.
     """
     try:
-        if auth_properties["type"] == "SAML2" and "okta" in auth_properties["metadata"]:
+        if auth_properties["type"] == "SAML2":
             return True
     except (TypeError, KeyError):
         pass
