@@ -39,7 +39,7 @@ def api_wrapper(url, payload, headers=None):
     :param headers: Headers of the request
     :return: Dictionary with authentication response
     """
-    logger.debug(f"Calling {url} with {headers} and {payload}")
+    logger.debug(f"Calling {url} with {headers}")
     try:
         response = requests.request("POST", url, data=json.dumps(payload), headers=headers)
         response.raise_for_status()
@@ -432,13 +432,13 @@ def mfa_provider_type(
     mfa_verify = dict()
     factor_type = selected_factor.get("_embedded", {}).get("factor", {}).get("factorType", None)
 
-    if mfa_provider == "duo":
+    if mfa_provider == "DUO":
         payload, headers, callback_url = duo.authenticate_duo(selected_factor)
         duo.duo_api_post(callback_url, payload=payload)
         mfa_verify = api_wrapper(mfa_challenge_url, payload, headers)
-    elif mfa_provider == "okta" and factor_type == "push":
+    elif mfa_provider == "OKTA" and factor_type == "push":
         mfa_verify = push_approval(headers, mfa_challenge_url, payload)
-    elif mfa_provider in ["okta", "google"] and factor_type in ["token:software:totp", "sms"]:
+    elif mfa_provider in ["OKTA", "GOOGLE"] and factor_type in ["token:software:totp", "sms"]:
         mfa_verify = totp_approval(
             config, selected_mfa_option, headers, mfa_challenge_url, payload, primary_auth
         )
@@ -538,7 +538,7 @@ def mfa_challenge(config, headers, primary_auth):
     return mfa_session_token
 
 
-def totp_approval(selected_mfa_option, headers, mfa_challenge_url, payload, primary_auth, config):
+def totp_approval(config, selected_mfa_option, headers, mfa_challenge_url, payload, primary_auth):
     """Handle user mfa options.
 
     :param config: Config object

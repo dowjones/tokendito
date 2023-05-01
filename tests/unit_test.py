@@ -631,9 +631,9 @@ def test_bad_session_token(mocker, sample_json_response, sample_headers):
 @pytest.mark.parametrize(
     "mfa_provider, session_token, selected_factor, expected",
     [
-        ("duo", 123, {"_embedded": {}}, 123),
-        ("okta", 345, {"_embedded": {"factor": {"factorType": "push"}}}, 345),
-        ("google", 456, {"_embedded": {"factor": {"factorType": "sms"}}}, 456),
+        ("DUO", 123, {"_embedded": {}}, 123),
+        ("OKTA", 345, {"_embedded": {"factor": {"factorType": "push"}}}, 345),
+        ("GOOGLE", 456, {"_embedded": {"factor": {"factorType": "sms"}}}, 456),
     ],
 )
 def test_mfa_provider_type(
@@ -883,7 +883,7 @@ def test_mfa_options(sample_headers, sample_json_response, mocker):
     mocker.patch("tokendito.user.get_input", return_value="012345")
     mocker.patch("tokendito.okta.api_wrapper", return_value=mfa_verify)
     ret = totp_approval(
-        selected_mfa_option, sample_headers, mfa_challenge_url, payload, primary_auth, pytest_config
+        pytest_config, selected_mfa_option, sample_headers, mfa_challenge_url, payload, primary_auth
     )
     assert ret == mfa_verify
 
