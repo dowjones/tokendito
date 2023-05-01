@@ -315,7 +315,7 @@ def test_extract_saml_response():
     from tokendito import okta
 
     ret = okta.extract_saml_response("")
-    assert ret == None
+    assert ret is None
 
 
 def test_assert_credentials():
