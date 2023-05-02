@@ -1463,3 +1463,35 @@ def test_get_output_types():
 
     ret = aws.get_output_types()
     assert "json" in ret
+
+
+@pytest.mark.parametrize(
+    "auth_properties,expected",
+    [
+        ({}, False),
+        (None, False),
+        ({"type": "OKTA"}, True),
+        ({"type": "SAML2"}, False),
+    ],
+)
+def test_is_local_auth(auth_properties, expected):
+    """Test local auth method."""
+    from tokendito import okta
+
+    assert okta.is_local_auth(auth_properties) == expected
+
+
+@pytest.mark.parametrize(
+    "auth_properties,expected",
+    [
+        ({}, False),
+        (None, False),
+        ({"type": "OKTA"}, False),
+        ({"type": "SAML2"}, True),
+    ],
+)
+def test_is_saml2_auth(auth_properties, expected):
+    """Test saml2 auth method."""
+    from tokendito import okta
+
+    assert okta.is_saml2_auth(auth_properties) == expected
