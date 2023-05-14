@@ -1698,24 +1698,49 @@ def test_authenticate(mocker):
             assert (okta.authenticate(pytest_config) == error)
 
 
-#    """Test local auth method."""
-#    from tokendito import okta
-#
-#    with pytest.raises(ValueError):
-#        okta.local_auth("pytest")
-#
-# def test_saml2_auth():
-#    """Test saml2 authentication."""
-#    from tokendito import okta
-#
-#    with pytest.raises(ValueError):
-#        okta.saml2_auth("pytest")
-#
-#
-# def test_totp_approval():
-#    """Test TOTP approval."""
-#    from tokendito import okta
-#
-#    with pytest.raises(ValueError):
-#        okta.totp_approval("pytest")
-#
+def test_local_auth(mocker):
+    """Test local auth method."""
+    from tokendito import okta
+    from tokendito import Config
+
+    pytest_config = Config(
+        okta={
+            "username": "pytest",
+            "password": "pytest",
+            "org": "https://acme.okta.org/",
+        }
+    )
+    api_wrapper_response = {"status": "SUCCESS", "sessionToken": "pytesttoken"}
+
+    mocker.patch("tokendito.okta.api_wrapper", return_value=api_wrapper_response)
+    mocker.patch("tokendito.okta.get_session_token", return_value="pytesttoken")
+    assert okta.local_auth(pytest_config) == "pytesttoken"
+
+def test_saml2_auth(mocker):
+    """Test saml2 authentication."""
+    from tokendito import okta
+    from tokendito import Config
+
+    auth_properties = {"id": "id", "metadata": "metadata"}
+
+    pytest_config = Config(
+        okta={
+            "username": "pytest",
+            "password": "pytest",
+            "org": "https://acme.okta.org/",
+        }
+    )
+    saml_request = {
+        "base_url": "https://acme.okta.com",
+    }    
+    mocker.patch("tokendito.okta.get_saml_request", return_value=saml_request)
+    mocker.patch("tokendito.okta.authenticate", return_value="pytestsessioncookie")
+
+
+    saml_response = {
+        "response": "pytestresponse",
+    }
+
+    mocker.patch("tokendito.okta.send_saml_request", return_value=saml_response)
+    mocker.patch("tokendito.okta.send_saml_response", return_value="pytestsessionid")
+    assert okta.saml2_auth(pytest_config, auth_properties) == "pytestsessionid"
