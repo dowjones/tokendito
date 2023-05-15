@@ -222,6 +222,9 @@ def authenticate(config):
     :return: session ID cookie.
     """
     auth_properties = get_auth_properties(userid=config.okta["username"], url=config.okta["org"])
+    if "type" not in auth_properties:
+        logger.error("Okta auth failed: unknown type.")
+        sys.exit(1)
     sid = None
 
     if is_local_auth(auth_properties):

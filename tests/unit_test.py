@@ -310,14 +310,6 @@ def test_update_ini(tmpdir):
     assert ret.get(profile, "key_pytest_2") == "val_pytest_2"
 
 
-def test_extract_saml_response():
-    """Test for failures on SAML response."""
-    from tokendito import okta
-
-    ret = okta.extract_saml_response("")
-    assert ret is None
-
-
 def test_assert_credentials():
     """Test whether getting credentials works as expeted."""
     from moto import mock_sts
@@ -1495,3 +1487,296 @@ def test_is_saml2_auth(auth_properties, expected):
     from tokendito import okta
 
     assert okta.is_saml2_auth(auth_properties) == expected
+
+
+def test_request_wrapper():
+    """Test whether request_wrapper returns the correct data."""
+    from tokendito.user import request_wrapper
+
+    url = "https://acme.org"
+
+    with requests_mock.Mocker() as m:
+        data = {"response": "ok"}
+        m.get(url, json=data, status_code=200)
+        assert request_wrapper("GET", url).json() == data
+
+    with requests_mock.Mocker() as m:
+        data = {"response": "ok"}
+        m.post(url, json=data, status_code=200)
+        assert request_wrapper("POST", url).json() == data
+
+    with pytest.raises(SystemExit) as error, requests_mock.Mocker() as m:
+        m.post("invalid_url", json=data, status_code=200)
+        assert request_wrapper("GET", "invalid_url") == error
+
+
+@pytest.mark.parametrize(
+    "html, raw, expected",
+    [
+        (
+            '<html><body><input name="SAMLResponse" type="hidden" '
+            'value="PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4="></body></html>',
+            False,
+            '<?xml version="1.0" encoding="UTF-8"?>',
+        ),
+        (
+            '<html><body><input name="SAMLResponse" type="hidden" '
+            'value="PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4="></body></html>',
+            True,
+            "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4=",
+        ),
+        (
+            "",
+            False,
+            None,
+        ),
+        (
+            "invalid html",
+            False,
+            None,
+        ),
+    ],
+)
+def test_extract_saml_response(html, raw, expected):
+    """Test extracting SAML response."""
+    from tokendito import okta
+
+    assert okta.extract_saml_response(html, raw) == expected
+
+
+@pytest.mark.parametrize(
+    "html, raw, expected",
+    [
+        (
+            '<html><body><input name="SAMLRequest" type="hidden" '
+            'value="PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4="></body></html>',
+            False,
+            '<?xml version="1.0" encoding="UTF-8"?>',
+        ),
+        (
+            '<html><body><input name="SAMLRequest" type="hidden" '
+            'value="PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4="></body></html>',
+            True,
+            "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4=",
+        ),
+        (
+            "",
+            False,
+            None,
+        ),
+        (
+            "invalid html",
+            False,
+            None,
+        ),
+    ],
+)
+def test_extract_saml_request(html, raw, expected):
+    """Test extracting SAML response."""
+    from tokendito import okta
+
+    assert okta.extract_saml_request(html, raw) == expected
+
+
+@pytest.mark.parametrize(
+    "html,expected",
+    [
+        (
+            "<html><body><form action='https://acme.okta.com/app/okta_org2org/"
+            "akjlkjlksjx0xmdd/sso/saml' id='appForm' method='POST'</form></body></html>",
+            "https://acme.okta.com/app/okta_org2org/akjlkjlksjx0xmdd/sso/saml",
+        ),
+        ("<html><body><form action='' id='appForm' method='POST'</form></body></html>", ""),
+        ("invalid html", None),
+    ],
+)
+def test_extract_form_post_url(html, expected):
+    """Test extracting form post URL."""
+    from tokendito import okta
+
+    assert okta.extract_form_post_url(html) == expected
+
+
+@pytest.mark.parametrize(
+    "html,expected",
+    [
+        (
+            "<html><body><input name='RelayState' type='hidden' value='foobar'></body></html>",
+            "foobar",
+        ),
+        ("<html><body><input name='RelayState' type='hidden' value=''></body></html>", ""),
+        ("invalid html", None),
+    ],
+)
+def test_extract_saml_relaystate(html, expected):
+    """Test extracting SAML relay state."""
+    from tokendito import okta
+
+    assert okta.extract_saml_relaystate(html) == expected
+
+
+def test_get_saml_request(mocker):
+    """Test getting SAML request."""
+    from tokendito import okta
+
+    request_wrapper_response = Mock()
+    auth_properties = {"id": "id", "metadata": "metadata"}
+    request_wrapper_response.text = (
+        "<html><body><form action='https://acme.okta.com/app/okta_org2org/akjlkjlksjx0xmdd/sso/"
+        "saml' id='appForm' method='POST'</form><input name='SAMLRequest' type='hidden' "
+        "value='PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4='>"
+        "<input name='RelayState' type='hidden' value='foobar'></body></html>"
+    )
+    mocker.patch("tokendito.user.request_wrapper", return_value=request_wrapper_response)
+
+    assert okta.get_saml_request(auth_properties) == {
+        "base_url": "https://acme.okta.com",
+        "post_url": "https://acme.okta.com/app/okta_org2org/akjlkjlksjx0xmdd/sso/saml",
+        "relay_state": "foobar",
+        "request": "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4=",
+    }
+
+
+def test_send_saml_request(mocker):
+    """Test sending SAML request."""
+    from tokendito import okta
+
+    request_wrapper_response = Mock()
+    request_wrapper_response.text = (
+        "<html><body><form action='https://acme.okta.com/app/okta_org2org/akjlkjlksjx0xmdd/sso/"
+        "saml' id='appForm' method='POST'</form><input name='SAMLResponse' type='hidden' "
+        "value='PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4='>"
+        "<input name='RelayState' type='hidden' value='foobar'></body></html>"
+    )
+
+    saml_request = {"relay_state": "relay_state", "request": "request", "post_url": "post_url"}
+    cookie = {"sid": "pytestcookie"}
+
+    mocker.patch("tokendito.user.request_wrapper", return_value=request_wrapper_response)
+
+    assert okta.send_saml_request(saml_request, cookie) == {
+        "response": "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4=",
+        "relay_state": "foobar",
+        "post_url": "https://acme.okta.com/app/okta_org2org/akjlkjlksjx0xmdd/sso/saml",
+    }
+
+
+def test_send_saml_response(mocker):
+    """Test sending SAML response."""
+    from tokendito import okta
+
+    request_wrapper_response = Mock()
+    request_wrapper_response.cookies = {"sid": "pytestcookie"}
+
+    saml_response = {
+        "response": "pytestresponse",
+        "relay_state": "foobar",
+        "post_url": "https://acme.okta.com/app/okta_org2org/akjlkjlksjx0xmdd/sso/saml",
+    }
+
+    mocker.patch("tokendito.user.request_wrapper", return_value=request_wrapper_response)
+    assert okta.send_saml_response(saml_response) == request_wrapper_response.cookies
+
+
+def test_authenticate(mocker):
+    """Test authentication."""
+    from tokendito import okta
+    from tokendito import Config
+
+    pytest_config = Config(
+        okta={
+            "username": "pytest",
+            "password": "pytest",
+            "org": "https://acme.okta.org/",
+        }
+    )
+    sid = {"sid": "pytestsid"}
+    mocker.patch("tokendito.user.request_cookies", return_value=sid)
+    mocker.patch("tokendito.okta.local_auth", return_value="foobar")
+    mocker.patch("tokendito.okta.saml2_auth", return_value=sid)
+    with mocker.patch("tokendito.okta.get_auth_properties", return_value={"type": "OKTA"}):
+        assert okta.authenticate(pytest_config) == sid
+    with mocker.patch("tokendito.okta.get_auth_properties", return_value={"type": "SAML2"}):
+        assert okta.authenticate(pytest_config) == sid
+    with mocker.patch("tokendito.okta.get_auth_properties", return_value={"type": "UNKNOWN"}):
+        with pytest.raises(SystemExit) as error:
+            assert okta.authenticate(pytest_config) == error
+    with mocker.patch("tokendito.okta.get_auth_properties", return_value={}):
+        with pytest.raises(SystemExit) as error:
+            assert okta.authenticate(pytest_config) == error
+
+
+def test_local_auth(mocker):
+    """Test local auth method."""
+    from tokendito import okta
+    from tokendito import Config
+
+    pytest_config = Config(
+        okta={
+            "username": "pytest",
+            "password": "pytest",
+            "org": "https://acme.okta.org/",
+        }
+    )
+    api_wrapper_response = {"status": "SUCCESS", "sessionToken": "pytesttoken"}
+
+    mocker.patch("tokendito.okta.api_wrapper", return_value=api_wrapper_response)
+    mocker.patch("tokendito.okta.get_session_token", return_value="pytesttoken")
+    assert okta.local_auth(pytest_config) == "pytesttoken"
+
+
+def test_saml2_auth(mocker):
+    """Test saml2 authentication."""
+    from tokendito import okta
+    from tokendito import Config
+
+    auth_properties = {"id": "id", "metadata": "metadata"}
+
+    pytest_config = Config(
+        okta={
+            "username": "pytest",
+            "password": "pytest",
+            "org": "https://acme.okta.org/",
+        }
+    )
+    saml_request = {
+        "base_url": "https://acme.okta.com",
+    }
+    mocker.patch("tokendito.okta.get_saml_request", return_value=saml_request)
+    mocker.patch("tokendito.okta.authenticate", return_value="pytestsessioncookie")
+
+    saml_response = {
+        "response": "pytestresponse",
+    }
+
+    mocker.patch("tokendito.okta.send_saml_request", return_value=saml_response)
+    mocker.patch("tokendito.okta.send_saml_response", return_value="pytestsessionid")
+    assert okta.saml2_auth(pytest_config, auth_properties) == "pytestsessionid"
+
+
+def test_assume_role(mocker):
+    """Test assuming role."""
+    from tokendito import aws
+    from tokendito import Config
+
+    pytest_config = Config(
+        okta={
+            "username": "pytest",
+            "password": "pytest",
+            "org": "https://acme.okta.org/",
+        }
+    )
+    role_arn = "0000000000000000000000000:role/testrole"
+    session_name = "pytestsession"
+    assumed_role_object = {
+        "Credentials": {
+            "AccessKeyId": "pytestaccesskey",
+            "SecretAccessKey": "pytestsecretkey",
+            "SessionToken": "pytestsessiontoken",
+        }
+    }
+    with mocker.patch("tokendito.aws.handle_assume_role", return_value=assumed_role_object):
+        assert aws.assume_role(pytest_config, role_arn, session_name) == assumed_role_object
+    with mocker.patch("tokendito.aws.handle_assume_role", return_value={}):
+        with pytest.raises(SystemExit) as error:
+            assert aws.assume_role(pytest_config, role_arn, session_name) == error
