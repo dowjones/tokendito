@@ -3,12 +3,12 @@
 """Functional tests, and local fixtures."""
 import datetime
 import os
-from os import environ, path
+from os import environ
+from os import path
 import re
 import subprocess
 import sys
 import time
-
 
 import pytest
 
@@ -142,7 +142,9 @@ def test_version(package_version, package_regex, runnable):
 def test_parameter_collection(monkeypatch, tmpdir):
     """Ensure that the order of arguments has the correct behavior."""
     from argparse import Namespace
-    from tokendito import user, Config
+
+    from tokendito import Config
+    from tokendito import user
 
     config = Config()
     data = "[default]\n"
@@ -186,7 +188,8 @@ def test_quiet_failure():
 
 def test_generate_config(custom_args, config_file):
     """Test writing to a config file."""
-    from tokendito import user, Config
+    from tokendito import Config
+    from tokendito import user
 
     pytest_cfg = Config()
     tool_args = user.parse_cli_args(custom_args)
@@ -223,8 +226,10 @@ def test_generate_config(custom_args, config_file):
 @pytest.mark.run("second-to-last")
 def test_generate_credentials(custom_args, config_file):
     """Run the tool and generate credentials."""
-    from tokendito import user, config
     import pyotp
+
+    from tokendito import config
+    from tokendito import user
 
     # Emulate helpers.process_options() bypassing interactive portions.
     tool_args = user.parse_cli_args(custom_args)
@@ -296,7 +301,8 @@ def test_generate_credentials(custom_args, config_file):
 @pytest.mark.run("last")
 def test_aws_credentials(custom_args):
     """Run the AWS cli to verify whether credentials work."""
-    from tokendito import user, config
+    from tokendito import config
+    from tokendito import user
 
     # Emulate helpers.process_options() bypassing interactive portions.
     tool_args = user.parse_cli_args(custom_args)

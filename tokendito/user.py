@@ -473,25 +473,6 @@ def extract_arns(saml):
     return roles_and_providers
 
 
-def validate_saml_response(html):
-    """Parse html to validate that saml a saml response was returned."""
-    soup = BeautifulSoup(html, "html.parser")
-
-    xml = None
-    for elem in soup.find_all("input", attrs={"name": "SAMLResponse"}):
-        saml_base64 = elem.get("value")
-        xml = codecs.decode(saml_base64.encode("ascii"), "base64").decode("utf-8")
-
-    if xml is None:
-        logger.error(
-            "Invalid data detected in SAML response. View the response with the DEBUG loglevel."
-        )
-        logger.debug(html)
-        sys.exit(1)
-
-    return xml
-
-
 def validate_okta_org(input_url=None):
     """Validate whether a given URL is a valid AWS Org URL in Okta.
 
@@ -1197,6 +1178,17 @@ def sanitize_config_values(config):
         config.aws["region"] = config.get_defaults()["aws"]["region"]
         logger.warning(f"AWS Region reset to {config.aws['region']}")
 
+    # Expand any "~", if given by the user
+    if "config_dir" in config.user:
+        config.user["config_dir"] = os.path.expanduser(config.user["config_dir"])
+    if "config_file" in config.user:
+        config.user["config_file"] = os.path.expanduser(config.user["config_file"])
+    if "config_file" in config.aws:
+        config.aws["config_file"] = os.path.expanduser(config.aws["config_file"])
+    if "shared_credentials_file" in config.aws:
+        config.aws["shared_credentials_file"] = os.path.expanduser(
+            config.aws["shared_credentials_file"]
+        )
     return config
 
 
@@ -1211,7 +1203,7 @@ def request_cookies(url, session_token):
     url = f"{url}/api/v1/sessions"
     data = json.dumps({"sessionToken": f"{session_token}"})
 
-    response_with_cookie = make_request(method="POST", url=url, data=data)
+    response_with_cookie = request_wrapper(method="POST", url=url, data=data)
     sess_id = response_with_cookie.json()["id"]
     add_sensitive_value_to_be_masked(sess_id)
 
@@ -1222,7 +1214,7 @@ def request_cookies(url, session_token):
     return cookies
 
 
-def discover_tile(url, cookies):
+def discover_tiles(url, cookies):
     """
     Discover aws tile url on user's okta dashboard.
 
@@ -1236,7 +1228,7 @@ def discover_tile(url, cookies):
         "expand": ["items", "items.resource"],
     }
     logger.debug(f"Performing auto-discovery on {url}.")
-    response_with_tabs = make_request(method="GET", url=url, cookies=cookies, params=params)
+    response_with_tabs = request_wrapper(method="GET", url=url, cookies=cookies, params=params)
     tabs = response_with_tabs.json()
 
     aws_tiles = []
@@ -1259,7 +1251,7 @@ def discover_tile(url, cookies):
     return tile
 
 
-def make_request(method, url, headers=None, **kwargs):
+def request_wrapper(method, url, headers=None, **kwargs):
     """
     Wrap 'requests.request' and perform response checks.
 
@@ -1272,12 +1264,18 @@ def make_request(method, url, headers=None, **kwargs):
     if headers is None:
         headers = {"content-type": "application/json", "accept": "application/json"}
 
-    response = requests.request(method=method, url=url, headers=headers, **kwargs)
-
-    if response.status_code != 200:
+    logger.debug(f"Issuing {method} request to {url} with {headers} and {kwargs}")
+    try:
+        response = requests.request(method=method, url=url, headers=headers, **kwargs)
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as err:
         logger.error(
-            f"Your {method} request failed with status_code {response.status_code}.\n"
-            f"{response.content}\n"
+            f"The {method} request to {url} failed ({err.response.status_code}): "
+            f"{err.response.text}"
         )
+        sys.exit(1)
+    except Exception as err:
+        logger.error(f"The {method} request to {url} failed with {err}")
+        sys.exit(1)
 
     return response

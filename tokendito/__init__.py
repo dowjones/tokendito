@@ -22,8 +22,9 @@ class Config(object):
     """Creates configuration variables for the application."""
 
     _default_encoding = "utf-8"
-    if getattr(sys, "stdin") is not None:
-        _default_encoding = sys.stdin.encoding
+    if hasattr(sys, "stdin") and getattr(sys, "stdin") is not None:
+        if getattr(sys.stdin, "encoding") is not None:
+            _default_encoding = sys.stdin.encoding
 
     # Instantiated objects can get Class defaults with get_defaults()
     _defaults = dict(
@@ -93,7 +94,7 @@ class Config(object):
         return repr(other) == repr(self)
 
     def update(self, other):
-        """Copy values from another Config object."""
+        """Update values from another Config object."""
         self._check_constraints(**other.__dict__)
         for key in other.__dict__.keys():
             self.__dict__[key].update(other.__dict__[key])
