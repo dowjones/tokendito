@@ -23,7 +23,7 @@ your AWS accounts, returning
 tokens into your local `~/.aws/credentials` file.
 
 ## What's new
-With the release of tokendito 2.0, many changes and fixes were introduced. It is a breaking release: your configuration needs to be updated, the command line arguments have changed, and support for python < 3.7 has been removed.
+With the release of tokendito 2.0, many changes and fixes were introduced. It is a breaking release: your configuration needs to be updated, the command line arguments have changed, and support for Python < 3.7 has been removed.
 The following changes are part of this release:
 - Set the config file to be platform dependent, and follow the XDG standard.
 - Extend configuration capabilities.
@@ -77,23 +77,30 @@ then
 docker run --rm -it tokendito/tokendito  --version
 ```
 
-You must map a volume in the Docker command to allow tokendito to write AWS credentials to your local system for use.  This is done with the `-v` flag.  See [Docker documentation](https://docs.docker.com/engine/reference/commandline/run/#-mount-volume--v---read-only) for help setting the syntax.  The following directories are used by tokendito and should be considered when mapping volumes:
+You must map a volume in the Docker command to allow tokendito to write AWS credentials to your local filesystem for use.  This is done with the `-v` flag.  See [Docker documentation](https://docs.docker.com/engine/reference/commandline/run/#-mount-volume--v---read-only) for help setting the syntax.  The following directories are used by tokendito and should be considered when mapping volumes:
 
-- `/home/tokendito/.aws/` (AWS credential storage)
-- `/home/tokendito/.config/tokendito/` (tokendito profile storage)
+- `/app/.aws/` (AWS credential storage)
+- `/app/.config/tokendito/` (tokendito profile storage)
 
-These can be covered by mapping a single volume to both the host and container users' home directories (`/home/tokendito/` is the home directory in the container and must be explicitly defined).  You may also map multiple volumes if you have custom configuration locations and require granularity.
+These can be covered by mapping a single volume to both the host and container users' home directories (`/app` is the home directory in the container and must be explicitly defined).  You may also map multiple volumes if you have custom configuration locations and require granularity.
 
 Be sure to set the `-it` flags to enable an interactive terminal session.
 
-In a Linux system, you can run:
-``` shell
-docker run --rm -it -v "$HOME/.aws":/home/tokendito/.aws  -v "$HOME/.config":/home/tokendito/.config tokendito/tokendito
+On Windows, you can do the following:
+``` powershell
+docker run --rm -it -v "%USERPROFILE%\.aws":/app/.aws  -v "%USERPROFILE%\.config":/app/.config tokendito/tokendito
 ```
 
-On Windows, you can do the following instead:
-``` powershell
-docker run --rm -it -v "%USERPROFILE%\.aws":/home/tokendito/.aws  -v "%USERPROFILE%\.config":/home/tokendito/.config tokendito/tokendito
+In a Mac OS system, you can run:
+``` shell
+docker run --rm -it -v "$HOME/.aws":/app/.aws  -v "$HOME/.config":/app/.config tokendito/tokendito
+```
+
+On a Linux system, however, you must specify the user and group IDs for the mount mappings to work as expected.
+Additionally the mount points within the container move to a different location:
+
+``` shell
+docker run --user $(id -u):$(id -g) --rm -it -v "$HOME/.aws":/.aws  -v "$HOME/.config":/.config tokendito/tokendito
 ```
 
 Tokendito command line arguments are supported as well.
@@ -101,7 +108,7 @@ Tokendito command line arguments are supported as well.
 **NOTE**: In the following examples the entire home directory is exported for simplicity. This is not recommended as it exposes too much data to the running container:
 
 ``` shell
-docker run --rm -it -v "$HOME":/home/tokendito/ tokendito/tokendito \
+docker run --rm -it -v "$HOME":/ tokendito/tokendito \
   --okta-tile https://acme.okta.com/home/amazon_aws/000000000000000000x0/123 \
   --username username@example.com \
   --okta-mfa push \
@@ -114,7 +121,7 @@ docker run --rm -it -v "$HOME":/home/tokendito/ tokendito/tokendito \
 Tokendito profiles are supported while using containers provided the proper volume mapping exists.
 
 ``` shell
-docker run --rm -ti -v "$HOME":/home/tokendito tokendito/tokendito \
+docker run --rm -ti -v "$HOME":/app tokendito/tokendito \
   --profile my-profile-name
 ```
 
