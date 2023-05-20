@@ -455,20 +455,18 @@ def extract_arns(saml):
     """
     logger.debug("Decode response string as a SAML decoded value.")
 
+    roles_and_providers = {}
     arn_regex = ">(arn:aws:iam::.*?,arn:aws:iam::.*?)<"
 
     # find all provider and role pairs.
     arns = re.findall(arn_regex, saml)
-
-    if len(arns) == 0:
-        logger.error("No IAM roles found in SAML response.")
-        logger.debug(arns)
-        sys.exit(2)
+    logger.debug(f"found ARNs: {arns}")
 
     # stuff into dict, role is dict key.
-    roles_and_providers = {i.split(",")[1]: i.split(",")[0] for i in arns}
+    if arns:
+        roles_and_providers = {i.split(",")[1]: i.split(",")[0] for i in arns}
 
-    logger.debug(f"Collected ARNs: {json.dumps(roles_and_providers)}")
+    logger.debug(f"Collected ARNs: {roles_and_providers}")
 
     return roles_and_providers
 
