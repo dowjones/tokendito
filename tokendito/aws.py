@@ -204,6 +204,9 @@ def select_assumeable_role(tiles):
     authenticated_tiles = {}
     for url, saml_response, saml, label in tiles:
         roles_and_providers = user.extract_arns(saml)
+        if not roles_and_providers:
+            logger.warning(f"Skipping {url}, no valid roles or tile is misconfigured")
+            continue
         authenticated_tiles[url] = {
             "roles": list(roles_and_providers.keys()),
             "saml": saml,
@@ -211,6 +214,10 @@ def select_assumeable_role(tiles):
             "roles_and_providers": roles_and_providers,
             "label": label,
         }
+
+    if not authenticated_tiles:
+        logger.error("No roles found. Please check with your Okta admin.")
+        sys.exit(1)
 
     role_arn, _id = user.select_role_arn(authenticated_tiles)
     role_name = role_arn.split("/")[-1]

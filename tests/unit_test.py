@@ -1780,3 +1780,39 @@ def test_assume_role(mocker):
     with mocker.patch("tokendito.aws.handle_assume_role", return_value={}):
         with pytest.raises(SystemExit) as error:
             assert aws.assume_role(pytest_config, role_arn, session_name) == error
+
+
+@pytest.mark.parametrize(
+    "saml, expected",
+    [
+        ("pytest", {}),
+        ("pytest,pytest", {}),
+        (
+            'xsi:type="xs:string">arn:aws:iam::000000000000:saml/name,'
+            "arn:aws:iam::000000000000:role/name</saml2:AttributeValue>",
+            {"arn:aws:iam::000000000000:role/name": "arn:aws:iam::000000000000:saml/name"},
+        ),
+    ],
+)
+def test_extract_arns(saml, expected):
+    """Test extracting Provider/Role ARN pairs from a SAML document."""
+    from tokendito import user
+
+    assert user.extract_arns(saml) == expected
+
+
+def test_select_assumeable_role_no_tiles():
+    """Test exiting when there are no assumable roles."""
+    from tokendito import aws
+
+    tiles = [
+        (
+            "https://acme.okta.org/home/amazon_aws/0123456789abcdef0123/456",
+            "saml_response",
+            "arn:aws:iam::000000000000:saml/name,arn:aws:iam::000000000000:role/name",
+            "Tile Label",
+        )
+    ]
+    with pytest.raises(SystemExit) as err:
+        aws.select_assumeable_role(tiles)
+    assert err.value.code == 1
