@@ -70,6 +70,13 @@ jobs:
         DOCKER_PRIVATE_KEY_ID: "${{ secrets.DOCKER_PRIVATE_KEY_ID }}"
         DOCKER_PRIVATE_KEY: "${{ secrets.DOCKER_PRIVATE_KEY }}"
         DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE: "${{ secrets.DOCKER_PRIVATE_KEY_PASSPHRASE }}"
+    - name : Sign image
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+      run: |
+        docker trust sign {}
+      env:
+        DOCKER_CONTENT_TRUST: 1
+        DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE: "${{ secrets.DOCKER_PRIVATE_KEY_PASSPHRASE }}"
     - name: Build and push container for releases
       if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
       uses: docker/build-push-action@v4
