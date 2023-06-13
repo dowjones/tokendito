@@ -1,91 +1,155 @@
-name: Publish to Dockerhub
+name: Multiarch build, sign and publish to Dockerhub
 on:
   push:
-    branches:
-      - main
     tags:
-      - '[0-9]+.[0-9]+.[0-9]+'
+     - '[0-9]+.[0-9]+.[0-9]+'
 
 env:
   REGISTRY: docker.io
-  IMAGE_NAME: tokendito/tokendito
+  REGISTRY_IMAGE: tokendito/tokendito
 
 jobs:
-  dockerhubpublish:
-    name: Build and Publish Docker Container
+  build_archs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
+      matrix: 
+        arch: [arm64, amd64]
     steps:
-    - name: Checkout
-      uses: actions/checkout@v3
-    - name: Set up QEMU
-      uses: docker/setup-qemu-action@v2
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
-    - name: Login to Docker Hub
-      uses: docker/login-action@v2
-      with:
-        username: tokendito
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
-    - name: Extract Docker metadata
-      id: meta
-      uses: docker/metadata-action@v4
-      with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-        tags: |
-          type=ref,event=branch
-          type=ref,event=pr
-          type=sha,format=long
-          type=raw,value=latest,enable={{is_default_branch}}
-          type=semver,pattern={{version}}
-          type=semver,pattern={{major}}
-          type=semver,pattern={{major}}.{{minor}}
-          type=semver,pattern={{major}}.{{minor}}.{{patch}}
-    - name: Build container
-      uses: docker/build-push-action@v4
-      with:
-        context: .
-        push: false
-        platforms: linux/amd64,linux/arm64
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-      env:
-        DOCKER_CONTENT_TRUST: 1
-    - name: Set up trust signatures for releases
-      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
-      run: |
-        mkdir -p ~/.docker/trust/private
-        echo "${DOCKER_PRIVATE_KEY}" > ~/.docker/trust/private/${DOCKER_PRIVATE_KEY_ID}.key
-        chmod 0600 ~/.docker/trust/private/${DOCKER_PRIVATE_KEY_ID}.key
-        docker trust key load ~/.docker/trust/private/${DOCKER_PRIVATE_KEY_ID}.key --name "${DOCKER_PRIVATE_KEY_ID}"
-      env:
-        DOCKER_CONTENT_TRUST: 1
-        DOCKER_PRIVATE_KEY_ID: "${{ secrets.DOCKER_PRIVATE_KEY_ID }}"
-        DOCKER_PRIVATE_KEY: "${{ secrets.DOCKER_PRIVATE_KEY }}"
-        DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE: "${{ secrets.DOCKER_PRIVATE_KEY_PASSPHRASE }}"
-    - name: Build and push container for releases
-      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
-      uses: docker/build-push-action@v4
-      with:
-        context: .
-        push: true
-        sbom: true
-        platforms: linux/amd64,linux/arm64
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-      env:
-        DOCKER_CONTENT_TRUST: 1
-        DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE: "${{ secrets.DOCKER_PRIVATE_KEY_PASSPHRASE }}"
-    - name: Verify signatures
-      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
-      run: |
-        echo "${{ steps.meta.outputs.tags }}" |  xargs -I {} -n 1 docker trust inspect --pretty {}
+      -
+        name: Checkout
+        uses: actions/checkout@v3
+      -
+        name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ env.REGISTRY_IMAGE }}
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      -
+        name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: tokendito
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      -
+        name: Build and push linux/${{matrix.arch}}
+        run: |
+          docker buildx build . --provenance=false --platform linux/${{matrix.arch}} --tag ${{env.REGISTRY}}/${{env.REGISTRY_IMAGE}}:${{steps.meta.outputs.version}}-${{matrix.arch}} --push
+
+  get_versions_matrix:
+    needs: build_archs
+    runs-on: ubuntu-latest
+    outputs:
+      versions: ${{ steps.produce_output.outputs.versions }}    
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v3
+      - 
+        name: extract docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.REGISTRY_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,format=long
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}.{{minor}}.{{patch}}
+      - 
+        name: produce output
+        id: produce_output
+        run: |
+          TAGS_JSON=$(cat <<'EOF'
+          ${{ toJSON(fromJSON(steps.meta.outputs.json).tags) }}
+          EOF
+          )
+          string_to_remove="${{env.REGISTRY}}/${{env.REGISTRY_IMAGE}}:"
+          TAGS_JSON=$(echo $TAGS_JSON | tr '\n' ' ' | sed "s|$string_to_remove||g" )
+          echo "versions=$TAGS_JSON" >> "$GITHUB_OUTPUT"
+          
+  create_manifests:
+    needs: get_versions_matrix
+    runs-on: ubuntu-latest
+    strategy:
+        matrix:
+          version: ${{ fromJSON(needs.get_versions_matrix.outputs.versions) }}
+    steps:
+      -
+        name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: tokendito
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      -
+        name: create files for signing
+        run: | 
+          mkdir -p ~/.docker/trust/private
+          echo "${DOCKER_PRIVATE_KEY}" > ~/.docker/trust/private/${DOCKER_PRIVATE_KEY_ID}.key
+          chmod 0600 ~/.docker/trust/private/${DOCKER_PRIVATE_KEY_ID}.key
+          docker trust key load ~/.docker/trust/private/${DOCKER_PRIVATE_KEY_ID}.key --name "${DOCKER_PRIVATE_KEY_ID}"
+        env: 
+          DOCKER_PRIVATE_KEY_ID: "${{ secrets.DOCKER_PRIVATE_KEY_ID }}"
+          DOCKER_PRIVATE_KEY: "${{ secrets.DOCKER_PRIVATE_KEY }}"
+          DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE: "${{ secrets.DOCKER_PRIVATE_KEY_PASSPHRASE }}"
+      -
+        name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ env.REGISTRY_IMAGE }}
+      -
+        name: create manifest and push it
+        # create and sign "$version" manifest
+        run: | 
+          DOCKER_CLI_EXPERIMENTAL=enabled docker manifest create ${{ env.REGISTRY_IMAGE }}:${{matrix.version}} --amend ${{env.REGISTRY_IMAGE}}:${{ steps.meta.outputs.version }}-amd64 --amend ${{env.REGISTRY_IMAGE}}:${{steps.meta.outputs.version}}-arm64
+          docker manifest push ${{ env.REGISTRY_IMAGE }}:${{matrix.version}}
+          docker pull ${{ env.REGISTRY_IMAGE }}:${{matrix.version}}
+          docker trust sign ${{ env.REGISTRY_IMAGE }}:${{matrix.version}}
+          docker manifest push ${{ env.REGISTRY_IMAGE }}:${{matrix.version}}
+        env: 
+          DOCKER_CONTENT_TRUST: 0
+          DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE: "${{ secrets.DOCKER_PRIVATE_KEY_PASSPHRASE }}"
+
+  verify_signatures:
+    needs: [get_versions_matrix, create_manifests]
+    runs-on: ubuntu-latest
+    strategy:
+        matrix:
+          version: ${{ fromJSON(needs.get_versions_matrix.outputs.versions) }}  
+    steps:
+      -
+        name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: tokendito
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - 
+        name: Verify signatures
+        run: |
+          docker trust inspect --pretty ${{ env.REGISTRY_IMAGE }}:${{matrix.version}}
+      -
+        name: verify that secure download works
+        run: |
+          version=$(echo "${{matrix.version}}" | awk -F':' '{print $2}')
+          # docker rmi ${{ env.REGISTRY_IMAGE }}:${{matrix.version}} --force
+          docker pull ${{ env.REGISTRY_IMAGE }}:${{matrix.version}}
+          docker run ${{ env.REGISTRY_IMAGE }}:${{matrix.version}}  --version         
+          # version_output=$(docker run ${{ env.REGISTRY_IMAGE }}:${{matrix.version}}  --version)
+          # if [[ $(echo "$version_output" | grep -c "tokendito/${{steps.meta.outputs.version}}") -eq 0 ]]; then
+          #  exit 1
+          # fi
+        env:
+          DOCKER_CONTENT_TRUST: 1
+
+
