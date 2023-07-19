@@ -504,14 +504,14 @@ def test_process_arguments():
 
     from tokendito import user
 
-    valid_settings = dict(okta_username="pytest", okta_password="pytest_password")
+    valid_settings = dict(okta_username="pytest", okta_password="%pytest_!&%password^")
     invalid_settings = dict(pytest_expected_failure="pytest_failure")
     args = {**valid_settings, **invalid_settings}
     ret = user.process_arguments(Namespace(**args))
 
     # Make sure that the arguments we passed are interpreted
     assert ret.okta["username"] == "pytest"
-    assert ret.okta["password"] == "pytest_password"
+    assert ret.okta["password"] == "%pytest_!&%password^"
     # Make sure that incorrect arguments are not passed down to the Config object.
     assert "pytest" not in ret.__dict__
 
@@ -549,7 +549,7 @@ def test_process_ini_file(tmpdir):
     from tokendito import user
 
     valid_settings = dict(
-        okta_password="pytest_password",
+        okta_password="%pytest_!&%password^",
         okta_username="pytest",
     )
     invalid_settings = dict(user_pytest_expected_failure="pytest")
@@ -559,7 +559,7 @@ def test_process_ini_file(tmpdir):
     user.update_ini("pytest", path, **valid_settings)
     ret = user.process_ini_file(path, "pytest")
     assert ret.okta["username"] == "pytest"
-    assert ret.okta["password"] == "pytest_password"
+    assert ret.okta["password"] == "%pytest_!&%password^"
 
     # Ensure we fail if the section is not found
     user.update_ini("pytest", path, **valid_settings)
@@ -1134,7 +1134,7 @@ def test_config_object():
     pytest_config_aws = Config(aws={"profile": "pytest_aws"})
     pytest_config_okta = Config(okta={"username": "pytest_username"})
     pytest_config_mixed = Config(
-        user={"config_profile": "pytest_user"}, okta={"password": "pytest_password"}
+        user={"config_profile": "pytest_user"}, okta={"password": "%pytest_!&%password^"}
     )
     assert (pytest_config == pytest_config_aws) is False
 
@@ -1149,7 +1149,7 @@ def test_config_object():
     # Check that an update overwrites matching values only
     pytest_config.update(pytest_config_mixed)
     assert pytest_config.okta["username"] == "pytest_username"
-    assert pytest_config.okta["password"] == "pytest_password"
+    assert pytest_config.okta["password"] == "%pytest_!&%password^"
     assert pytest_config.user["config_profile"] == "pytest_user"
 
     # Check that default values from the original object are kept
@@ -1214,7 +1214,7 @@ def test_process_interactive_input(mocker):
     from tokendito import user
 
     # Check that a good object retrieves an interactive password
-    mocker.patch("getpass.getpass", return_value="pytest_password")
+    mocker.patch("getpass.getpass", return_value="%pytest_!&%password^")
 
     pytest_config = Config()
     pytest_config.okta["tile"] = "https://pytest/tile"
@@ -1222,7 +1222,7 @@ def test_process_interactive_input(mocker):
     pytest_config.okta["username"] = "pytest"
     ret = user.process_interactive_input(pytest_config)
     pytest_config.update(ret)
-    assert pytest_config.okta["password"] == "pytest_password"
+    assert pytest_config.okta["password"] == "%pytest_!&%password^"
 
     # Check that quiet mode does not retrieve a username
     pytest_config.user["quiet"] = True

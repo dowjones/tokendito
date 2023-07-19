@@ -131,10 +131,15 @@ def parse_cli_args(args):
         "--okta-tile",
         help="Okta tile URL to use.",
     )
-    parser.add_argument("--okta-mfa", help="Sets the MFA method")
+    parser.add_argument(
+        "--okta-mfa",
+        help="Sets the MFA method. You "
+        "can also use the TOKENDITO_OKTA_MFA environment variable.",
+    )
     parser.add_argument(
         "--okta-mfa-response",
-        help="Sets the MFA response to a challenge",
+        help="Sets the MFA response to a challenge. You "
+        "can also use the TOKENDITO_OKTA_MFA_RESPONSE environment variable.",
     )
     parser.add_argument(
         "--quiet",
@@ -582,7 +587,7 @@ def process_ini_file(file, profile):
     res = dict()
     pattern = re.compile(r"^(.*?)_(.*)")
 
-    ini = configparser.ConfigParser(default_section=config.user["config_profile"])
+    ini = configparser.RawConfigParser(default_section=config.user["config_profile"])
     # Here, group(1) is the dictionary key, and group(2) the configuration element
     try:
         ini.read(file)
