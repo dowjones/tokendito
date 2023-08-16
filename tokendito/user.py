@@ -7,6 +7,9 @@ import codecs
 import configparser
 from datetime import timezone
 from getpass import getpass
+
+# to debug http messages
+import http.client as http_client
 import json
 import logging
 import os
@@ -23,6 +26,7 @@ from bs4 import BeautifulSoup
 import requests
 from tokendito import __version__
 from tokendito import aws
+from tokendito import okta
 from tokendito.config import Config
 from tokendito.config import config
 from tokendito.http_client import HTTP_client
@@ -35,8 +39,66 @@ except ModuleNotFoundError:
 
 logger = logging.getLogger(__name__)
 
-
 mask_items = []
+
+
+def cmd_interface(args):
+    """Tokendito retrieves AWS credentials after authenticating with Okta."""
+    args = parse_cli_args(args)
+
+    # Early logging, in case the user requests debugging via env/CLI
+    setup_early_logging(args)
+
+    # Set some required initial values
+    process_options(args)
+
+    # Late logging (default)
+    setup_logging(config.user)
+
+    # Validate configuration
+    message = validate_configuration(config)
+    if message:
+        quiet_msg = ""
+        if config.user["quiet"] is not False:
+            quiet_msg = " to run in quiet mode"
+        logger.error(
+            f"Could not validate configuration{quiet_msg}: {'. '.join(message)}. "
+            "Please check your settings, and try again."
+        )
+        sys.exit(1)
+
+    # get authentication and authorization cookies from okta
+    okta.idp_auth(config)
+    # breakpoint()
+
+    if config.okta["tile"]:
+        tile_label = ""
+        config.okta["tile"] = (config.okta["tile"], tile_label)
+    else:
+        config.okta["tile"] = discover_tiles(config.okta["org"])
+
+    # Authenticate to AWS roles
+    auth_tiles = aws.authenticate_to_roles(config.okta["tile"], cookies=HTTP_client.session.cookies)
+
+    (role_response, role_name) = aws.select_assumeable_role(auth_tiles)
+
+    identity = aws.assert_credentials(role_response=role_response)
+    if "Arn" not in identity and "UserId" not in identity:
+        logger.error(
+            f"There was an error retrieving and verifying AWS credentials: {role_response}"
+        )
+        sys.exit(1)
+
+    set_profile_name(config, role_name)
+
+    set_local_credentials(
+        response=role_response,
+        role=config.aws["profile"],
+        region=config.aws["region"],
+        output=config.aws["output"],
+    )
+
+    display_selected_role(profile_name=config.aws["profile"], role_response=role_response)
 
 
 class MaskLoggerSecret(logging.Filter):
@@ -133,6 +195,12 @@ def parse_cli_args(args):
     okta_me_group.add_argument(
         "--okta-tile",
         help="Okta tile URL to use.",
+    )
+    # oauth_client_id
+
+    parser.add_argument(
+        "--okta-oauth-client-id",
+        help="Sets the Okta client ID needed in oauth2.",
     )
     parser.add_argument(
         "--okta-mfa",
@@ -628,6 +696,7 @@ def process_arguments(args):
     pattern = re.compile(r"^(.*?)_(.*)")
 
     for key, val in vars(args).items():
+        logger.debug(f"key is {key} and val is {val}")
         match = re.search(pattern, key.lower())
         if match:
             if match.group(1) not in get_submodule_names():
@@ -1195,6 +1264,7 @@ def sanitize_config_values(config):
         config.aws["shared_credentials_file"] = os.path.expanduser(
             config.aws["shared_credentials_file"]
         )
+
     return config
 
 
@@ -1234,6 +1304,11 @@ def request_cookies(url, session_token):
     logger.debug(f"Received session cookies: {cookies}")
 
     return cookies
+
+
+def request_oie_cookie(url, idx_id):
+    """ """
+    return "todo"
 
 
 def discover_tiles(url):

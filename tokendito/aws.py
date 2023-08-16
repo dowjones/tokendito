@@ -47,7 +47,7 @@ def get_output_types():
     return ["json", "text", "csv", "yaml", "yaml-stream"]
 
 
-def authenticate_to_roles(urls, cookies=None):
+def authenticate_to_roles(urls, cookies):
     """Authenticate AWS user with saml.
 
     :param urls: list of tuples or tuple, with tiles info

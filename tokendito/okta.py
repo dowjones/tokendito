@@ -7,10 +7,13 @@ Handle the all Okta operations.
 2. Update Okta Config File
 
 """
+import base64
 import codecs
 from copy import deepcopy
+import hashlib
 import json
 import logging
+import os
 import re
 import sys
 import time
@@ -20,6 +23,7 @@ from bs4 import BeautifulSoup
 from tokendito import duo
 from tokendito import user
 from tokendito.http_client import HTTP_client
+from tokendito import __version__
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +41,7 @@ def api_error_code_parser(status=None):
     param status: Response status
     return message: status message
     """
+    logger.debug(f"api_error_code_parser({status})")
     if status and status in _status_dict.keys():
         message = f"Okta auth failed: {_status_dict[status]}"
     else:
@@ -46,18 +51,46 @@ def api_error_code_parser(status=None):
     return message
 
 
-def get_auth_properties(userid=None, url=None):
-    """Make a call to the Okta webfinger endpoint to retrieve authentication properties.
+def get_auth_pipeline(url=None):
+    """Get auth pipeline version."""
+    logger.debug(f"get_auth_pipeline({url})")
+    headers = {"accept": "application/json"}
+    # https://developer.okta.com/docs/api/openapi/okta-management/management/tag/OrgSetting/
+    url = f"{url}/.well-known/okta-organization"
 
+    response = HTTP_client.get(url, headers=headers)
+
+    try:
+        response_json = response.json()
+    except (KeyError, ValueError) as e:
+        logger.error(f"Failed to parse type in {url}:{str(e)}")
+        logger.debug(f"Response: {response.text}")
+        sys.exit(1)
+    logger.debug(f"we have {response_json}")
+    try:
+        auth_pipeline = response_json.get("pipeline", None)
+    except (KeyError, ValueError) as e:
+        logger.error(f"Failed to parse pipeline in {url}:{str(e)}")
+        logger.debug(f"Response: {response.text}")
+        sys.exit(1)
+    if auth_pipeline != "idx" and auth_pipeline != "v1":
+        logger.error(f"unsupported auth pipeline version {auth_pipeline}")
+        sys.exit(1)
+    logger.debug(f"Pipeline is of type {auth_pipeline}")
+    return auth_pipeline
+
+
+def get_auth_properties(userid=None, url=None):
+    """Make a call to the webfinger endpoint to get the auth properties metadata.
     :param userid: User's ID for which we are requesting an auth endpoint.
     :param url: Okta organization URL where we are looking up the user.
     :returns: Dictionary containing authentication properties.
     """
-    # Prepare the payload for the webfinger endpoint request.
+    logger.debug(f"get_auth_properies({userid}, {url})")
     payload = {"resource": f"okta:acct:{userid}", "rel": "okta:idp"}
+    # payload = {"resource": f"okta:acct:{userid}"}
     headers = {"accept": "application/jrd+json"}
     url = f"{url}/.well-known/webfinger"
-
     logger.debug(f"Looking up auth endpoint for {userid} in {url}")
 
     # Make a GET request to the webfinger endpoint.
@@ -179,8 +212,6 @@ def send_saml_response(saml_response):
         "accept": "text/html,application/xhtml+xml,application/xml",
         "Content-Type": "application/x-www-form-urlencoded",
     }
-
-    # Construct the URL from the provided saml_response.
     url = saml_response["post_url"]
 
     # Log the SAML response details.
@@ -214,7 +245,6 @@ def get_session_token(config, primary_auth, headers):
     :param primary_auth: Primary authentication
     :return: Session Token from JSON response
     """
-    status = None
     try:
         status = primary_auth.get("status", None)
     except AttributeError:
@@ -227,7 +257,7 @@ def get_session_token(config, primary_auth, headers):
         session_token = mfa_challenge(config, headers, primary_auth)
     else:
         logger.debug(f"Error parsing response: {json.dumps(primary_auth)}")
-        logger.error("Okta auth failed: unknown status.")
+        logger.error(f"Okta auth failed: unknown status {status}")
         sys.exit(1)
 
     user.add_sensitive_value_to_be_masked(session_token)
@@ -235,63 +265,336 @@ def get_session_token(config, primary_auth, headers):
     return session_token
 
 
-def authenticate(config):
-    """Authenticate user.
+def get_oauth2_token(token_endpoint_url, config, code_verifier, authz_code):
+    """Get OAuth token from Okta by calling /token endpoint.
+
+    https://developer.okta.com/docs/reference/api/oidc/#token-endpoint
+    :param url: URL of the Okta OAuth token endpoint
+    :return: OAuth token
+    """
+    payload = {
+        "code": f"{authz_code}",
+        "grant_type": "authorization_code",
+        "redirect_uri": f"{get_redirect_uri(config)}",
+        "client_id": f"{get_client_id(config)}",
+        "code_verifier": f"{code_verifier}",
+    }
+    # payload = {"resource": f"okta:acct:{userid}"}
+    # headers = {"accept": "application/jrd+json"}
+    # response = user.request_wrapper("GET", token_endpoint_url , headers=headers, params=payload)
+
+    headers = {"accept": "application/json"}
+    payload = {"code": authz_code}
+    # Using the http_client to make the POST request
+    response_json = HTTP_client.post(
+        token_endpoint_url, data=payload, headers=headers, return_json=True
+    )
+    return response_json
+
+
+def extract_authz_code(response_text):
+    """Extract authorization code from response text.
+
+    :param response_text: response text from /authorize call
+    :return: authorization code
+    """
+    authz_code = re.search(r"(?<=code=)[^&]+", response_text).group(0)
+    return authz_code
+
+
+def get_client_id_by_redirect(config):
+    """If implemented by your org, we can make an http get call and get a redirect that has the client_id."""
+    #    local_session = requests.Session()
+    #    local_session.headers.update({"User-Agent": f"tokendito/{__version__}"})
+    #    logger.error(f"calling {config.okta['org']}")
+    #    response = local_session.get(config.okta["org"])
+    #    logger.debug(f"Response from redirect: {response.text}")
+    return None
+
+
+def get_client_id(config):
+    """Return the client id needed by the Authorization Code Flow.
+    If passed, the cmd line value takes precedence.
+    """
+    if config.okta["oauth_client_id"] is None:
+        config.okta["oauth_client_id"] = get_client_id_by_redirect(config)
+        if config.okta["oauth_client_id"] is None:
+            logger.error(
+                """
+                Your okta org did not provide a redirect with the client_id,
+                pass it as an argument or set it in the config file.
+                """
+            )
+            sys.exit(1)
+
+    return config.okta["oauth_client_id"]
+
+
+def get_redirect_uri(config):
+    """TODO."""
+    url = f"{config.okta['org']}/enduser/callback"
+    return url
+
+
+def get_response_type():
+    """We're only implementing code response type."""
+    return "code"
+
+
+def get_authorize_scope():
+    """We're only implementing openid scope."""
+    return "openid"
+
+
+def get_oauth2_state():
+    """Generate a random string for state.
+    https://developer.okta.com/docs/guides/implement-grant-type/authcode/main/#flow-specifics
+    https://developer.okta.com/docs/guides/implement-grant-type/authcodepkce/main/#next-steps
+    """
+    state = hashlib.sha256(os.urandom(1024)).hexdigest()
+    return state
+
+
+def get_pkce_code_challenge_method():
+    """TODO"""
+    return "S256"
+
+
+def get_pkce_code_challenge(code_verifier=None):
+    """
+    get_pkce_code_challenge
+
+    Base64-URL-encoded string of the SHA256 hash of the code verifier
+    https://www.oauth.com/oauth2-servers/pkce/authorization-request/
+
+    :param: code_verifier
+    :return: code_challenge
+    """
+
+    code_challenge = hashlib.sha256(code_verifier.encode("utf-8")).digest()
+    code_challenge = base64.urlsafe_b64encode(code_challenge).decode("utf-8")
+    code_challenge = code_challenge.replace("=", "")
+    return code_challenge
+
+
+def get_pkce_code_verifier():
+    """
+    to review
+    """
+    # code_verifier = base64.urlsafe_b64encode(os.urandom(32)).decode("utf-8")
+    # code_verifier = base64.urlsafe_b64encode(os.urandom(50)).rstrip(b'=')
+
+    code_verifier = base64.urlsafe_b64encode(os.urandom(40)).decode("utf-8")
+    code_verifier = re.sub("[^a-zA-Z0-9]+", "", code_verifier)
+    return code_verifier
+
+
+def pkce_enabled():
+    """TODO"""
+    return False
+
+
+def get_idx_cookies(cookies):
+    """TODO"""
+    idx_val = cookies.get_dict("idx")
+    return idx_val
+
+
+def oauth2_authorize_request(config, authz_code_flow_data, session_token):
+    """implements authorization code request
+    calls /authorize endpoint with authenticated session_token.
+    https://developer.okta.com/docs/reference/api/oidc/#_2-okta-as-the-identity-platform-for-your-app-or-api
+    :param
+    :return: authorization code, needed for /token call
+    """
+    logger.debug(f"oauth_code_request({config}, {authz_code_flow_data}, {session_token})")
+    headers = {"accept": "application/json", "content-type": "application/x-www-form-urlencoded"}
+
+    payload = {
+        "client_id": authz_code_flow_data["client_id"],
+        "redirect_uri": authz_code_flow_data["redirect_uri"],
+        "response_type": authz_code_flow_data["response_type"],
+        "sessionToken": session_token,
+        "scope": authz_code_flow_data["scope"],
+        "state": authz_code_flow_data["state"],
+    }
+
+    HTTP_client.get(
+        authz_code_flow_data["authz_endpoint_url"],
+        headers=headers,
+        params=payload,
+    )
+    logger.debug(f"Cookies in session: {HTTP_client.session.cookies.get_dict()}")
+
+    session_cookies = get_idx_cookies(HTTP_client.session.cookies)
+
+    return session_cookies
+
+
+def authorization_code_flow(config, oauth2_config, session_token):
+    # Authorization Code flow (see
+    # https://developer.okta.com/docs/guides/implement-grant-type/authcode/main/#about-the-authorization-code-grant
+    # )
+
+    authz_code_flow_data = {
+        "client_id": get_client_id(config),
+        "redirect_uri": get_redirect_uri(config),
+        "response_type": get_response_type(),
+        "scope": get_authorize_scope(),
+        "state": get_oauth2_state(),
+        "authz_endpoint_url": oauth2_config["authorization_endpoint"],
+        "token_endpoint_url": oauth2_config["token_endpoint"],
+    }
+
+    if pkce_enabled():
+        code_verifier = get_pkce_code_verifier()
+        authz_code_flow_data["code_verifier"] = code_verifier
+        authz_code_flow_data["code_challenge"] = get_pkce_code_challenge(code_verifier)
+        authz_code_flow_data["code_challenge_method"] = get_pkce_code_challenge_method()
+
+    # authz_code = oauth2_authorize_request(config, authz_code_flow_data, session_token)
+    oauth2_authorize_request(config, authz_code_flow_data, session_token)
+
+    # authz_token = get_oauth2_token(config, authz_code_flow_data, authz_code)
+    # user.add_sensitive_value_to_be_masked(authz_token)
+    # return authz_token
+
+
+def authorization_code_enabled(org_url, oauth2_config):
+    """Determines if authorization code grant is enabled
+    returns True if enabled and False otherwise,
+    """
+    try:
+        if "authorization_code" not in oauth2_config["grant_types_supported"]:
+            return False
+    except (KeyError, ValueError) as e:
+        logger.error(f"No grant types supported on {org_url}:{str(e)}")
+        sys.exit(1)
+
+    return True
+
+
+def get_oauth2_configuration(url=None):
+    """Get authorization server configuration data from Okta instance.
+    :param url: URL of the Okta org
+    :return: dict of conguration values
+    """
+    url = f"{url}/.well-known/oauth-authorization-server"
+    headers = {"accept": "application/json"}
+    response = HTTP_client.get(url, headers=headers)
+    logger.debug(f"Authorization Server info: {response.json()}")
+    # todo: handle errors.
+    return response.json()
+
+
+def validate_oauth2_configuration(oauth2_config):
+    """Validate that the oauth2 configuration has what we implement.
+    :param oauth2_config: dict of configuration values
+    """
+    if "authorization_endpoint" not in oauth2_config:
+        logger.error("No authorization endpoint url found.")
+        sys.exit(1)
+    if "token_endpoint" not in oauth2_config:
+        logger.error("No token endpoint url found.")
+        sys.exit(1)
+    if "grant_types_supported" not in oauth2_config:
+        logger.error("Grant types supported not found.")
+        sys.exit(1)
+    elif "authorization_code" not in oauth2_config["grant_types_supported"]:
+        logger.error("Authorization code grant not found.")
+        sys.exit(1)
+
+    if "response_types_supported" not in oauth2_config:
+        logger.error("Response type supported not found.")
+        sys.exit(1)
+    elif "code" not in oauth2_config["response_types_supported"]:
+        logger.error("Code response type not found.")
+        sys.exit(1)
+
+    if "scopes_supported" not in oauth2_config:
+        logger.error("Scopes supported not found.")
+        sys.exit(1)
+    elif "openid" not in oauth2_config["scopes_supported"]:
+        logger.error("OpenID scope not found.")
+        sys.exit(1)
+
+
+def idp_authorize(config, authn_sid):
+    """Authorize on the Okta authorization server.
+    returns a token
+    """
+    logger.debug(f"oie_auth({config}, {authn_sid})")
+
+    oauth2_config = get_oauth2_configuration(config.okta["org"])
+    validate_oauth2_configuration(oauth2_config)
+    if authorization_code_enabled(config.okta["org"], oauth2_config):
+        auth_token = authorization_code_flow(config, oauth2_config, authn_sid)
+    else:
+        logger.warning(
+            f"Authorization Code is not enabled on {config.okta['org']}, skipping oauth2"
+        )
+        auth_token = authn_sid
+    return auth_token
+
+
+def idp_auth(config):
+    """authenticate and authorize with the IDP. Authorization happens if OIE
+    is enabled, with Authorization code flow and PKCE being the only implemented grant types.
 
     :param config: Config object
     :return: session ID cookie.
     """
+
+    logger.debug(f"idp_auth({config})")
     auth_properties = get_auth_properties(userid=config.okta["username"], url=config.okta["org"])
+
     if "type" not in auth_properties:
         logger.error("Okta auth failed: unknown type.")
         sys.exit(1)
-    sid = None
 
-    if is_local_auth(auth_properties):
-        session_token = local_auth(config)
-        sid = user.request_cookies(config.okta["org"], session_token)
-    elif is_saml2_auth(auth_properties):
-        sid = saml2_auth(config, auth_properties)
+    session_cookies = None
+    session_token = None
+
+    if local_authentication_enabled(auth_properties):
+        session_token = authenticate_locally(config)
+        if oie_enabled(config.okta["org"]):
+            session_token = idp_authorize(config, session_token)
+    elif is_saml2_authentication(auth_properties):
+        session_cookies = saml2_authenticate(config, auth_properties)
     else:
         logger.error(f"{auth_properties['type']} login via IdP Discovery is not curretly supported")
         sys.exit(1)
-    return sid
+
+    if session_token is not None:
+        user.add_sensitive_value_to_be_masked(session_token)
+        # todo: change to idx cookies, for ioe
+        session_cookies = user.request_cookies(config.okta["org"], session_token)
+
+    # todo: the called needs to handle if it's a sesoin cookies or a web token
+    # renme sessin_cookies to better name..
+    return session_cookies
 
 
-def is_local_auth(auth_properties):
-    """Check whether authentication happens locally.
-
-    :param auth_properties: auth_properties dict
-    :return: True for local auth, False otherwise.
+def oie_enabled(url):
     """
-    try:
-        if auth_properties["type"] == "OKTA":
-            return True
-    except (TypeError, KeyError):
-        pass
-    return False
-
-
-def is_saml2_auth(auth_properties):
-    """Check whether authentication happens via SAML2 on a different IdP.
-
-    :param auth_properties: auth_properties dict
-    :return: True for SAML2 on Okta, False otherwise.
+    Determines if OIE is enabled.
+    :pamam url: okta org url
+    :return: True if OIE is enabled, False otherwise
     """
-    try:
-        if auth_properties["type"] == "SAML2":
-            return True
-    except (TypeError, KeyError):
-        pass
-    return False
+    if get_auth_pipeline(url) == "idx":  # oie
+        return True
+    else:
+        return False
 
 
-def local_auth(config):
-    """Authenticate local user with okta credential.
+def authenticate_locally(config):
+    """Authenticate user on local okta instance.
 
     :param config: Config object
-    :return: MFA session with options
+    :return: auth session ID cookie.
     """
+
+    logger.debug(f"authenticate_locally({config}")
     session_token = None
     headers = {"content-type": "application/json", "accept": "application/json"}
     payload = {"username": config.okta["username"], "password": config.okta["password"]}
@@ -313,7 +616,35 @@ def local_auth(config):
     return session_token
 
 
-def saml2_auth(config, auth_properties):
+def local_authentication_enabled(auth_properties):
+    """Check whether authentication happens on the current instance.
+
+    :param auth_properties: auth_properties dict
+    :return: True if this is the place to authenticate, False otherwise.
+    """
+    try:
+        if auth_properties["type"] == "OKTA":
+            return True
+    except (TypeError, KeyError):
+        pass
+    return False
+
+
+def is_saml2_authentication(auth_properties):
+    """Check whether authentication happens via SAML2 on a different IdP.
+
+    :param auth_properties: auth_properties dict
+    :return: True for SAML2 on Okta, False otherwise.
+    """
+    try:
+        if auth_properties["type"] == "SAML2":
+            return True
+    except (TypeError, KeyError):
+        pass
+    return False
+
+
+def saml2_authenticate(config, auth_properties):
     """SAML2 authentication flow.
 
     :param config: Config object
@@ -331,7 +662,7 @@ def saml2_auth(config, auth_properties):
 
     # Try to authenticate using the new configuration. This could cause
     # recursive calls, which allows for IdP chaining.
-    session_cookies = authenticate(saml2_config)
+    session_cookies = idp_auth(saml2_config)
 
     # Once we are authenticated, send the SAML request to the IdP.
     # This call requires session cookies.

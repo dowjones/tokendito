@@ -1,5 +1,4 @@
 beautifulsoup4>=4.6.0
 botocore>=1.12.36
-certifi>=2022.12.07 # This can be removed when requests updates its requirements from 2017.4.17 to >=2022.12.07
 platformdirs>=2.5.4
 requests>=2.19.0

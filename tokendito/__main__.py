@@ -12,10 +12,10 @@ def main(args=None):  # needed for console script
 
         path = os.path.dirname(os.path.dirname(__file__))
         sys.path[0:0] = [path]
-    from tokendito.tool import cli
+    from tokendito.user import cmd_interface
 
     try:
-        return cli(args)
+        return cmd_interface(args)
     except KeyboardInterrupt:
         print("\nInterrupted")
         sys.exit(1)

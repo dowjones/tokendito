@@ -45,6 +45,7 @@ class Config(object):
             password="",
             mfa=None,
             mfa_response=None,
+            oauth_client_id=None,
             tile=None,
             org=None,
         ),
