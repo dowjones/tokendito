@@ -23,6 +23,7 @@ from bs4 import BeautifulSoup
 import requests
 from tokendito import __version__
 from tokendito import aws
+from tokendito import okta
 from tokendito.config import Config
 from tokendito.config import config
 from tokendito.http_client import HTTP_client
@@ -35,8 +36,70 @@ except ModuleNotFoundError:
 
 logger = logging.getLogger(__name__)
 
-
 mask_items = []
+
+
+def cmd_interface(args):
+    """Tokendito retrieves AWS credentials after authenticating with Okta."""
+    args = parse_cli_args(args)
+
+    # Early logging, in case the user requests debugging via env/CLI
+    setup_early_logging(args)
+
+    # Set some required initial values
+    process_options(args)
+
+    # Late logging (default)
+    setup_logging(config.user)
+
+    # Validate configuration
+    message = validate_configuration(config)
+    if message:
+        quiet_msg = ""
+        if config.user["quiet"] is not False:
+            quiet_msg = " to run in quiet mode"
+        logger.error(
+            f"Could not validate configuration{quiet_msg}: {'. '.join(message)}. "
+            "Please check your settings, and try again."
+        )
+        sys.exit(1)
+
+    # get authentication and authorization cookies from okta
+    session_cookies = okta.idp_auth(config)
+    logger.debug(
+        f"""
+        about to call discover_tile
+        we have client cookies: {HTTP_client.session.cookies}
+        """
+    )
+    if config.okta["tile"]:
+        tile_label = ""
+        config.okta["tile"] = (config.okta["tile"], tile_label)
+    else:
+        config.okta["tile"] = discover_tiles(config.okta["org"])
+
+    # Authenticate to AWS roles
+    auth_tiles = aws.authenticate_to_roles(config, config.okta["tile"], session_cookies)
+
+    (role_response, role_name) = aws.select_assumeable_role(auth_tiles)
+
+    identity = aws.assert_credentials(role_response=role_response)
+    if "Arn" not in identity and "UserId" not in identity:
+        logger.error(
+            f"There was an error retrieving and verifying AWS credentials: {role_response}"
+        )
+        sys.exit(1)
+
+    set_profile_name(config, role_name)
+
+    set_local_credentials(
+        response=role_response,
+        role=config.aws["profile"],
+        region=config.aws["region"],
+        output=config.aws["output"],
+    )
+
+    display_selected_role(profile_name=config.aws["profile"], role_response=role_response)
 
 
 class MaskLoggerSecret(logging.Filter):
@@ -133,6 +196,10 @@ def parse_cli_args(args):
     okta_me_group.add_argument(
         "--okta-tile",
         help="Okta tile URL to use.",
+    )
+    parser.add_argument(
+        "--okta-client-id",
+        help="Sets the Okta client ID used in OAuth2. If passed, the authorize code flow will run.",
     )
     parser.add_argument(
         "--okta-mfa",
@@ -635,6 +702,7 @@ def process_arguments(args):
     pattern = re.compile(r"^(.*?)_(.*)")
 
     for key, val in vars(args).items():
+        logger.debug(f"key is {key} and val is {val}")
         match = re.search(pattern, key.lower())
         if match:
             if match.group(1) not in get_submodule_names():
@@ -1223,48 +1291,8 @@ def sanitize_config_values(config):
         config.aws["shared_credentials_file"] = os.path.expanduser(
             config.aws["shared_credentials_file"]
         )
+
     return config
-
-
-def request_cookies(url, session_token):
-    """
-    Request session cookie.
-
-    :param url: okta org url, str
-    :param session_token: session token, str
-    :returns: cookies object
-    """
-    # Construct the URL from the base URL provided.
-    url = f"{url}/api/v1/sessions"
-
-    # Define the payload and headers for the request.
-    data = {"sessionToken": session_token}
-    headers = {"Content-Type": "application/json", "accept": "application/json"}
-
-    # Log the request details.
-    logger.debug(f"Requesting session cookies from {url}")
-
-    # Use the HTTP client to make a POST request.
-    response_json = HTTP_client.post(url, json=data, headers=headers, return_json=True)
-
-    if "id" not in response_json:
-        logger.error(f"'id' not found in response. Full response: {response_json}")
-        sys.exit(1)
-
-    sess_id = response_json["id"]
-    add_sensitive_value_to_be_masked(sess_id)
-
-    # create cookies with sid 'sid'.
-    domain = urlparse(url).netloc
-
-    cookies = requests.cookies.RequestsCookieJar()
-    cookies.set("sid", sess_id, domain=domain, path="/")
-    cookies.set("sessionToken", session_token, domain=domain, path="/")
-
-    # Log the session cookies.
-    logger.debug(f"Received session cookies: {cookies}")
-
-    return cookies
 
 
 def discover_tiles(url):
@@ -1281,7 +1309,7 @@ def discover_tiles(url):
         "expand": ["items", "items.resource"],
     }
     logger.debug(f"Performing auto-discovery on {url}.")
-
+    logger.debug(f"in discover_tiles we have cookies: {HTTP_client.session.cookies}")
     response_with_tabs = HTTP_client.get(url, params=params)
 
     tabs = response_with_tabs.json()

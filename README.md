@@ -24,6 +24,14 @@ tokens into your local `~/.aws/credentials` file.
 
 ## What's new
 See [Releases](https://github.com/dowjones/tokendito/releases) for a detailed Changelog.
+### Tokendito 2.3.0
+Version 2.3.0 of Tokendito introduces the following new features:
+- Basic OIE support while forcing Classic mode.    
+- Misc bug fixes
+
+Note: This feature currently works with locally enabled OIE organizations, but it does not for Organizations with chained Authentication in mixed OIE/Classic environments.
+
+
 ### Tokendito 2.2.0
 
 Version 2.2.0 of Tokendito introduces the following new features:

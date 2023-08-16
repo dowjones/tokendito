@@ -47,18 +47,14 @@ def get_output_types():
     return ["json", "text", "csv", "yaml", "yaml-stream"]
 
 
-def authenticate_to_roles(config, urls, cookies=None):
+def authenticate_to_roles(config, urls, cookies):
     """Authenticate AWS user with saml.
 
     :param urls: list of tuples or tuple, with tiles info
     :param cookies: html cookies
-    :param user_agent: optional user agent string
     :return: response text
 
     """
-    if cookies:
-        HTTP_client.set_cookies(cookies)  # Set cookies if provided
-
     url_list = [urls] if isinstance(urls, tuple) else urls
     responses = []
     tile_count = len(url_list)
@@ -66,11 +62,8 @@ def authenticate_to_roles(config, urls, cookies=None):
 
     logger.info(f"Discovering roles in {tile_count} tile{plural}.")
     for url, label in url_list:
-        response = HTTP_client.get(url)  # Use the HTTPClient's get method
-
         session_url = config.okta["org"] + "/login/sessionCookieRedirect"
         params = {"token": cookies.get("sessionToken"), "redirectUrl": url}
-
         response = HTTP_client.get(session_url, params=params)
 
         saml_response_string = response.text
