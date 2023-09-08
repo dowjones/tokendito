@@ -8,8 +8,10 @@ functional (end-to-end) testing.
 To run end-to-end tests, use `py.test -v -rA -k 'functional' -s tests`
 instead. Several other arguments can be provided so that the tool can
 run in non-interactive mode. Currently, the config file, arguments, and
-environment variables (mix and match) are supported. The syntax is the
-same as for `tokendito`.
+environment variables (mix and match) are supported. The syntax is as close as
+possible as for `tokendito`, with the exception of `--tool-config-file`. Pytest
+version 7.4.0 introduced a similarly named variable, and options defined in 
+`conftest.py` cannot collide with command-line arguments to `pytest`.
 
 If all of the username, password, MFA, tile URL, and role ARN are passed to
 `py.test`, then two other tests are kicked off. The first will execute
@@ -20,7 +22,7 @@ credentials.
 # Example 1
 
 ``` txt
-py.test -v -rA -s tests --config-file=/tmp/my-tokendito-config.ini
+py.test -v -rA -s tests --tool-config-file=/tmp/my-tokendito-config.ini
 ```
 
 Where the config file has valid configuration items for the tool.

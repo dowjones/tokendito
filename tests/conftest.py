@@ -14,7 +14,7 @@ def pytest_addoption(parser):
     )
     parser.addoption("--aws-role-arn", default=None, help="Sets the IAM role")
     parser.addoption(
-        "--config-file",
+        "--tool-config-file",
         default="/dev/null",
         help="Sets an optional config file to read from",
     )

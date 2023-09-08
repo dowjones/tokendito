@@ -50,6 +50,8 @@ class MaskLoggerSecret(logging.Filter):
         for secret in mask_items:
             if not isinstance(secret, str):
                 secret = str(secret)
+            if not isinstance(record.msg, str):
+                record.msg = str(record.msg)
             record.msg = record.msg.replace(secret, "*****")
         return True
 
