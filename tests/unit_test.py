@@ -1694,16 +1694,20 @@ def test_authenticate(mocker):
     mocker.patch("tokendito.user.request_cookies", return_value=sid)
     mocker.patch("tokendito.okta.local_auth", return_value="foobar")
     mocker.patch("tokendito.okta.saml2_auth", return_value=sid)
-    with mocker.patch("tokendito.okta.get_auth_properties", return_value={"type": "OKTA"}):
-        assert okta.authenticate(pytest_config) == sid
-    with mocker.patch("tokendito.okta.get_auth_properties", return_value={"type": "SAML2"}):
-        assert okta.authenticate(pytest_config) == sid
-    with mocker.patch("tokendito.okta.get_auth_properties", return_value={"type": "UNKNOWN"}):
-        with pytest.raises(SystemExit) as error:
-            assert okta.authenticate(pytest_config) == error
-    with mocker.patch("tokendito.okta.get_auth_properties", return_value={}):
-        with pytest.raises(SystemExit) as error:
-            assert okta.authenticate(pytest_config) == error
+
+    mocker.patch("tokendito.okta.get_auth_properties", return_value={"type": "OKTA"})
+    assert okta.authenticate(pytest_config) == sid
+
+    mocker.patch("tokendito.okta.get_auth_properties", return_value={"type": "SAML2"})
+    assert okta.authenticate(pytest_config) == sid
+
+    mocker.patch("tokendito.okta.get_auth_properties", return_value={"type": "UNKNOWN"})
+    with pytest.raises(SystemExit) as error:
+        assert okta.authenticate(pytest_config) == error
+
+    mocker.patch("tokendito.okta.get_auth_properties", return_value={})
+    with pytest.raises(SystemExit) as error:
+        assert okta.authenticate(pytest_config) == error
 
 
 def test_local_auth(mocker):
