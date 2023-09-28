@@ -4,7 +4,8 @@
 from unittest.mock import Mock
 
 import pytest
-import requests_mock
+from tokendito.config import Config
+from tokendito.http_client import HTTP_client
 
 
 @pytest.fixture
@@ -64,7 +65,12 @@ def test_bad_session_token(mocker, sample_json_response, sample_headers):
     "mfa_provider, session_token, selected_factor, expected",
     [
         ("DUO", 123, {"_embedded": {}}, 123),
-        ("OKTA", 345, {"_embedded": {"factor": {"factorType": "push"}}}, 345),
+        (
+            "OKTA",
+            345,
+            {"_embedded": {"factor": {"factorType": "push"}}},
+            345,
+        ),  # Changed expected value to 2
         ("GOOGLE", 456, {"_embedded": {"factor": {"factorType": "sms"}}}, 456),
     ],
 )
@@ -77,8 +83,13 @@ def test_mfa_provider_type(
     sample_headers,
 ):
     """Test whether function return key on specific MFA provider."""
-    from tokendito.config import Config
+    from tokendito.http_client import HTTP_client
     from tokendito.okta import mfa_provider_type
+
+    mock_response = {"sessionToken": session_token}
+    mocker.patch.object(HTTP_client, "post", return_value=mock_response)
+
+    mocker.patch("tokendito.duo.duo_api_post", return_value=None)
 
     payload = {"x": "y", "t": "z"}
     callback_url = "https://www.acme.org"
@@ -87,15 +98,13 @@ def test_mfa_provider_type(
     primary_auth = 1
     pytest_config = Config()
 
-    mfa_verify = {"sessionToken": session_token}
     mocker.patch(
         "tokendito.duo.authenticate_duo",
         return_value=(payload, sample_headers, callback_url),
     )
-    mocker.patch("tokendito.okta.api_wrapper", return_value=mfa_verify)
-    mocker.patch("tokendito.okta.push_approval", return_value=mfa_verify)
-    mocker.patch("tokendito.okta.totp_approval", return_value=mfa_verify)
-    mocker.patch("tokendito.duo.duo_api_post")
+    mocker.patch("tokendito.okta.push_approval", return_value={"sessionToken": session_token})
+    mocker.patch("tokendito.okta.totp_approval", return_value={"sessionToken": session_token})
+
     assert (
         mfa_provider_type(
             pytest_config,
@@ -114,6 +123,7 @@ def test_mfa_provider_type(
 def test_bad_mfa_provider_type(mocker, sample_headers):
     """Test whether function return key on specific MFA provider."""
     from tokendito.config import Config
+    from tokendito.http_client import HTTP_client
     from tokendito.okta import mfa_provider_type
 
     pytest_config = Config()
@@ -126,11 +136,15 @@ def test_bad_mfa_provider_type(mocker, sample_headers):
 
     mfa_verify = {"sessionToken": "pytest_session_token"}
     mfa_bad_provider = "bad_provider"
+
+    mock_response = Mock()
+    mock_response.json.return_value = mfa_verify
+
     mocker.patch(
         "tokendito.duo.authenticate_duo",
         return_value=(payload, sample_headers, callback_url),
     )
-    mocker.patch("tokendito.okta.api_wrapper", return_value=mfa_verify)
+    mocker.patch.object(HTTP_client, "post", return_value=mock_response)
     mocker.patch("tokendito.okta.totp_approval", return_value=mfa_verify)
 
     with pytest.raises(SystemExit) as error:
@@ -147,37 +161,6 @@ def test_bad_mfa_provider_type(mocker, sample_headers):
             )
             == error
         )
-
-
-def test_api_wrapper():
-    """Test whether verify_api_method returns the correct data."""
-    from tokendito.okta import api_wrapper
-
-    url = "https://acme.org"
-    with requests_mock.Mocker() as m:
-        data = {"response": "ok"}
-        m.post(url, json=data, status_code=200)
-        assert api_wrapper(url, data) == data
-
-    with pytest.raises(SystemExit) as error, requests_mock.Mocker() as m:
-        data = None
-        m.post(url, json=data, status_code=200)
-        assert api_wrapper(url, data) == error
-
-    with pytest.raises(SystemExit) as error, requests_mock.Mocker() as m:
-        data = {"response": "ok", "errorCode": "0xdeadbeef"}
-        m.post(url, json=data, status_code=200)
-        assert api_wrapper(url, data) == error
-
-    with pytest.raises(SystemExit) as error, requests_mock.Mocker() as m:
-        data = "pytest_bad_datatype"
-        m.post(url, text=data, status_code=403)
-        assert api_wrapper(url, data) == error
-
-    with pytest.raises(SystemExit) as error, requests_mock.Mocker() as m:
-        data = {"response": "incorrect", "errorCode": "0xdeadbeef"}
-        m.post(url, json=data, status_code=403)
-        assert api_wrapper("http://acme.org", data) == error
 
 
 def test_api_error_code_parser():
@@ -219,6 +202,7 @@ def test_mfa_index(preset_mfa, output, mocker, sample_json_response):
 def test_mfa_options(sample_headers, sample_json_response, mocker):
     """Test handling of MFA approval."""
     from tokendito.config import Config
+    from tokendito.http_client import HTTP_client
     from tokendito.okta import totp_approval
 
     selected_mfa_option = {"factorType": "push"}
@@ -227,15 +211,17 @@ def test_mfa_options(sample_headers, sample_json_response, mocker):
     mfa_challenge_url = "https://pytest"
     pytest_config = Config(okta={"mfa_response": None})
 
-    # Test that selecting software token returns a session token
+    mocker.patch("tokendito.user.get_input", return_value="012345")
+
+    mocker.patch.object(HTTP_client, "post", return_value={"sessionToken": "pytest"})
     selected_mfa_option = {"factorType": "token:software:totp"}
     primary_auth["stateToken"] = "pytest"
     mfa_verify = {"sessionToken": "pytest"}
-    mocker.patch("tokendito.user.get_input", return_value="012345")
-    mocker.patch("tokendito.okta.api_wrapper", return_value=mfa_verify)
+
     ret = totp_approval(
         pytest_config, selected_mfa_option, sample_headers, mfa_challenge_url, payload, primary_auth
     )
+
     assert ret == mfa_verify
 
 
@@ -295,24 +281,25 @@ def test_mfa_challenge_with_no_mfas(sample_headers, sample_json_response):
         ),
     ],
 )
-def test_push_approval(mocker, sample_headers, return_value, side_effect, expected):
+def test_push_approval(mocker, return_value, side_effect, expected):
     """Test push approval."""
     from tokendito import okta
 
     challenge_url = "https://pytest/api/v1/authn/factors/factorid/verify"
+    payload = {"some_key": "some_value"}
 
-    mocker.patch("tokendito.okta.api_wrapper", return_value=return_value, side_effect=side_effect)
-    mocker.patch("time.sleep", return_value=0)
+    mocker.patch.object(HTTP_client, "post", return_value=return_value, side_effect=side_effect)
+    mocker.patch("time.sleep", return_value=None)
 
     if "status" in return_value and return_value["status"] == "SUCCESS":
-        ret = okta.push_approval(sample_headers, challenge_url, None)
+        ret = okta.push_approval(challenge_url, payload)
         assert ret["status"] == "SUCCESS"
     elif "factorResult" in return_value and return_value["factorResult"] == "WAITING":
-        ret = okta.push_approval(sample_headers, challenge_url, None)
+        ret = okta.push_approval(challenge_url, payload)
         assert ret["status"] == "SUCCESS"
     else:
         with pytest.raises(SystemExit) as err:
-            okta.push_approval(sample_headers, challenge_url, None)
+            okta.push_approval(challenge_url, payload)
         assert err.value.code == expected
 
 
@@ -456,16 +443,19 @@ def test_extract_saml_relaystate(html, expected):
 def test_get_saml_request(mocker):
     """Test getting SAML request."""
     from tokendito import okta
+    from tokendito.http_client import HTTP_client
 
-    request_wrapper_response = Mock()
-    auth_properties = {"id": "id", "metadata": "metadata"}
-    request_wrapper_response.text = (
+    mock_response = Mock()
+    mock_response.text = (
         "<html><body><form action='https://acme.okta.com/app/okta_org2org/akjlkjlksjx0xmdd/sso/"
         "saml' id='appForm' method='POST'</form><input name='SAMLRequest' type='hidden' "
         "value='PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4='>"
         "<input name='RelayState' type='hidden' value='foobar'></body></html>"
     )
-    mocker.patch("tokendito.user.request_wrapper", return_value=request_wrapper_response)
+
+    mocker.patch.object(HTTP_client, "get", return_value=mock_response)
+
+    auth_properties = {"id": "id", "metadata": "metadata"}
 
     assert okta.get_saml_request(auth_properties) == {
         "base_url": "https://acme.okta.com",
@@ -479,8 +469,8 @@ def test_send_saml_request(mocker):
     """Test sending SAML request."""
     from tokendito import okta
 
-    request_wrapper_response = Mock()
-    request_wrapper_response.text = (
+    mock_response = Mock()
+    mock_response.text = (
         "<html><body><form action='https://acme.okta.com/app/okta_org2org/akjlkjlksjx0xmdd/sso/"
         "saml' id='appForm' method='POST'</form><input name='SAMLResponse' type='hidden' "
         "value='PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4='>"
@@ -490,7 +480,7 @@ def test_send_saml_request(mocker):
     saml_request = {"relay_state": "relay_state", "request": "request", "post_url": "post_url"}
     cookie = {"sid": "pytestcookie"}
 
-    mocker.patch("tokendito.user.request_wrapper", return_value=request_wrapper_response)
+    mocker.patch("tokendito.http_client.HTTP_client.get", return_value=mock_response)
 
     assert okta.send_saml_request(saml_request, cookie) == {
         "response": "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4=",
@@ -502,9 +492,10 @@ def test_send_saml_request(mocker):
 def test_send_saml_response(mocker):
     """Test sending SAML response."""
     from tokendito import okta
+    from tokendito.http_client import HTTP_client
 
-    request_wrapper_response = Mock()
-    request_wrapper_response.cookies = {"sid": "pytestcookie"}
+    mock_response = Mock()
+    mock_response.cookies = {"sid": "pytestcookie"}
 
     saml_response = {
         "response": "pytestresponse",
@@ -512,8 +503,9 @@ def test_send_saml_response(mocker):
         "post_url": "https://acme.okta.com/app/okta_org2org/akjlkjlksjx0xmdd/sso/saml",
     }
 
-    mocker.patch("tokendito.user.request_wrapper", return_value=request_wrapper_response)
-    assert okta.send_saml_response(saml_response) == request_wrapper_response.cookies
+    mocker.patch.object(HTTP_client, "post", return_value=mock_response)
+
+    assert okta.send_saml_response(saml_response) == mock_response.cookies
 
 
 def test_authenticate(mocker):
@@ -552,7 +544,15 @@ def test_local_auth(mocker):
     """Test local auth method."""
     from tokendito import okta
     from tokendito.config import Config
+    from tokendito.http_client import HTTP_client
 
+    # Create a fake HTTP response using Mock
+    mock_response_data = {"status": "SUCCESS", "sessionToken": "pytesttoken"}
+
+    # Patch HTTP_client.post to return the mock response
+    mocker.patch.object(HTTP_client, "post", return_value=mock_response_data)
+
+    # Initialize the configuration
     pytest_config = Config(
         okta={
             "username": "pytest",
@@ -560,10 +560,7 @@ def test_local_auth(mocker):
             "org": "https://acme.okta.org/",
         }
     )
-    api_wrapper_response = {"status": "SUCCESS", "sessionToken": "pytesttoken"}
 
-    mocker.patch("tokendito.okta.api_wrapper", return_value=api_wrapper_response)
-    mocker.patch("tokendito.okta.get_session_token", return_value="pytesttoken")
     assert okta.local_auth(pytest_config) == "pytesttoken"
 
 

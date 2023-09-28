@@ -8,6 +8,7 @@ from tokendito import aws
 from tokendito import okta
 from tokendito import user
 from tokendito.config import config
+from tokendito.http_client import HTTP_client
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +41,13 @@ def cli(args):
     # Authenticate to okta
     session_cookies = okta.authenticate(config)
 
+    HTTP_client.set_cookies(session_cookies)
+
     if config.okta["tile"]:
         tile_label = ""
         config.okta["tile"] = (config.okta["tile"], tile_label)
     else:
-        config.okta["tile"] = user.discover_tiles(config.okta["org"], session_cookies)
+        config.okta["tile"] = user.discover_tiles(config.okta["org"])
 
     # Authenticate to AWS roles
     auth_tiles = aws.authenticate_to_roles(config.okta["tile"], cookies=session_cookies)

@@ -1,6 +1,8 @@
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
 """Unit tests, and local fixtures for AWS module."""
+from unittest.mock import Mock
+
 import pytest
 
 
@@ -91,10 +93,18 @@ def test_select_assumeable_role_no_tiles():
 @pytest.mark.parametrize("status_code", [(400), (401), (404), (500), (503)])
 def test_authenticate_to_roles(status_code, monkeypatch):
     """Test if function return correct response."""
-    import requests
     from tokendito.aws import authenticate_to_roles
+    import tokendito.http_client as http_client
 
-    mock_get = {"status_code": status_code, "text": "response"}
-    monkeypatch.setattr(requests, "get", mock_get)
-    with pytest.raises(SystemExit) as error:
-        assert authenticate_to_roles([("http://test.url.com", "")], "secret_session_token") == error
+    # Create a mock response object
+    mock_response = Mock()
+    mock_response.status_code = status_code
+    mock_response.text = "response"
+
+    # Use monkeypatch to replace the HTTP_client.get method with the mock
+    monkeypatch.setattr(http_client.HTTP_client, "get", lambda *args, **kwargs: mock_response)
+
+    cookies = {"some_cookie": "some_value"}
+
+    with pytest.raises(SystemExit):
+        authenticate_to_roles([("http://test.url.com", "")], cookies)

@@ -17,9 +17,9 @@ import time
 
 import bs4
 from bs4 import BeautifulSoup
-import requests
 from tokendito import duo
 from tokendito import user
+from tokendito.http_client import HTTP_client
 
 logger = logging.getLogger(__name__)
 
@@ -29,42 +29,6 @@ _status_dict = dict(
     PASSWORD_EXPIRED="Your password has expired",
     LOCKED_OUT="Your account is locked out",
 )
-
-
-def api_wrapper(url, payload, headers=None):
-    """Okta MFA authentication.
-
-    :param url: url to call
-    :param payload: JSON Payload
-    :param headers: Headers of the request
-    :return: Dictionary with authentication response
-    """
-    logger.debug(f"Calling {url} with {headers}")
-    try:
-        response = requests.request("POST", url, data=json.dumps(payload), headers=headers)
-        response.raise_for_status()
-    except Exception as err:
-        logger.error(f"There was an error with the call to {url}: {err}")
-        sys.exit(1)
-
-    logger.debug(f"{response.url} responded with status code {response.status_code}")
-
-    try:
-        ret = response.json()
-    except ValueError as e:
-        logger.error(
-            f"{type(e).__name__} - Failed to parse response\n"
-            f"URL: {url}\n"
-            f"Status: {response.status_code}\n"
-            f"Content: {response.content}\n"
-        )
-        sys.exit(1)
-
-    if "errorCode" in ret:
-        api_error_code_parser(ret["errorCode"])
-        sys.exit(1)
-
-    return ret
 
 
 def api_error_code_parser(status=None):
@@ -83,19 +47,23 @@ def api_error_code_parser(status=None):
 
 
 def get_auth_properties(userid=None, url=None):
-    """Make a call to the webfinger endpoint.
+    """Make a call to the Okta webfinger endpoint to retrieve authentication properties.
 
-    :param userid: User for which we are requesting an auth endpoint.
-    :param url: Site where we are looking up the user.
-    :returns: dictionary with authentication properties.
+    :param userid: User's ID for which we are requesting an auth endpoint.
+    :param url: Okta organization URL where we are looking up the user.
+    :returns: Dictionary containing authentication properties.
     """
+    # Prepare the payload for the webfinger endpoint request.
     payload = {"resource": f"okta:acct:{userid}", "rel": "okta:idp"}
     headers = {"accept": "application/jrd+json"}
     url = f"{url}/.well-known/webfinger"
 
     logger.debug(f"Looking up auth endpoint for {userid} in {url}")
-    response = user.request_wrapper("GET", url, headers=headers, params=payload)
 
+    # Make a GET request to the webfinger endpoint.
+    response = HTTP_client.get(url, params=payload, headers=headers)
+
+    # Extract properties from the response.
     try:
         ret = response.json()["links"][0]["properties"]
     except (KeyError, ValueError) as e:
@@ -103,8 +71,8 @@ def get_auth_properties(userid=None, url=None):
         logger.debug(f"Response: {response.text}")
         sys.exit(1)
 
-    # Try to get metadata, type, and ID if available, but ensure
-    # that a dictionary with the correct keys is returned.
+    # Extract specific authentication properties if available.
+    # Return a dictionary with 'metadata', 'type', and 'id' keys.
     properties = {}
     properties["metadata"] = ret.get("okta:idp:metadata", None)
     properties["type"] = ret.get("okta:idp:type", None)
@@ -121,69 +89,120 @@ def get_saml_request(auth_properties):
     :param auth_properties: dict with the IdP ID and type.
     :returns: dict with post_url, relay_state, and base64 encoded saml request.
     """
+    # Prepare the headers for the request to retrieve the SAML request.
     headers = {"accept": "text/html,application/xhtml+xml,application/xml"}
+
+    # Build the URL based on the metadata and ID provided in the auth properties.
     base_url = user.get_base_url(auth_properties["metadata"])
     url = f"{base_url}/sso/idps/{auth_properties['id']}"
 
     logger.debug(f"Getting SAML request from {url}")
-    response = user.request_wrapper("GET", url, headers=headers)
+
+    # Make a GET request using the HTTP client to retrieve the SAML request.
+    response = HTTP_client.get(url, headers=headers)
+
+    # Extract the required parameters from the SAML request.
     saml_request = {
         "base_url": user.get_base_url(extract_form_post_url(response.text)),
         "post_url": extract_form_post_url(response.text),
         "relay_state": extract_saml_relaystate(response.text),
         "request": extract_saml_request(response.text, raw=True),
     }
+
+    # Mask sensitive data in the logs for security.
     user.add_sensitive_value_to_be_masked(saml_request["request"])
+
     logger.debug(f"SAML request is {saml_request}")
     return saml_request
 
 
 def send_saml_request(saml_request, cookies):
-    """Submit SAML request to IdP, and get the response back.
+    """
+    Submit SAML request to IdP, and get the response back.
 
-    :param cookies: session cookies with `sid`
     :param saml_request: dict with IdP post_url, relay_state, and saml_request
+    :param cookies: session cookies with `sid`
     :returns: dict with with SP post_url, relay_state, and saml_response
     """
+    HTTP_client.set_cookies(cookies)
+
+    # Define the payload and headers for the request
     payload = {
         "relayState": saml_request["relay_state"],
         "SAMLRequest": saml_request["request"],
     }
-    headers = {"accept": "text/html,application/xhtml+xml,application/xml"}
+
+    headers = {
+        "accept": "text/html,application/xhtml+xml,application/xml",
+        "Content-Type": "application/json",
+    }
+
+    # Construct the URL from the provided saml_request
     url = saml_request["post_url"]
+
+    # Log the SAML request details
     logger.debug(f"Sending SAML request to {url}")
 
-    response = user.request_wrapper("GET", url, headers=headers, data=payload, cookies=cookies)
+    # Use the HTTP client to make a GET request
+    response = HTTP_client.get(url, params=payload, headers=headers)
+
+    # Extract relevant information from the response to form the saml_response dictionary
     saml_response = {
         "response": extract_saml_response(response.text, raw=True),
         "relay_state": extract_saml_relaystate(response.text),
         "post_url": extract_form_post_url(response.text),
     }
+
+    # Mask sensitive values for logging purposes
     user.add_sensitive_value_to_be_masked(saml_response["response"])
+
+    # Log the formed SAML response
     logger.debug(f"SAML response is {saml_response}")
+
+    # Return the formed SAML response
     return saml_response
 
 
 def send_saml_response(saml_response):
-    """Submit SAML response to the SP.
+    """
+    Submit SAML response to the SP.
 
-    :param saml_response: dict with with SP post_url, relay_state, and saml_response
+    :param saml_response: dict with SP post_url, relay_state, and saml_response
     :returns: `sid` session cookie
     """
+    # Define the payload and headers for the request.
     payload = {
         "SAMLResponse": saml_response["response"],
         "RelayState": saml_response["relay_state"],
     }
-    headers = {"accept": "text/html,application/xhtml+xml,application/xml"}
+    headers = {
+        "accept": "text/html,application/xhtml+xml,application/xml",
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
+
+    # Construct the URL from the provided saml_response.
     url = saml_response["post_url"]
 
+    # Log the SAML response details.
     logger.debug(f"Sending SAML response back to {url}")
-    response = user.request_wrapper("POST", url, data=payload, headers=headers)
+
+    # Use the HTTP client to make a POST request.
+    response = HTTP_client.post(url, data=payload, headers=headers)
+
+    # Extract cookies from the response.
     session_cookies = response.cookies
+
+    # Get the 'sid' value from the cookies.
     sid = session_cookies.get("sid")
+
+    # If 'sid' is present, mask its value for logging purposes.
     if sid is not None:
         user.add_sensitive_value_to_be_masked(sid)
+
+    # Log the session cookies.
     logger.debug(f"Have session cookies: {session_cookies}")
+
+    # Return the session cookies.
     return session_cookies
 
 
@@ -204,6 +223,7 @@ def get_session_token(config, primary_auth, headers):
     if status == "SUCCESS" and "sessionToken" in primary_auth:
         session_token = primary_auth.get("sessionToken")
     elif status == "MFA_REQUIRED":
+        # Note: mfa_challenge should also be modified to accept and use http_client
         session_token = mfa_challenge(config, headers, primary_auth)
     else:
         logger.debug(f"Error parsing response: {json.dumps(primary_auth)}")
@@ -278,11 +298,18 @@ def local_auth(config):
 
     logger.debug(f"Authenticate user to {config.okta['org']}")
     logger.debug(f"Sending {headers}, {payload} to {config.okta['org']}")
-    primary_auth = api_wrapper(f"{config.okta['org']}/api/v1/authn", payload, headers)
+
+    primary_auth = HTTP_client.post(
+        f"{config.okta['org']}/api/v1/authn", json=payload, headers=headers, return_json=True
+    )
+
+    if "errorCode" in primary_auth:
+        api_error_code_parser(primary_auth["errorCode"])
+        sys.exit(1)
 
     while session_token is None:
         session_token = get_session_token(config, primary_auth, headers)
-    logger.info(f"User has been succesfully authenticated to {config.okta['org']}.")
+    logger.info(f"User has been successfully authenticated to {config.okta['org']}.")
     return session_token
 
 
@@ -301,6 +328,7 @@ def saml2_auth(config, auth_properties):
     saml2_config = deepcopy(config)
     saml2_config.okta["org"] = saml_request["base_url"]
     logger.info(f"Authentication is being redirected to {saml2_config.okta['org']}.")
+
     # Try to authenticate using the new configuration. This could cause
     # recursive calls, which allows for IdP chaining.
     session_cookies = authenticate(saml2_config)
@@ -438,9 +466,12 @@ def mfa_provider_type(
     if mfa_provider == "DUO":
         payload, headers, callback_url = duo.authenticate_duo(selected_factor)
         duo.duo_api_post(callback_url, payload=payload)
-        mfa_verify = api_wrapper(mfa_challenge_url, payload, headers)
+        mfa_verify = HTTP_client.post(
+            mfa_challenge_url, json=payload, headers=headers, return_json=True
+        )
+
     elif mfa_provider == "OKTA" and factor_type == "push":
-        mfa_verify = push_approval(headers, mfa_challenge_url, payload)
+        mfa_verify = push_approval(mfa_challenge_url, payload)
     elif mfa_provider in ["OKTA", "GOOGLE"] and factor_type in ["token:software:totp", "sms"]:
         mfa_verify = totp_approval(
             config, selected_mfa_option, headers, mfa_challenge_url, payload, primary_auth
@@ -505,13 +536,9 @@ def mfa_challenge(config, headers, primary_auth):
 
     preset_mfa = config.okta["mfa"]
 
-    # This creates a list where each elements looks like provider_factor_id.
-    # For example, OKTA_push_9yi4bKJNH2WEWQ0x8, GOOGLE_token:software:totp_9yi4bKJNH2WEWQ
     available_mfas = [f"{d['provider']}_{d['factorType']}_{d['id']}" for d in mfa_options]
-
     index = mfa_index(preset_mfa, available_mfas, mfa_options)
 
-    # time to challenge the mfa option
     selected_mfa_option = mfa_options[index]
     logger.debug(f"Selected MFA is [{selected_mfa_option}]")
 
@@ -523,10 +550,14 @@ def mfa_challenge(config, headers, primary_auth):
         "provider": selected_mfa_option["provider"],
         "profile": selected_mfa_option["profile"],
     }
-    selected_factor = api_wrapper(mfa_challenge_url, payload, headers)
+
+    selected_factor = HTTP_client.post(
+        mfa_challenge_url, json=payload, headers=headers, return_json=True
+    )
 
     mfa_provider = selected_factor["_embedded"]["factor"]["provider"]
     logger.debug(f"MFA Challenge URL: [{mfa_challenge_url}] headers: {headers}")
+
     mfa_session_token = mfa_provider_type(
         config,
         mfa_provider,
@@ -564,8 +595,12 @@ def totp_approval(config, selected_mfa_option, headers, mfa_challenge_url, paylo
         "stateToken": primary_auth["stateToken"],
         "passCode": config.okta["mfa_response"],
     }
-    # FIXME: This call needs to catch a 403 coming from a bad token
-    mfa_verify = api_wrapper(mfa_challenge_url, payload, headers)
+
+    # Using the http_client to make the POST request
+    mfa_verify = HTTP_client.post(
+        mfa_challenge_url, json=payload, headers=headers, return_json=True
+    )
+
     if "sessionToken" in mfa_verify:
         user.add_sensitive_value_to_be_masked(mfa_verify["sessionToken"])
     logger.debug(f"mfa_verify [{json.dumps(mfa_verify)}]")
@@ -573,16 +608,15 @@ def totp_approval(config, selected_mfa_option, headers, mfa_challenge_url, paylo
     return mfa_verify
 
 
-def push_approval(headers, mfa_challenge_url, payload):
+def push_approval(mfa_challenge_url, payload):
     """Handle push approval from the user.
 
-    :param headers: HTTP headers sent to API call
     :param mfa_challenge_url: MFA challenge url
     :param payload: payload which needs to be sent
     :return: Session Token if succeeded or terminates if user wait goes 5 min
 
     """
-    logger.debug(f"Push approval with headers:{headers} challenge_url:{mfa_challenge_url}")
+    logger.debug(f"Push approval with challenge_url:{mfa_challenge_url}")
 
     user.print("Waiting for an approval from the device...")
     status = "MFA_CHALLENGE"
@@ -590,8 +624,13 @@ def push_approval(headers, mfa_challenge_url, payload):
     response = {}
     challenge_displayed = False
 
+    headers = {"content-type": "application/json", "accept": "application/json"}
+
     while status == "MFA_CHALLENGE" and result == "WAITING":
-        response = api_wrapper(mfa_challenge_url, payload, headers)
+        response = HTTP_client.post(
+            mfa_challenge_url, json=payload, headers=headers, return_json=True
+        )
+
         if "sessionToken" in response:
             user.add_sensitive_value_to_be_masked(response["sessionToken"])
 

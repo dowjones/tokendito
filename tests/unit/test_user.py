@@ -6,7 +6,6 @@ import os
 import sys
 
 import pytest
-import requests_mock
 
 
 @pytest.mark.xfail(
@@ -936,25 +935,3 @@ def test_extract_arns(saml, expected):
     from tokendito import user
 
     assert user.extract_arns(saml) == expected
-
-
-def test_request_wrapper():
-    """Test whether request_wrapper returns the correct data."""
-    from tokendito.user import request_wrapper
-
-    url = "https://acme.org"
-
-    with requests_mock.Mocker() as m:
-        data = {"response": "ok"}
-        m.get(url, json=data, status_code=200)
-        assert request_wrapper("GET", url).json() == data
-
-    with requests_mock.Mocker() as m:
-        data = {"response": "ok"}
-        m.post(url, json=data, status_code=200)
-        assert request_wrapper("POST", url).json() == data
-
-    with pytest.raises(SystemExit) as error, requests_mock.Mocker() as m:
-        m.get(url, json=data, status_code=500)
-        request_wrapper("GET", url)
-    assert error.value.code == 1
