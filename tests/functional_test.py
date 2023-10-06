@@ -227,7 +227,6 @@ def test_generate_config(custom_args, config_file):
 def test_generate_credentials(custom_args, config_file):
     """Run the tool and generate credentials."""
     import pyotp
-
     from tokendito import config
     from tokendito import user
 
