@@ -59,7 +59,9 @@ def test_tty_assertion():
     """Test the availability of stdin."""
     import os
     import sys
+
     from tokendito.user import tty_assertion
+
     from io import UnsupportedOperation
 
     # Save for reuse
@@ -313,7 +315,6 @@ def test_update_ini(tmpdir):
 def test_assert_credentials():
     """Test whether getting credentials works as expeted."""
     from moto import mock_sts
-
     from tokendito import aws
 
     with pytest.raises(SystemExit) as err:
@@ -637,8 +638,8 @@ def test_mfa_provider_type(
     sample_headers,
 ):
     """Test whether function return key on specific MFA provider."""
-    from tokendito.okta import mfa_provider_type
     from tokendito import Config
+    from tokendito.okta import mfa_provider_type
 
     payload = {"x": "y", "t": "z"}
     callback_url = "https://www.acme.org"
@@ -673,8 +674,8 @@ def test_mfa_provider_type(
 
 def test_bad_mfa_provider_type(mocker, sample_headers):
     """Test whether function return key on specific MFA provider."""
-    from tokendito.okta import mfa_provider_type
     from tokendito import Config
+    from tokendito.okta import mfa_provider_type
 
     pytest_config = Config()
     payload = {"x": "y", "t": "z"}
@@ -1089,7 +1090,6 @@ def test_get_duo_sid(mocker):
 def test_authenticate_to_roles(status_code, monkeypatch):
     """Test if function return correct response."""
     import requests
-
     from tokendito.aws import authenticate_to_roles
 
     mock_get = {"status_code": status_code, "text": "response"}
@@ -1112,6 +1112,7 @@ def test_config_object():
     """Test proper initialization of the Config object."""
     import json
     import sys
+
     from tokendito import Config
 
     # Test for invalid assignments to the object
@@ -1680,8 +1681,8 @@ def test_send_saml_response(mocker):
 
 def test_authenticate(mocker):
     """Test authentication."""
-    from tokendito import okta
     from tokendito import Config
+    from tokendito import okta
 
     pytest_config = Config(
         okta={
@@ -1712,8 +1713,8 @@ def test_authenticate(mocker):
 
 def test_local_auth(mocker):
     """Test local auth method."""
-    from tokendito import okta
     from tokendito import Config
+    from tokendito import okta
 
     pytest_config = Config(
         okta={
@@ -1731,8 +1732,8 @@ def test_local_auth(mocker):
 
 def test_saml2_auth(mocker):
     """Test saml2 authentication."""
-    from tokendito import okta
     from tokendito import Config
+    from tokendito import okta
 
     auth_properties = {"id": "id", "metadata": "metadata"}
 
