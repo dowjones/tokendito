@@ -1,6 +1,6 @@
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
-"""This module handles Duo operations."""
+"""Handle Duo operations."""
 import json
 import logging
 import sys
@@ -10,8 +10,8 @@ from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
 import requests
-from tokendito import config
 from tokendito import user
+from tokendito.config import config
 
 logger = logging.getLogger(__name__)
 

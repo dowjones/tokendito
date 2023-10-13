@@ -114,7 +114,7 @@ def test_get_password(mocker):
     from tokendito import user
 
     mocker.patch("tokendito.user.tty_assertion", return_value=True)
-    mocker.patch("getpass.getpass", return_value="pytest_patched")
+    mocker.patch("tokendito.user.getpass", return_value="pytest_patched")
     val = user.get_password()
 
     assert val == "pytest_patched"
@@ -519,8 +519,8 @@ def test_process_arguments():
 
 def test_update_configuration(tmpdir):
     """Test writing and reading to a configuration file."""
-    from tokendito import Config
     from tokendito import user
+    from tokendito.config import Config
 
     path = tmpdir.mkdir("pytest").join("pytest_tokendito.ini")
     pytest_config = Config(
@@ -593,7 +593,7 @@ def test_get_session_token(
     mfa_availability,
 ):
     """Test whether function return key on specific status."""
-    from tokendito import Config
+    from tokendito.config import Config
     from tokendito.okta import get_session_token
 
     pytest_config = Config()
@@ -607,7 +607,7 @@ def test_get_session_token(
 
 def test_bad_session_token(mocker, sample_json_response, sample_headers):
     """Test whether function behave accordingly."""
-    from tokendito import Config
+    from tokendito.config import Config
     from tokendito.okta import get_session_token
 
     pytest_config = Config()
@@ -638,7 +638,7 @@ def test_mfa_provider_type(
     sample_headers,
 ):
     """Test whether function return key on specific MFA provider."""
-    from tokendito import Config
+    from tokendito.config import Config
     from tokendito.okta import mfa_provider_type
 
     payload = {"x": "y", "t": "z"}
@@ -674,7 +674,7 @@ def test_mfa_provider_type(
 
 def test_bad_mfa_provider_type(mocker, sample_headers):
     """Test whether function return key on specific MFA provider."""
-    from tokendito import Config
+    from tokendito.config import Config
     from tokendito.okta import mfa_provider_type
 
     pytest_config = Config()
@@ -835,7 +835,7 @@ def test_select_preferred_mfa_index(mocker, sample_json_response):
 )
 def test_select_preferred_mfa_index_output(email, capsys, mocker, sample_json_response):
     """Test whether the function gives correct output."""
-    from tokendito import config
+    from tokendito.config import config
     from tokendito.user import select_preferred_mfa_index
 
     # For this test, ensure that quiet is never true
@@ -860,7 +860,7 @@ def test_select_preferred_mfa_index_output(email, capsys, mocker, sample_json_re
 
 def test_mfa_options(sample_headers, sample_json_response, mocker):
     """Test handling of MFA approval."""
-    from tokendito import Config
+    from tokendito.config import Config
     from tokendito.okta import totp_approval
 
     selected_mfa_option = {"factorType": "push"}
@@ -883,7 +883,7 @@ def test_mfa_options(sample_headers, sample_json_response, mocker):
 
 def test_mfa_challenge_with_no_mfas(sample_headers, sample_json_response):
     """Test whether okta response has mfas."""
-    from tokendito import Config
+    from tokendito.config import Config
     from tokendito.okta import mfa_challenge
 
     primary_auth = sample_json_response["okta_response_no_auth_methods"]
@@ -982,10 +982,10 @@ def test_correct_role_selection(mocker, selected_role):
 
 def test_repeated_line_select_role_arn():
     """Ensure that duplicate roles trigger an error."""
-    import tokendito
+    from tokendito.config import config
     from tokendito.user import select_role_arn
 
-    tokendito.config.aws["profile"] = "pytest"
+    config.aws["profile"] = "pytest"
 
     role_arns = [
         "arn:aws:iam::123456789012:role/pytest",
@@ -1000,11 +1000,11 @@ def test_repeated_line_select_role_arn():
 
 def test_incorrect_role_arn():
     """Ensure that incorrectly selected options trigger an error."""
-    import tokendito
+    from tokendito.config import config
     from tokendito.user import select_role_arn
 
-    tokendito.config.aws["profile"] = "pytest_failure"
-    tokendito.config.aws["role_arn"] = "pytest_failure"
+    config.aws["profile"] = "pytest_failure"
+    config.aws["role_arn"] = "pytest_failure"
 
     role_arns = [
         "arn:aws:iam::123456789012:role/pytest",
@@ -1019,7 +1019,7 @@ def test_incorrect_role_arn():
 
 def test_prepare_duo_info():
     """Test behaviour empty return duo info."""
-    from tokendito import config
+    from tokendito.config import config
     from tokendito.duo import prepare_duo_info
 
     selected_okta_factor = {
@@ -1058,7 +1058,7 @@ def test_prepare_duo_info():
 
 def test_get_duo_sid(mocker):
     """Check if got sid correct."""
-    from tokendito import config
+    from tokendito.config import config
     from tokendito.duo import get_duo_sid
 
     test_duo_info = {
@@ -1106,60 +1106,6 @@ def test_get_mfa_response():
     mfa_result.json = Mock(return_value={"response": "test_response"})
 
     assert get_mfa_response(mfa_result) == "test_response"
-
-
-def test_config_object():
-    """Test proper initialization of the Config object."""
-    import json
-    import sys
-
-    from tokendito import Config
-
-    # Test for invalid assignments to the object
-    with pytest.raises(AttributeError):
-        pytest_config = Config(pytest_attribute={})
-
-    with pytest.raises(KeyError):
-        pytest_config = Config(aws="pytest")
-
-    with pytest.raises(ValueError):
-        pytest_config = Config(aws={"pytest": "pytest"})
-
-    # Test whether repr can be reused to create an object
-    pytest_config = Config()
-    args = json.loads(repr(pytest_config))
-    pytest_config_2 = Config(**args)
-    assert (pytest_config == pytest_config_2) is True
-
-    # Test if passing arguments results in an object with new values
-    pytest_config_aws = Config(aws={"profile": "pytest_aws"})
-    pytest_config_okta = Config(okta={"username": "pytest_username"})
-    pytest_config_mixed = Config(
-        user={"config_profile": "pytest_user"}, okta={"password": "%pytest_!&%password^"}
-    )
-    assert (pytest_config == pytest_config_aws) is False
-
-    # Check that an update copies the values correctly
-    pytest_config.update(pytest_config_aws)
-    assert pytest_config.aws["profile"] == "pytest_aws"
-
-    # Check that an update does not overwrite all values
-    pytest_config.update(pytest_config_okta)
-    assert pytest_config.aws["profile"] == "pytest_aws"
-
-    # Check that an update overwrites matching values only
-    pytest_config.update(pytest_config_mixed)
-    assert pytest_config.okta["username"] == "pytest_username"
-    assert pytest_config.okta["password"] == "%pytest_!&%password^"
-    assert pytest_config.user["config_profile"] == "pytest_user"
-
-    # Check that default values from the original object are kept
-    assert pytest_config.get_defaults()["aws"]["region"] == pytest_config.aws["region"]
-
-    # Check that we set encoding correctly when there is no stdin
-    sys.stdin = None
-    pytest_config = Config()
-    assert pytest_config.user["encoding"] == "utf-8"
 
 
 def test_loglevel_collected_from_env(monkeypatch):
@@ -1211,11 +1157,12 @@ def test_get_submodules_names(mocker):
 
 def test_process_interactive_input(mocker):
     """Test interactive input processor."""
-    from tokendito import Config
     from tokendito import user
+    from tokendito.config import Config
 
     # Check that a good object retrieves an interactive password
-    mocker.patch("getpass.getpass", return_value="%pytest_!&%password^")
+    mocker.patch("tokendito.user.tty_assertion", return_value=True)
+    mocker.patch("tokendito.user.getpass", return_value="%pytest_!&%password^")
 
     pytest_config = Config()
     pytest_config.okta["tile"] = "https://pytest/tile"
@@ -1281,8 +1228,8 @@ def test_get_interactive_profile_name_invalid_input(mocker, monkeypatch):
 )
 def test_set_role_name(value, submit, mocker, expected):
     """Test setting the AWS Role (profile) name."""
-    from tokendito import Config
     from tokendito import user
+    from tokendito.config import Config
 
     pytest_config = Config(aws=dict(profile=value))
 
@@ -1418,8 +1365,8 @@ def test_set_role_name(value, submit, mocker, expected):
 )
 def test_validate_configuration(config, expected):
     """Test configuration validator."""
-    from tokendito import Config
     from tokendito import user
+    from tokendito.config import Config
 
     pytest_config = Config(**config)
     assert user.validate_configuration(pytest_config) == expected
@@ -1427,8 +1374,8 @@ def test_validate_configuration(config, expected):
 
 def test_sanitize_config_values():
     """Test configuration sanitizer method."""
-    from tokendito import Config
     from tokendito import user
+    from tokendito.config import Config
 
     pytest_config = Config(
         aws=dict(output="pytest", region="pytest"),
@@ -1681,8 +1628,8 @@ def test_send_saml_response(mocker):
 
 def test_authenticate(mocker):
     """Test authentication."""
-    from tokendito import Config
     from tokendito import okta
+    from tokendito.config import Config
 
     pytest_config = Config(
         okta={
@@ -1713,8 +1660,8 @@ def test_authenticate(mocker):
 
 def test_local_auth(mocker):
     """Test local auth method."""
-    from tokendito import Config
     from tokendito import okta
+    from tokendito.config import Config
 
     pytest_config = Config(
         okta={
@@ -1732,8 +1679,8 @@ def test_local_auth(mocker):
 
 def test_saml2_auth(mocker):
     """Test saml2 authentication."""
-    from tokendito import Config
     from tokendito import okta
+    from tokendito.config import Config
 
     auth_properties = {"id": "id", "metadata": "metadata"}
 
@@ -1762,7 +1709,7 @@ def test_saml2_auth(mocker):
 def test_assume_role(mocker):
     """Test assuming role."""
     from tokendito import aws
-    from tokendito import Config
+    from tokendito.config import Config
 
     pytest_config = Config(
         okta={

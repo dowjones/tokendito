@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
-"""tokendito module entry point."""
+"""Tokendito module entry point."""
 import sys
 
 

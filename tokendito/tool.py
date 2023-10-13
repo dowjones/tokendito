@@ -1,13 +1,13 @@
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
-"""This module retrieves AWS credentials after authenticating with Okta."""
+"""CLI operations."""
 import logging
 import sys
 
 from tokendito import aws
-from tokendito import config
 from tokendito import okta
 from tokendito import user
+from tokendito.config import config
 
 logger = logging.getLogger(__name__)
 
