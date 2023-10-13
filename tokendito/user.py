@@ -6,7 +6,7 @@ import builtins
 import codecs
 import configparser
 from datetime import timezone
-import getpass
+from getpass import getpass
 import json
 import logging
 import os
@@ -23,8 +23,8 @@ from bs4 import BeautifulSoup
 import requests
 from tokendito import __version__
 from tokendito import aws
-from tokendito import Config
-from tokendito import config as config
+from tokendito.config import Config
+from tokendito.config import config
 
 # Unfortunately, readline is only available in non-Windows systems. There is no substitution.
 try:
@@ -842,7 +842,7 @@ def get_password():
 
     tty_assertion()
     while res == "":
-        password = getpass.getpass()
+        password = getpass()
         res = password
         logger.debug("password set interactively")
     return res

@@ -1,7 +1,7 @@
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
 """
-This module handles the all Okta operations.
+Handle the all Okta operations.
 
 1. Okta authentication
 2. Update Okta Config File

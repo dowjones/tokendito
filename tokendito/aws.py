@@ -1,6 +1,6 @@
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
-"""This module handles the all aws workflow operations.
+"""Handle the AWS workflow operations.
 
 Tasks include:
 1. Aws Authentication with SAML
@@ -13,7 +13,7 @@ import logging
 import sys
 
 from botocore import UNSIGNED
-from botocore.client import Config
+from botocore.client import Config as BotocoreConfig
 from botocore.exceptions import ClientError
 import botocore.session
 from tokendito import okta
@@ -130,7 +130,7 @@ def handle_assume_role(role_arn, provider_arn, encoded_xml, duration, default_er
     logger.debug(f"Attempting session time [{duration}]")
     try:
         session = botocore.session.get_session()
-        client = session.create_client("sts", config=Config(signature_version=UNSIGNED))
+        client = session.create_client("sts", config=BotocoreConfig(signature_version=UNSIGNED))
         assume_role_response = client.assume_role_with_saml(
             RoleArn=role_arn,
             PrincipalArn=provider_arn,

@@ -143,8 +143,8 @@ def test_parameter_collection(monkeypatch, tmpdir):
     """Ensure that the order of arguments has the correct behavior."""
     from argparse import Namespace
 
-    from tokendito import Config
     from tokendito import user
+    from tokendito.config import Config
 
     config = Config()
     data = "[default]\n"
@@ -188,8 +188,8 @@ def test_quiet_failure():
 
 def test_generate_config(custom_args, config_file):
     """Test writing to a config file."""
-    from tokendito import Config
     from tokendito import user
+    from tokendito.config import Config
 
     pytest_cfg = Config()
     tool_args = user.parse_cli_args(custom_args)
@@ -227,8 +227,8 @@ def test_generate_config(custom_args, config_file):
 def test_generate_credentials(custom_args, config_file):
     """Run the tool and generate credentials."""
     import pyotp
-    from tokendito import config
     from tokendito import user
+    from tokendito.config import config
 
     # Emulate helpers.process_options() bypassing interactive portions.
     tool_args = user.parse_cli_args(custom_args)
@@ -300,8 +300,8 @@ def test_generate_credentials(custom_args, config_file):
 @pytest.mark.run("last")
 def test_aws_credentials(custom_args):
     """Run the AWS cli to verify whether credentials work."""
-    from tokendito import config
     from tokendito import user
+    from tokendito.config import config
 
     # Emulate helpers.process_options() bypassing interactive portions.
     tool_args = user.parse_cli_args(custom_args)
