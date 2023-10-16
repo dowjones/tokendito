@@ -1,6 +1,6 @@
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
-"""Unit tests, and local fixtures."""
+"""Unit tests, and local fixtures for the Config class."""
 import pytest
 
 

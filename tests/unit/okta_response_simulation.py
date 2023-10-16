@@ -1,6 +1,6 @@
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
-"""simulation okta reponses."""
+"""Simulatie okta reponses."""
 
 with_mfa = {
     "status": "MFA_REQUIRED",
