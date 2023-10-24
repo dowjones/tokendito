@@ -25,6 +25,7 @@ from tokendito import __version__
 from tokendito import aws
 from tokendito.config import Config
 from tokendito.config import config
+from tokendito.http_client import HTTP_client
 
 # Unfortunately, readline is only available in non-Windows systems. There is no substitution.
 try:
@@ -538,7 +539,7 @@ def get_account_aliases(saml_xml, saml_response_string):
     encoded_xml = codecs.encode(saml_xml.encode("utf-8"), "base64")
     aws_response = None
     try:
-        aws_response = requests.Session().post(url, data={"SAMLResponse": encoded_xml})
+        aws_response = HTTP_client.post(url, data={"SAMLResponse": encoded_xml})
     except Exception as request_error:
         logger.error(f"There was an error retrieving the AWS SAML page: \n{request_error}")
         logger.debug(json.dumps(aws_response))
@@ -1205,21 +1206,37 @@ def request_cookies(url, session_token):
     :param session_token: session token, str
     :returns: cookies object
     """
+    # Construct the URL from the base URL provided.
     url = f"{url}/api/v1/sessions"
-    data = json.dumps({"sessionToken": f"{session_token}"})
 
-    response_with_cookie = request_wrapper(method="POST", url=url, data=data)
-    sess_id = response_with_cookie.json()["id"]
+    # Define the payload and headers for the request.
+    data = {"sessionToken": session_token}
+    headers = {"Content-Type": "application/json", "accept": "application/json"}
+
+    # Log the request details.
+    logger.debug(f"Requesting session cookies from {url}")
+
+    # Use the HTTP client to make a POST request.
+    response_json = HTTP_client.post(url, json=data, headers=headers, return_json=True)
+
+    if "id" not in response_json:
+        logger.error(f"'id' not found in response. Full response: {response_json}")
+        sys.exit(1)
+
+    sess_id = response_json["id"]
     add_sensitive_value_to_be_masked(sess_id)
 
-    cookies = response_with_cookie.cookies
-    cookies.update({"sid": f"{sess_id}"})
-    logger.debug(f"Session cookies: {cookies}")
+    # create cookies with sid 'sid'.
+    cookies = requests.cookies.RequestsCookieJar()
+    cookies.set("sid", sess_id, domain=urlparse(url).netloc, path="/")
+
+    # Log the session cookies.
+    logger.debug(f"Received session cookies: {cookies}")
 
     return cookies
 
 
-def discover_tiles(url, cookies):
+def discover_tiles(url):
     """
     Discover aws tile url on user's okta dashboard.
 
@@ -1233,7 +1250,9 @@ def discover_tiles(url, cookies):
         "expand": ["items", "items.resource"],
     }
     logger.debug(f"Performing auto-discovery on {url}.")
-    response_with_tabs = request_wrapper(method="GET", url=url, cookies=cookies, params=params)
+
+    response_with_tabs = HTTP_client.get(url, params=params)
+
     tabs = response_with_tabs.json()
 
     aws_tiles = []
@@ -1254,33 +1273,3 @@ def discover_tiles(url, cookies):
     logger.debug(f"Discovered {len(tile)} URLs.")
 
     return tile
-
-
-def request_wrapper(method, url, headers=None, **kwargs):
-    """
-    Wrap 'requests.request' and perform response checks.
-
-    :param method: request method
-    :param url: request URL
-    :param headers: request headers
-    :param kwargs: additional parameters passed to request
-    :returns: response object
-    """
-    if headers is None:
-        headers = {"content-type": "application/json", "accept": "application/json"}
-
-    logger.debug(f"Issuing {method} request to {url} with {headers} and {kwargs}")
-    try:
-        response = requests.request(method=method, url=url, headers=headers, **kwargs)
-        response.raise_for_status()
-    except requests.exceptions.HTTPError as err:
-        logger.error(
-            f"The {method} request to {url} failed ({err.response.status_code}): "
-            f"{err.response.text}"
-        )
-        sys.exit(1)
-    except Exception as err:
-        logger.error(f"The {method} request to {url} failed with {err}")
-        sys.exit(1)
-
-    return response

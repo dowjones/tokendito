@@ -18,6 +18,7 @@ from botocore.exceptions import ClientError
 import botocore.session
 from tokendito import okta
 from tokendito import user
+from tokendito.http_client import HTTP_client
 
 logger = logging.getLogger(__name__)
 
@@ -51,19 +52,21 @@ def authenticate_to_roles(urls, cookies=None):
 
     :param urls: list of tuples or tuple, with tiles info
     :param cookies: html cookies
+    :param user_agent: optional user agent string
     :return: response text
 
     """
+    if cookies:
+        HTTP_client.set_cookies(cookies)  # Set cookies if provided
+
     url_list = [urls] if isinstance(urls, tuple) else urls
     responses = []
     tile_count = len(url_list)
-    plural = ""
-    if tile_count > 1:
-        plural = "s"
+    plural = "s" if tile_count > 1 else ""
 
     logger.info(f"Discovering roles in {tile_count} tile{plural}.")
     for url, label in url_list:
-        response = user.request_wrapper("GET", url, cookies=cookies)
+        response = HTTP_client.get(url)  # Use the HTTPClient's get method
         saml_response_string = response.text
 
         saml_xml = okta.extract_saml_response(saml_response_string)
