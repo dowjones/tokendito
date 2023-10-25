@@ -464,8 +464,8 @@ def mfa_provider_type(
     factor_type = selected_factor.get("_embedded", {}).get("factor", {}).get("factorType", None)
 
     if mfa_provider == "DUO":
-        payload, headers, callback_url = duo.authenticate_duo(selected_factor)
-        duo.duo_api_post(callback_url, payload=payload)
+        mfa_verify = duo.authenticate_duo(selected_factor)
+        headers = {"content-type": "application/json", "accept": "application/json"}
         mfa_verify = HTTP_client.post(
             mfa_challenge_url, json=payload, headers=headers, return_json=True
         )

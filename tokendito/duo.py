@@ -8,6 +8,7 @@ import time
 from urllib.parse import unquote
 from urllib.parse import urlparse
 
+import bs4
 from bs4 import BeautifulSoup
 from tokendito import user
 from tokendito.config import config
@@ -23,21 +24,24 @@ def prepare_duo_info(selected_okta_factor):
     :return duo_info: dict of parameters for Duo
     """
     duo_info = {}
-    okta_factor = selected_okta_factor["_embedded"]["factor"]["_embedded"]["verification"]
-    duo_info["okta_factor"] = okta_factor
-    duo_info["factor_id"] = selected_okta_factor["_embedded"]["factor"]["id"]
+    try:
+        okta_factor = selected_okta_factor["_embedded"]["factor"]["_embedded"]["verification"]
+        duo_info["okta_factor"] = okta_factor
+        duo_info["factor_id"] = selected_okta_factor["_embedded"]["factor"]["id"]
 
-    duo_info["state_token"] = selected_okta_factor["stateToken"]
-    duo_info["okta_callback_url"] = okta_factor["_links"]["complete"]["href"]
-    duo_info["tx"] = okta_factor["signature"].split(":")[0]
-    duo_info["tile_sig"] = okta_factor["signature"].split(":")[1]
-    duo_info["parent"] = f"{config.okta['org']}/signin/verify/duo/web"
-    duo_info["host"] = okta_factor["host"]
-    duo_info["sid"] = ""
+        duo_info["state_token"] = selected_okta_factor["stateToken"]
+        duo_info["okta_callback_url"] = okta_factor["_links"]["complete"]["href"]
+        duo_info["tx"] = okta_factor["signature"].split(":")[0]
+        duo_info["tile_sig"] = okta_factor["signature"].split(":")[1]
+        duo_info["parent"] = f"{config.okta['org']}/signin/verify/duo/web"
+        duo_info["host"] = okta_factor["host"]
+        duo_info["sid"] = ""
 
-    version = okta_factor["_links"]["script"]["href"].split("-v")[1]
-    duo_info["version"] = version.strip(".js")
-
+        version = okta_factor["_links"]["script"]["href"].split("-v")[1]
+        duo_info["version"] = version.strip(".js")
+    except KeyError as missing_key:
+        logger.error(f"There was an issue parsing the Okta factor. Please try again: {missing_key}")
+        sys.exit(1)
     return duo_info
 
 
@@ -76,7 +80,7 @@ def get_duo_sid(duo_info):
         logger.error(f"There was an error getting your SID. Please try again: {sid_error}")
         sys.exit(2)
 
-    return duo_info, duo_auth_response
+    return (duo_info, duo_auth_response)
 
 
 def get_duo_devices(duo_auth):
@@ -91,17 +95,22 @@ def get_duo_devices(duo_auth):
     :return factor_options: list of dict objects describing each MFA option.
     """
     soup = BeautifulSoup(duo_auth.content, "html.parser")
+    devices = []
 
-    device_soup = soup.find("select", {"name": "device"}).findAll("option")  # type: ignore
-    devices = [f"{d['value']} - {d.text}" for d in device_soup]
+    device_soup = soup.find("select", {"name": "device"})
+    if type(device_soup) is bs4.element.Tag:
+        options = device_soup.findAll("option")
+        devices = [f"{d['value']} - {d.text}" for d in options]
     if not devices:
         logger.error("Please configure devices for your Duo MFA and retry.")
         sys.exit(2)
 
     factor_options = []
+    factors = []
     for device in devices:
         options = soup.find("fieldset", {"data-device-index": device.split(" - ")[0]})
-        factors = options.findAll("input", {"name": "factor"})  # type: ignore (PEP 561)
+        if type(options) is bs4.element.Tag:
+            factors = options.findAll("input", {"name": "factor"})
         for factor in factors:
             factor_option = {"device": device, "factor": factor["value"]}
             factor_options.append(factor_option)
@@ -118,8 +127,8 @@ def parse_duo_mfa_challenge(mfa_challenge):
         mfa_challenge = mfa_challenge.json()
         mfa_status = mfa_challenge["stat"]
         txid = mfa_challenge["response"]["txid"]
-    except ValueError as value_error:
-        logger.error(f"The Duo API returned a non-json response: {value_error}")
+    except (TypeError, ValueError) as err:
+        logger.error(f"The Duo API returned a non-json response: {err}")
         sys.exit(1)
     except KeyError as key_error:
         logger.error(f"The Duo API response is missing a required parameter: {key_error}")
@@ -127,7 +136,7 @@ def parse_duo_mfa_challenge(mfa_challenge):
         sys.exit(1)
 
     if mfa_status == "fail":
-        logger.error(f"Your Duo authentication has failed: {mfa_challenge['message']}")
+        logger.error(f"Your Duo authentication has failed: {mfa_challenge}")
         sys.exit(1)
     return txid
 
@@ -143,23 +152,29 @@ def duo_mfa_challenge(duo_info, mfa_option, passcode):
     :param mfa_option: the user's selected second factor.
     :return txid: Duo transaction ID used to track this auth attempt.
     """
-    url = f"https://{duo_info['host']}/frame/prompt"
-    device = mfa_option["device"].split(" - ")[0]
-    mfa_data = {
-        "factor": mfa_option["factor"],
-        "device": device,
-        "sid": duo_info["sid"],
-        "out_of_date": False,
-        "days_out_of_date": 0,
-        "days_to_block": None,
-        "async": True,
-    }
+    mfa_data = {}
+    try:
+        url = f"https://{duo_info['host']}/frame/prompt"
+        device = mfa_option["device"].split(" - ")[0]
+        mfa_data = {
+            "factor": mfa_option["factor"],
+            "device": device,
+            "sid": duo_info["sid"],
+            "out_of_date": False,
+            "days_out_of_date": 0,
+            "days_to_block": None,
+            "async": True,
+        }
+    except Exception as key_error:
+        logger.error(f"Unable to parse Duo MFA data: {key_error}")
+        sys.exit(2)
+
     if passcode:
         mfa_data["passcode"] = passcode
     mfa_challenge = duo_api_post(url, payload=mfa_data)
     txid = parse_duo_mfa_challenge(mfa_challenge)
 
-    logger.debug("Sent MFA Challenge and obtained Duo transaction ID.")
+    logger.debug(f"Sent MFA Challenge and obtained Duo transaction ID {txid}")
     return txid
 
 
@@ -171,8 +186,12 @@ def get_mfa_response(mfa_result):
     """
     try:
         verify_mfa = mfa_result.json()["response"]
-    except Exception as parse_error:
-        logger.error(f"There was an error parsing the mfa challenge result: {parse_error}")
+    except KeyError as key_error:
+        logger.error(f"The mfa challenge response is missing a required parameter: {key_error}")
+        logger.debug(json.dumps(mfa_result.json()))
+        sys.exit(1)
+    except Exception as other_error:
+        logger.error(f"There was an error getting the mfa challenge result: {other_error}")
         sys.exit(1)
     return verify_mfa
 
@@ -197,7 +216,7 @@ def parse_challenge(verify_mfa, challenge_result):
         challenge_result = verify_mfa["result"].lower()
 
     logger.debug(f"Challenge result is {challenge_result}")
-    return challenge_result, challenge_reason
+    return (challenge_result, challenge_reason)
 
 
 def duo_mfa_verify(duo_info, txid):
@@ -218,11 +237,9 @@ def duo_mfa_verify(duo_info, txid):
         logger.debug("Waiting for MFA challenge response")
         mfa_result = duo_api_post(url, payload=challenged_mfa)
         verify_mfa = get_mfa_response(mfa_result)
-        challenge_result, challenge_reason = parse_challenge(verify_mfa, challenge_result)
+        (challenge_result, challenge_reason) = parse_challenge(verify_mfa, challenge_result)
 
-        if challenge_result is None:
-            continue
-        elif challenge_result == "success":
+        if challenge_result == "success":
             logger.debug("Successful MFA challenge received")
             break
         elif challenge_result == "failure":
@@ -251,18 +268,16 @@ def duo_factor_callback(duo_info, verify_mfa):
     try:
         sig_response = f"{factor_callback.json()['response']['cookie']}:{duo_info['tile_sig']}"
     except Exception as sig_error:
-        logger.error(
-            "There was an error getting your application signature "
-            f"from Duo: {json.dumps(sig_error)}"
-        )
+        logger.error("There was an error getting your application signature. Please try again.")
+        logger.debug(f"from Duo: {sig_error}")
         sys.exit(2)
 
-    logger.debug("Completed factor callback.")
+    logger.debug(f"Completed callback to {factor_callback_url} with sig_response {sig_response}")
     return sig_response
 
 
-def set_passcode(mfa_option):
-    """Set totp passcode.
+def get_passcode(mfa_option):
+    """Get totp passcode.
 
     If the user has selected the passcode option, collect their TOTP.
 
@@ -270,9 +285,13 @@ def set_passcode(mfa_option):
     :return passcode: passcode value from user
     """
     passcode = None
-    if mfa_option["factor"].lower() == "passcode":
-        user.print("Type your TOTP and press Enter:")
-        passcode = user.get_input()
+
+    try:
+        if mfa_option["factor"].lower() == "passcode":
+            user.print("Type your TOTP and press Enter:")
+            passcode = user.get_input()
+    except (TypeError, KeyError):
+        pass
     return passcode
 
 
@@ -285,15 +304,10 @@ def authenticate_duo(selected_okta_factor):
 
     :param selected_okta_factor: Duo factor information retrieved from Okta.
     :return payload: required payload for Okta callback
-    :return headers: required headers for Okta callback
     """
-    try:
-        duo_info = prepare_duo_info(selected_okta_factor)
-    except KeyError as missing_key:
-        logger.error(f"There was an issue parsing the Okta factor. Please try again: {missing_key}")
-        sys.exit(1)
+    duo_info = prepare_duo_info(selected_okta_factor)
     # Collect devices, factors, auth params for Duo
-    duo_info, duo_auth_response = get_duo_sid(duo_info)
+    (duo_info, duo_auth_response) = get_duo_sid(duo_info)
     factor_options = get_duo_devices(duo_auth_response)
     mfa_index = user.select_preferred_mfa_index(
         factor_options, factor_key="factor", subfactor_key="device"
@@ -301,7 +315,7 @@ def authenticate_duo(selected_okta_factor):
 
     mfa_option = factor_options[mfa_index]
     logger.debug(f"Selected MFA is [{mfa_option}]")
-    passcode = set_passcode(mfa_option)
+    passcode = get_passcode(mfa_option)
 
     txid = duo_mfa_challenge(duo_info, mfa_option, passcode)
     verify_mfa = duo_mfa_verify(duo_info, txid)
@@ -315,6 +329,7 @@ def authenticate_duo(selected_okta_factor):
         "sig_response": sig_response,
         "stateToken": duo_info["state_token"],
     }
-    headers = {"content-type": "application/json", "accept": "application/json"}
 
-    return payload, headers, duo_info["okta_callback_url"]
+    # Send Okta callback and return payload
+    duo_api_post(duo_info["okta_callback_url"], payload=payload)
+    return payload
