@@ -488,34 +488,26 @@ def get_oauth2_configuration(url=None):
 
 
 def validate_oauth2_configuration(oauth2_config):
-    """Validate that the oauth2 configuration has what we implement.
+    """Validate that the oauth2 configuration has our implementation.
     :param oauth2_config: dict of configuration values
     """
-    if "authorization_endpoint" not in oauth2_config:
-        logger.error("No authorization endpoint url found.")
-        sys.exit(1)
-    if "token_endpoint" not in oauth2_config:
-        logger.error("No token endpoint url found.")
-        sys.exit(1)
-    if "grant_types_supported" not in oauth2_config:
-        logger.error("Grant types supported not found.")
-        sys.exit(1)
-    elif "authorization_code" not in oauth2_config["grant_types_supported"]:
+    mandadory_oauth2_config_items = {
+        "authorization_endpoint",
+        "token_endpoint",
+        "grant_types_supported",
+        "response_types_supported",
+        "scopes_supported",
+    }  # the authorization server must have these config elements
+    for item in mandadory_oauth2_config_items:
+        if item not in oauth2_config:
+            logger.error(f"No {item} found in oauth2 configuration.")
+            sys.exit(1)
+
+    if "authorization_code" not in oauth2_config["grant_types_supported"]:
         logger.error("Authorization code grant not found.")
         sys.exit(1)
-
-    if "response_types_supported" not in oauth2_config:
-        logger.error("Response type supported not found.")
-        sys.exit(1)
-    elif "code" not in oauth2_config["response_types_supported"]:
+    if "code" not in oauth2_config["response_types_supported"]:
         logger.error("Code response type not found.")
-        sys.exit(1)
-
-    if "scopes_supported" not in oauth2_config:
-        logger.error("Scopes supported not found.")
-        sys.exit(1)
-    elif "openid" not in oauth2_config["scopes_supported"]:
-        logger.error("OpenID scope not found.")
         sys.exit(1)
 
 
