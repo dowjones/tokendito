@@ -9,9 +9,9 @@ from urllib.parse import unquote
 from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
-import requests
 from tokendito import user
 from tokendito.config import config
+from tokendito.http_client import HTTP_client
 
 logger = logging.getLogger(__name__)
 
@@ -50,29 +50,7 @@ def duo_api_post(url, params=None, headers=None, payload=None):
     :param payload: Request body.
     :return response: Response to the API request.
     """
-    try:
-        response = requests.request("POST", url, params=params, headers=headers, data=payload)
-    except Exception as request_issue:
-        logger.error(f"There was an error connecting to the Duo API: {request_issue}")
-        sys.exit(1)
-
-    json_message = None
-    try:
-        json_message = response.json()
-    except ValueError:
-        logger.debug(f"Non-json response from Duo API: {response}")
-
-    if response.status_code != 200:
-        logger.error(f"Your Duo authentication has failed with status {response.status_code}.")
-        if json_message and json_message["stat"].lower() != "ok":
-            logger.error(f"{response.status_code}, {json_message['message']}")
-        else:
-            logger.error(
-                "Please re-run the program with parameter"
-                ' "--loglevel debug" to see more information.'
-            )
-        sys.exit(2)
-
+    response = HTTP_client.post(url, params=params, headers=headers, data=payload, return_json=True)
     return response
 
 
