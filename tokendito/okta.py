@@ -20,10 +20,13 @@ import time
 
 import bs4
 from bs4 import BeautifulSoup
+import requests
 from tokendito import duo
 from tokendito import user
 from tokendito.http_client import HTTP_client
 from tokendito import __version__
+
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -511,22 +514,51 @@ def validate_oauth2_configuration(oauth2_config):
         sys.exit(1)
 
 
-def idp_authorize(config, authn_sid):
+def idp_authorize(config, authn_token):
     """Authorize on the Okta authorization server.
     returns a token
     """
-    logger.debug(f"oie_auth({config}, {authn_sid})")
+    logger.debug(f"oie_auth({config}, {authn_token})")
 
     oauth2_config = get_oauth2_configuration(config.okta["org"])
     validate_oauth2_configuration(oauth2_config)
     if authorization_code_enabled(config.okta["org"], oauth2_config):
-        auth_token = authorization_code_flow(config, oauth2_config, authn_sid)
+        auth_token = authorization_code_flow(config, oauth2_config, authn_token)
     else:
         logger.warning(
             f"Authorization Code is not enabled on {config.okta['org']}, skipping oauth2"
         )
-        auth_token = authn_sid
-    return auth_token
+        auth_token = authn_token
+    return authn_token  # for now, pass thru
+
+
+def get_session_id(url, session_token):
+    """
+    Request session cookie.
+
+    :param url: okta org url, str
+    :param session_token: session token, str
+    :returns: cookies object
+    """
+    # Construct the URL from the base URL provided.
+    url = f"{url}/api/v1/sessions"
+
+    # Define the payload and headers for the request.
+    data = {"sessionToken": session_token}
+    headers = {"Content-Type": "application/json", "accept": "application/json"}
+
+    # Log the request details.
+    logger.debug(f"Requesting session cookies from {url}")
+
+    # Use the HTTP client to make a POST request.
+    response_json = HTTP_client.post(url, json=data, headers=headers, return_json=True)
+    if "id" not in response_json:
+        logger.error(f"'id' not found in response. Full response: {response_json}")
+        sys.exit(1)
+
+    session_id = response_json["id"]
+    user.add_sensitive_value_to_be_masked(session_id)
+    return session_id
 
 
 def idp_auth(config):
@@ -550,7 +582,8 @@ def idp_auth(config):
     if local_authentication_enabled(auth_properties):
         session_token = authenticate_locally(config)
         if oie_enabled(config.okta["org"]):
-            session_token = idp_authorize(config, session_token)
+            idp_authorize(config, session_token)
+            # session_token = idp_authorize(config, session_token)
     elif is_saml2_authentication(auth_properties):
         session_cookies = saml2_authenticate(config, auth_properties)
     else:
@@ -560,10 +593,14 @@ def idp_auth(config):
     if session_token is not None:
         user.add_sensitive_value_to_be_masked(session_token)
         # todo: change to idx cookies, for ioe
-        session_cookies = user.request_cookies(config.okta["org"], session_token)
+        session_id = get_session_id(config.okta["org"], session_token)
+        # create new cookies with sid 'sid'.
+        # todo: perhaps move the next 3 lines logic into HTTP_client
+        cookies = requests.cookies.RequestsCookieJar()
+        cookies.set("sid", session_id, domain=urlparse(config.okta["org"]).netloc, path="/")
+        # cookies.set("sid", sess_id, domain=urlparse(url).netloc, path="/", domain_specified=False)
+        session_cookies = cookies  # set out cookies to the new one with our session id
 
-    # todo: the called needs to handle if it's a sesoin cookies or a web token
-    # renme sessin_cookies to better name..
     return session_cookies
 
 
