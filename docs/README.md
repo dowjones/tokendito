@@ -74,7 +74,7 @@ tokendito --profile engineer
 usage: tokendito [-h] [--version] [--configure] [--username OKTA_USERNAME] [--password OKTA_PASSWORD] [--profile USER_CONFIG_PROFILE] [--config-file USER_CONFIG_FILE]
                  [--loglevel {DEBUG,INFO,WARN,ERROR}] [--log-output-file USER_LOG_OUTPUT_FILE] [--aws-config-file AWS_CONFIG_FILE] [--aws-output AWS_OUTPUT]
                  [--aws-profile AWS_PROFILE] [--aws-region AWS_REGION] [--aws-role-arn AWS_ROLE_ARN] [--aws-shared-credentials-file AWS_SHARED_CREDENTIALS_FILE]
-                 [--okta-org OKTA_ORG | --okta-tile OKTA_TILE] [--okta-mfa OKTA_MFA] [--okta-mfa-response OKTA_MFA_RESPONSE] [--quiet]
+                 [--okta-org OKTA_ORG | --okta-tile OKTA_TILE] [--okta-mfa OKTA_MFA] [--okta-mfa-response OKTA_MFA_RESPONSE] [--use-device-token] [--quiet]
 
 Gets an STS token to use with the AWS CLI and SDK.
 
@@ -112,6 +112,7 @@ options:
   --okta-mfa OKTA_MFA   Sets the MFA method
   --okta-mfa-response OKTA_MFA_RESPONSE
                         Sets the MFA response to a challenge
+  --use-device-token    Use device token across sessions
   --quiet               Suppress output
 ```
 
@@ -153,6 +154,7 @@ The following table lists the environment variable and user configuration entry 
 | `--okta-tile` | `TOKENDITO_OKTA_TILE`        | `okta_tile` |
 | `--okta-mfa` | `TOKENDITO_OKTA_MFA`        | `okta_mfa` |
 | `--okta-mfa-response` | `TOKENDITO_OKTA_MFA_RESPONSE`        | `okta_mfa_response` |
+| `--use-device-token` | `TOKENDITO_USER_USE_DEVICE_TOKEN`        | `user_use_device_token` |
 | `--quiet` | `TOKENDITO_USER_QUIET`        | `quiet` |
 
 # Configuration file location

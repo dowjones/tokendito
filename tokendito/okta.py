@@ -258,6 +258,35 @@ def authenticate(config):
     return sid
 
 
+def step_up_authenticate(config, state_token):
+    """Try to step up authenticate the user. Only supported for local auth.
+
+    :param config: Configuration object
+    :param state_token: The state token
+    :return: True if step up authentication was successful; False otherwise
+    """
+    auth_properties = get_auth_properties(userid=config.okta["username"], url=config.okta["org"])
+    if "type" not in auth_properties or not is_local_auth(auth_properties):
+        return False
+
+    headers = {"content-type": "application/json", "accept": "application/json"}
+    payload = {"stateToken": state_token}
+
+    auth = HTTP_client.post(
+        f"{config.okta['org']}/api/v1/authn", json=payload, headers=headers, return_json=True
+    )
+
+    status = auth.get("status", None)
+    if status == "SUCCESS":
+        return True
+    elif status == "MFA_REQUIRED":
+        mfa_challenge(config, headers, auth)
+        return True
+
+    logger.error("Okta auth failed: unknown status for step up authentication.")
+    return False
+
+
 def is_local_auth(auth_properties):
     """Check whether authentication happens locally.
 
@@ -429,7 +458,7 @@ def extract_state_token(html):
     state_token = None
     pattern = re.compile(r"var stateToken = '(?P<stateToken>.*)';", re.MULTILINE)
 
-    script = soup.find("script", text=pattern)
+    script = soup.find("script", string=pattern)
     if type(script) is bs4.element.Tag:
         match = pattern.search(script.text)
         if match:

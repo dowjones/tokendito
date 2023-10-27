@@ -29,6 +29,7 @@ class Config(object):
             encoding=_default_encoding,
             loglevel="INFO",
             log_output_file="",
+            use_device_token=False,
             mask_items=[],
             quiet=False,
         ),
@@ -47,6 +48,7 @@ class Config(object):
             mfa_response=None,
             tile=None,
             org=None,
+            device_token=None,
         ),
     )
 

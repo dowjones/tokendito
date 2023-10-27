@@ -540,6 +540,53 @@ def test_authenticate(mocker):
         assert okta.authenticate(pytest_config) == error
 
 
+def test_step_up_authenticate(mocker):
+    """Test set up authenticate method."""
+    from tokendito import okta
+    from tokendito.config import Config
+    from tokendito.http_client import HTTP_client
+
+    pytest_config = Config(
+        okta={
+            "username": "pytest",
+            "org": "https://acme.okta.org/",
+        }
+    )
+
+    state_token = "test-state-token"
+
+    # Test missing auth type
+    mocker.patch("tokendito.okta.get_auth_properties", return_value={})
+    assert okta.step_up_authenticate(pytest_config, state_token) == False
+
+    # Test unsupported auth type
+    mocker.patch("tokendito.okta.get_auth_properties", return_value={"type": "SAML2"})
+    assert okta.step_up_authenticate(pytest_config, state_token) == False
+
+    # Test supported auth type...
+    mocker.patch("tokendito.okta.get_auth_properties", return_value={"type": "OKTA"})
+
+    # ...with SUCCESS status
+    mock_response_data = {"status": "SUCCESS"}
+    mocker.patch.object(HTTP_client, "post", return_value=mock_response_data)
+
+    assert okta.step_up_authenticate(pytest_config, state_token) == True
+
+    # ...with MFA_REQUIRED status
+    mock_response_data = {"status": "MFA_REQUIRED"}
+    mocker.patch.object(HTTP_client, "post", return_value=mock_response_data)
+    patched_mfa_challenge = mocker.patch.object(okta, "mfa_challenge", return_value="test-session-token")
+
+    assert okta.step_up_authenticate(pytest_config, state_token) == True
+    assert patched_mfa_challenge.call_count == 1
+
+    # ...with unknown status
+    mock_response_data = {"status": "unknown"}
+    mocker.patch.object(HTTP_client, "post", return_value=mock_response_data)
+
+    assert okta.step_up_authenticate(pytest_config, state_token) == False
+
+
 def test_local_auth(mocker):
     """Test local auth method."""
     from tokendito import okta

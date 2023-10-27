@@ -155,3 +155,22 @@ def test_post_logging_on_exception(client, mocker):
     with pytest.raises(SystemExit):
         client.post("http://test.com", json={"key": "value"})
     mock_logger.assert_called()
+
+
+def test_get_device_token(client):
+    """Test getting device token from the session."""
+    device_token = "test-device-token"
+    cookies = {"DT": device_token}
+    client.set_cookies(cookies)
+
+    # Check if the device token is set correctly in the session
+    assert client.get_device_token() == device_token
+
+
+def test_set_device_token(client):
+    """Test setting device token in the session."""
+    device_token = "test-device-token"
+    client.set_device_token("http://test.com", device_token)
+
+    # Check if the device token is set correctly in the session
+    assert client.session.cookies.get("DT") == device_token

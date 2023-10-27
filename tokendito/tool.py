@@ -38,6 +38,13 @@ def cli(args):
         )
         sys.exit(1)
 
+    if config.user["use_device_token"]:
+        device_token = config.okta["device_token"]
+        if device_token:
+            HTTP_client.set_device_token(config.okta["org"], device_token)
+        else:
+            logger.warning(f"Device token unavailable for config profile {args.user_config_profile}. May see multiple MFA requests this time.")
+
     # Authenticate to okta
     session_cookies = okta.authenticate(config)
 
@@ -50,7 +57,7 @@ def cli(args):
         config.okta["tile"] = user.discover_tiles(config.okta["org"])
 
     # Authenticate to AWS roles
-    auth_tiles = aws.authenticate_to_roles(config.okta["tile"], cookies=session_cookies)
+    auth_tiles = aws.authenticate_to_roles(config, config.okta["tile"], cookies=session_cookies)
 
     (role_response, role_name) = aws.select_assumeable_role(auth_tiles)
 
@@ -69,5 +76,11 @@ def cli(args):
         region=config.aws["region"],
         output=config.aws["output"],
     )
+
+    device_token = HTTP_client.get_device_token()
+    if config.user["use_device_token"] and device_token:
+        logger.info(f"Saving device token to config profile {args.user_config_profile}")
+        config.okta["device_token"] = device_token
+        user.update_device_token(config)
 
     user.display_selected_role(profile_name=config.aws["profile"], role_response=role_response)

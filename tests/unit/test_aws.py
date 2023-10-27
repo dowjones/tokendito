@@ -94,6 +94,7 @@ def test_select_assumeable_role_no_tiles():
 def test_authenticate_to_roles(status_code, monkeypatch):
     """Test if function return correct response."""
     from tokendito.aws import authenticate_to_roles
+    from tokendito.config import Config
     import tokendito.http_client as http_client
 
     # Create a mock response object
@@ -104,7 +105,12 @@ def test_authenticate_to_roles(status_code, monkeypatch):
     # Use monkeypatch to replace the HTTP_client.get method with the mock
     monkeypatch.setattr(http_client.HTTP_client, "get", lambda *args, **kwargs: mock_response)
 
+    pytest_config = Config(
+        okta={
+            "org": "https://acme.okta.org/",
+        }
+    )
     cookies = {"some_cookie": "some_value"}
 
     with pytest.raises(SystemExit):
-        authenticate_to_roles([("http://test.url.com", "")], cookies)
+        authenticate_to_roles(pytest_config, [("http://test.url.com", "")], cookies)
