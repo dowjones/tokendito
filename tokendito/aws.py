@@ -69,10 +69,7 @@ def authenticate_to_roles(config, urls, cookies=None):
         response = HTTP_client.get(url)  # Use the HTTPClient's get method
 
         session_url = config.okta["org"] + "/login/sessionCookieRedirect"
-        params = {
-            'token': cookies.get("sessionToken"),
-            'redirectUrl': url
-        }
+        params = {"token": cookies.get("sessionToken"), "redirectUrl": url}
 
         response = HTTP_client.get(session_url, params=params)
 

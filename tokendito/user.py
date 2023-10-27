@@ -919,7 +919,7 @@ def update_configuration(config):
 
 
 def update_device_token(config):
-    """Update configuration file on local system with device token
+    """Update configuration file on local system with device token.
 
     :param config: the current configuration
     :return: None
@@ -937,6 +937,7 @@ def update_device_token(config):
     logger.debug(f"Adding {contents} to config file.")
     update_ini(profile=profile, ini_file=ini_file, **contents)
     logger.info(f"Updated {ini_file} with profile {profile}")
+
 
 def set_local_credentials(response={}, role="default", region="us-east-1", output="json"):
     """Write to local files to insert credentials.

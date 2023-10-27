@@ -43,7 +43,10 @@ def cli(args):
         if device_token:
             HTTP_client.set_device_token(config.okta["org"], device_token)
         else:
-            logger.warning(f"Device token unavailable for config profile {args.user_config_profile}. May see multiple MFA requests this time.")
+            logger.warning(
+                f"Device token unavailable for config profile {args.user_config_profile}. "
+                "May see multiple MFA requests this time."
+            )
 
     # Authenticate to okta
     session_cookies = okta.authenticate(config)

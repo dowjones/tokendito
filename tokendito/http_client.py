@@ -93,7 +93,7 @@ class HTTPClient:
         if not device_token:
             return
 
-        self.session.cookies.set("DT", device_token, domain=urlparse(org_url).netloc, path='/')
+        self.session.cookies.set("DT", device_token, domain=urlparse(org_url).netloc, path="/")
 
 
 HTTP_client = HTTPClient()
