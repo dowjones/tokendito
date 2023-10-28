@@ -77,7 +77,7 @@ def cmd_interface(args):
         config.okta["tile"] = discover_tiles(config.okta["org"])
 
     # Authenticate to AWS roles
-    auth_tiles = aws.authenticate_to_roles(config.okta["tile"], cookies=HTTP_client.session.cookies)
+    auth_tiles = aws.authenticate_to_roles(config.okta["tile"], cookies=session_cookies)
 
     (role_response, role_name) = aws.select_assumeable_role(auth_tiles)
 
@@ -1286,7 +1286,7 @@ def discover_tiles(url):
         "expand": ["items", "items.resource"],
     }
     logger.debug(f"Performing auto-discovery on {url}.")
-
+    logger.error(f"we have cookies: {HTTP_client.session.cookies}")
     response_with_tabs = HTTP_client.get(url, params=params)
 
     tabs = response_with_tabs.json()
