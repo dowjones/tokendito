@@ -533,7 +533,7 @@ def idp_authorize(config, authn_token):
     return authn_token  # for now, pass thru
 
 
-def create_cookies_from_token(authn_org_url, session_token):
+def create_sid_cookies(authn_org_url, session_token):
     """
     Create session cookie.
 
@@ -582,7 +582,7 @@ def idp_auth(config):
 
     if local_authentication_enabled(auth_properties):
         session_token = authenticate_locally(config)
-        session_cookies = create_cookies_from_token(config.okta["org"], session_token)
+        session_cookies = create_sid_cookies(config.okta["org"], session_token)
     elif is_saml2_authentication(auth_properties):
         session_cookies = saml2_authenticate(config, auth_properties)
     else:
@@ -592,7 +592,7 @@ def idp_auth(config):
     if oie_enabled(config.okta["org"]):
         # this should a return a session token, but for now pass thru
         # session_token = idp_authorize(config, session_token)
-        idp_authorize(config, session_cookies)
+        idp_authorize(config, session_token)
 
     logger.error(f"Returning session cookies: {session_cookies}")
     return session_cookies
