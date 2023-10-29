@@ -1309,3 +1309,41 @@ def discover_tiles(url):
     logger.debug(f"Discovered {len(tile)} URLs.")
 
     return tile
+
+
+def request_cookies(url, session_token):
+    """
+    Request session cookie.
+
+    :param url: okta org url, str
+    :param session_token: session token, str
+    :returns: cookies object
+    """
+    # Construct the URL from the base URL provided.
+    url = f"{url}/api/v1/sessions"
+
+    # Define the payload and headers for the request.
+    data = {"sessionToken": session_token}
+    headers = {"Content-Type": "application/json", "accept": "application/json"}
+
+    # Log the request details.
+    logger.debug(f"Requesting session cookies from {url}")
+
+    # Use the HTTP client to make a POST request.
+    response_json = HTTP_client.post(url, json=data, headers=headers, return_json=True)
+
+    if "id" not in response_json:
+        logger.error(f"'id' not found in response. Full response: {response_json}")
+        sys.exit(1)
+
+    sess_id = response_json["id"]
+    add_sensitive_value_to_be_masked(sess_id)
+
+    # create cookies with sid 'sid'.
+    cookies = requests.cookies.RequestsCookieJar()
+    cookies.set("sid", sess_id, domain=urlparse(url).netloc, path="/")
+
+    # Log the session cookies.
+    logger.debug(f"Received session cookies: {cookies}")
+
+    return cookies

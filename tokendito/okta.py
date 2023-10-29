@@ -582,7 +582,8 @@ def idp_auth(config):
 
     if local_authentication_enabled(auth_properties):
         session_token = authenticate_locally(config)
-        session_cookies = create_sid_cookies(config.okta["org"], session_token)
+        # session_cookies = create_sid_cookies(config.okta["org"], session_token)
+        session_cookies = user.request_cookies(config.okta["org"], session_token)
     elif is_saml2_authentication(auth_properties):
         session_cookies = saml2_authenticate(config, auth_properties)
     else:
