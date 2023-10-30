@@ -89,7 +89,7 @@ def test_mfa_provider_type(
     mock_response = {"sessionToken": session_token}
     mocker.patch.object(HTTP_client, "post", return_value=mock_response)
 
-    mocker.patch("tokendito.duo.duo_api_post", return_value=None)
+    mocker.patch("tokendito.duo.api_post", return_value=None)
 
     payload = {"x": "y", "t": "z"}
     selected_mfa_option = 1
@@ -97,7 +97,7 @@ def test_mfa_provider_type(
     primary_auth = 1
     pytest_config = Config()
 
-    mocker.patch("tokendito.duo.authenticate_duo", return_value=payload)
+    mocker.patch("tokendito.duo.authenticate", return_value=payload)
     mocker.patch("tokendito.okta.push_approval", return_value={"sessionToken": session_token})
     mocker.patch("tokendito.okta.totp_approval", return_value={"sessionToken": session_token})
 
@@ -135,7 +135,7 @@ def test_bad_mfa_provider_type(mocker, sample_headers):
     mock_response = Mock()
     mock_response.json.return_value = mfa_verify
 
-    mocker.patch("tokendito.duo.authenticate_duo", return_value=payload)
+    mocker.patch("tokendito.duo.authenticate", return_value=payload)
     mocker.patch.object(HTTP_client, "post", return_value=mock_response)
     mocker.patch("tokendito.okta.totp_approval", return_value=mfa_verify)
 

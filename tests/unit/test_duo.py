@@ -19,10 +19,10 @@ def test_get_passcode(mocker):
     assert duo.get_passcode("pytest") is None
 
 
-def test_prepare_duo_info():
+def test_prepare_info():
     """Test behaviour empty return duo info."""
     from tokendito.config import config
-    from tokendito.duo import prepare_duo_info
+    from tokendito.duo import prepare_info
 
     selected_okta_factor = {
         "_embedded": {
@@ -55,17 +55,17 @@ def test_prepare_duo_info():
         "sid": "",
         "version": "3.7",
     }
-    assert prepare_duo_info(selected_okta_factor) == expected_duo_info
+    assert prepare_info(selected_okta_factor) == expected_duo_info
 
     with pytest.raises(SystemExit) as err:
-        prepare_duo_info({"badresponse": "FAIL"})
+        prepare_info({"badresponse": "FAIL"})
     assert err.value.code == 1
 
 
-def test_get_duo_sid(mocker):
+def test_get_sid(mocker):
     """Check if got sid correct."""
     from tokendito.config import config
-    from tokendito.duo import get_duo_sid
+    from tokendito.duo import get_sid
 
     test_duo_info = {
         "okta_factor": "okta_factor",
@@ -84,16 +84,16 @@ def test_get_duo_sid(mocker):
     duo_api_response = Mock()
     duo_api_response.url = test_url
 
-    mocker.patch("tokendito.duo.duo_api_post", return_value=duo_api_response)
+    mocker.patch("tokendito.duo.api_post", return_value=duo_api_response)
 
-    duo_sid_info, duo_auth_response = get_duo_sid(test_duo_info)
+    duo_sid_info, duo_auth_response = get_sid(test_duo_info)
 
     assert duo_sid_info["sid"] == "testval"
     assert duo_auth_response.url == test_url
 
-    mocker.patch("tokendito.duo.duo_api_post", return_value="FAIL")
+    mocker.patch("tokendito.duo.api_post", return_value="FAIL")
     with pytest.raises(SystemExit) as err:
-        get_duo_sid(test_duo_info)
+        get_sid(test_duo_info)
     assert err.value.code == 2
 
 
@@ -119,9 +119,9 @@ def test_get_mfa_response():
     assert err.value.code == 1
 
 
-def test_duo_api_post(mocker):
+def test_api_post(mocker):
     """Test if duo api post correctly."""
-    from tokendito.duo import duo_api_post
+    from tokendito.duo import api_post
 
     mock_post = mocker.patch("requests.Session.post")
     mock_resp = mocker.Mock()
@@ -129,13 +129,13 @@ def test_duo_api_post(mocker):
     mock_resp.json.return_value = {"status": "pytest"}
     mock_post.return_value = mock_resp
 
-    response = duo_api_post("https://pytest/")
+    response = api_post("https://pytest/")
     assert response == {"status": "pytest"}
 
 
-def test_get_duo_devices(mocker):
+def test_get_devices(mocker):
     """Test that we can get a list of devices."""
-    from tokendito.duo import get_duo_devices
+    from tokendito.duo import get_devices
 
     mock_resp = mocker.Mock()
     mock_resp.status_code = 200
@@ -143,7 +143,7 @@ def test_get_duo_devices(mocker):
 
     # Test generic failure or empty response
     with pytest.raises(SystemExit) as err:
-        get_duo_devices(mock_resp)
+        get_devices(mock_resp)
     assert err.value.code == 2
 
     # Test no devices in list
@@ -152,7 +152,7 @@ def test_get_duo_devices(mocker):
                 <option value='pytest_val'>pytest_text</option>
         </select>
         """
-    assert get_duo_devices(mock_resp) == []
+    assert get_devices(mock_resp) == []
 
     # Test devices in list
     mock_resp.content = """
@@ -163,46 +163,46 @@ def test_get_duo_devices(mocker):
             <input name='factor' value='factor_type'>
         </fieldset>
         """
-    assert get_duo_devices(mock_resp) == [
+    assert get_devices(mock_resp) == [
         {"device": "pytest_device - pytest_device_name", "factor": "factor_type"}
     ]
 
 
-def test_parse_duo_mfa_challenge():
+def test_parse_mfa_challenge():
     """Test parsing the response to the challenge."""
-    from tokendito.duo import parse_duo_mfa_challenge
+    from tokendito.duo import parse_mfa_challenge
 
     mfa_challenge = Mock()
 
     # Test successful challenge
     mfa_challenge.json = Mock(return_value={"stat": "OK", "response": {"txid": "pytest"}})
-    assert parse_duo_mfa_challenge(mfa_challenge) == "pytest"
+    assert parse_mfa_challenge(mfa_challenge) == "pytest"
 
     # Test error
     mfa_challenge.json = Mock(return_value={"stat": "OK", "response": "error"})
     with pytest.raises(SystemExit) as err:
-        parse_duo_mfa_challenge(mfa_challenge)
+        parse_mfa_challenge(mfa_challenge)
     assert err.value.code == 1
 
     # Test no response in returned content
     mfa_challenge.json = Mock(return_value={"stat": "OK", "badresponse": "error"})
     with pytest.raises(SystemExit) as err:
-        parse_duo_mfa_challenge(mfa_challenge)
+        parse_mfa_challenge(mfa_challenge)
     assert err.value.code == 1
 
     # Test API failure
     mfa_challenge.json = Mock(return_value={"stat": "fail", "response": {"txid": "error"}})
     with pytest.raises(SystemExit) as err:
-        parse_duo_mfa_challenge(mfa_challenge)
+        parse_mfa_challenge(mfa_challenge)
     assert err.value.code == 1
 
 
-def test_duo_mfa_challenge(mocker):
+def test_mfa_challenge(mocker):
     """TODO: Test MFA challenge."""
-    from tokendito.duo import duo_mfa_challenge
+    from tokendito.duo import mfa_challenge
 
     with pytest.raises(SystemExit) as err:
-        duo_mfa_challenge(None, None, None)
+        mfa_challenge(None, None, None)
     assert err.value.code == 2
 
     duo_info = {
@@ -223,9 +223,9 @@ def test_duo_mfa_challenge(mocker):
     duo_api_response = mocker.Mock()
     duo_api_response.json.return_value = {"stat": "OK", "response": {"txid": "pytest_txid"}}
 
-    mocker.patch("tokendito.duo.duo_api_post", return_value=duo_api_response)
+    mocker.patch("tokendito.duo.api_post", return_value=duo_api_response)
 
-    txid = duo_mfa_challenge(duo_info, mfa_option, passcode)
+    txid = mfa_challenge(duo_info, mfa_option, passcode)
     assert txid == "pytest_txid"
 
 
@@ -249,12 +249,12 @@ def test_parse_challenge():
         (("failure", "pytest"), None, SystemExit),
     ],
 )
-def test_duo_mfa_verify(mocker, return_value, side_effect, expected):
+def test_mfa_verify(mocker, return_value, side_effect, expected):
     """Test MFA challenge completion.
 
     side_effect is utilized to return different values on different iterations.
     """
-    from tokendito.duo import duo_mfa_verify
+    from tokendito.duo import mfa_verify
 
     mocker.patch.object(HTTP_client, "post", return_value=None)
     mocker.patch("time.sleep", return_value=None)
@@ -269,16 +269,16 @@ def test_duo_mfa_verify(mocker, return_value, side_effect, expected):
     if expected == SystemExit:
         # Test failure as exit condition
         with pytest.raises(expected) as err:
-            duo_mfa_verify(duo_info, txid)
+            mfa_verify(duo_info, txid)
         assert err.value.code == 2
     else:
         # Test success, failure, and iterated calls
-        assert duo_mfa_verify(duo_info, txid) == expected
+        assert mfa_verify(duo_info, txid) == expected
 
 
-def test_duo_factor_callback(mocker):
+def test_factor_callback(mocker):
     """Test submitting factor to callback API."""
-    from tokendito.duo import duo_factor_callback
+    from tokendito.duo import factor_callback
 
     duo_info = {"host": "pytest_host", "sid": "pytest_sid", "tile_sig": "pytest_tile_sig"}
     verify_mfa = {"result_url": "/pytest_result_url"}
@@ -288,25 +288,25 @@ def test_duo_factor_callback(mocker):
         "stat": "OK",
         "response": {"txid": "pytest_txid", "cookie": "pytest_cookie"},
     }
-    mocker.patch("tokendito.duo.duo_api_post", return_value=duo_api_response)
+    mocker.patch("tokendito.duo.api_post", return_value=duo_api_response)
 
     # Test successful retrieval of the cookie
-    sig_response = duo_factor_callback(duo_info, verify_mfa)
+    sig_response = factor_callback(duo_info, verify_mfa)
     assert sig_response == "pytest_cookie:pytest_tile_sig"
 
     # Test failure to retrieve the cookie
     duo_api_response.json.return_value = {"stat": "FAIL", "response": "pytest_error"}
     with pytest.raises(SystemExit) as err:
-        duo_factor_callback(duo_info, verify_mfa)
+        factor_callback(duo_info, verify_mfa)
     assert err.value.code == 2
 
 
-def test_authenticate_duo(mocker):
+def test_authenticate(mocker):
     """Test end to end authentication."""
-    from tokendito.duo import authenticate_duo
+    from tokendito.duo import authenticate
 
     mocker.patch(
-        "tokendito.duo.get_duo_sid",
+        "tokendito.duo.get_sid",
         return_value=(
             {
                 "sid": "pytest",
@@ -320,13 +320,13 @@ def test_authenticate_duo(mocker):
     )
     # We mock a lot of functions here, but we're really just testing that the data can flow,
     # and that it can be parsed correctly to be sent to the API endpoint.
-    mocker.patch("tokendito.duo.get_duo_devices", return_value=[{"device": "pytest - device"}])
+    mocker.patch("tokendito.duo.get_devices", return_value=[{"device": "pytest - device"}])
     mocker.patch("tokendito.user.select_preferred_mfa_index", return_value=0)
     mocker.patch("tokendito.user.input", return_value="0123456")
-    mocker.patch("tokendito.duo.duo_mfa_challenge", return_value="txid_pytest")
-    mocker.patch("tokendito.duo.duo_mfa_verify", return_value={"result_url": "/pytest_result_url"})
-    mocker.patch("tokendito.duo.duo_api_post", return_value=None)
-    mocker.patch("tokendito.duo.duo_factor_callback", return_value="pytest_cookie:pytest_tile_sig")
+    mocker.patch("tokendito.duo.mfa_challenge", return_value="txid_pytest")
+    mocker.patch("tokendito.duo.mfa_verify", return_value={"result_url": "/pytest_result_url"})
+    mocker.patch("tokendito.duo.api_post", return_value=None)
+    mocker.patch("tokendito.duo.factor_callback", return_value="pytest_cookie:pytest_tile_sig")
     selected_okta_factor = {
         "_embedded": {
             "factor": {
@@ -346,7 +346,7 @@ def test_authenticate_duo(mocker):
         "stateToken": 12345,
     }
 
-    res = authenticate_duo(selected_okta_factor)
+    res = authenticate(selected_okta_factor)
     assert {
         "id": "pytest",
         "sig_response": "pytest_cookie:pytest_tile_sig",

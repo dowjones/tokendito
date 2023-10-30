@@ -17,7 +17,7 @@ from tokendito.http_client import HTTP_client
 logger = logging.getLogger(__name__)
 
 
-def prepare_duo_info(selected_okta_factor):
+def prepare_info(selected_okta_factor):
     """Aggregate most of the parameters needed throughout the Duo authentication process.
 
     :param selected_okta_factor: dict response describing Duo factor in Okta.
@@ -45,7 +45,7 @@ def prepare_duo_info(selected_okta_factor):
     return duo_info
 
 
-def duo_api_post(url, params=None, headers=None, payload=None):
+def api_post(url, params=None, headers=None, payload=None):
     """Error handling and response parsing wrapper for Duo POSTs.
 
     :param url: The URL being connected to.
@@ -58,7 +58,7 @@ def duo_api_post(url, params=None, headers=None, payload=None):
     return response
 
 
-def get_duo_sid(duo_info):
+def get_sid(duo_info):
     """Perform the initial Duo authentication request to obtain the SID.
 
     The SID is referenced throughout the authentication process for Duo.
@@ -71,7 +71,7 @@ def get_duo_sid(duo_info):
 
     url = f"https://{duo_info['host']}/frame/web/v1/auth"
     logger.debug(f"Calling Duo {urlparse(url).path} with params {params.keys()}")
-    duo_auth_response = duo_api_post(url, params=params)
+    duo_auth_response = api_post(url, params=params)
 
     try:
         duo_auth_redirect = urlparse(f"{unquote(duo_auth_response.url)}").query
@@ -83,7 +83,7 @@ def get_duo_sid(duo_info):
     return (duo_info, duo_auth_response)
 
 
-def get_duo_devices(duo_auth):
+def get_devices(duo_auth):
     """Parse Duo auth response to extract user's MFA options.
 
     The /frame/web/v1/auth API returns an html page that lists
@@ -117,7 +117,7 @@ def get_duo_devices(duo_auth):
     return factor_options
 
 
-def parse_duo_mfa_challenge(mfa_challenge):
+def parse_mfa_challenge(mfa_challenge):
     """Gracefully parse Duo MFA challenge response.
 
     :param mfa_challenge: Duo API response for MFA challenge.
@@ -141,7 +141,7 @@ def parse_duo_mfa_challenge(mfa_challenge):
     return txid
 
 
-def duo_mfa_challenge(duo_info, mfa_option, passcode):
+def mfa_challenge(duo_info, mfa_option, passcode):
     """Poke Duo to challenge the selected factor.
 
     After the user has selected their device and factor of choice,
@@ -171,8 +171,8 @@ def duo_mfa_challenge(duo_info, mfa_option, passcode):
 
     if passcode:
         mfa_data["passcode"] = passcode
-    mfa_challenge = duo_api_post(url, payload=mfa_data)
-    txid = parse_duo_mfa_challenge(mfa_challenge)
+    mfa_challenge = api_post(url, payload=mfa_data)
+    txid = parse_mfa_challenge(mfa_challenge)
 
     logger.debug(f"Sent MFA Challenge and obtained Duo transaction ID {txid}")
     return txid
@@ -219,7 +219,7 @@ def parse_challenge(verify_mfa, challenge_result):
     return (challenge_result, challenge_reason)
 
 
-def duo_mfa_verify(duo_info, txid):
+def mfa_verify(duo_info, txid):
     """Verify MFA challenge completion.
 
     After the user has received the MFA challenge, query the Duo API
@@ -235,7 +235,7 @@ def duo_mfa_verify(duo_info, txid):
 
     while True:
         logger.debug("Waiting for MFA challenge response")
-        mfa_result = duo_api_post(url, payload=challenged_mfa)
+        mfa_result = api_post(url, payload=challenged_mfa)
         verify_mfa = get_mfa_response(mfa_result)
         (challenge_result, challenge_reason) = parse_challenge(verify_mfa, challenge_result)
 
@@ -252,7 +252,7 @@ def duo_mfa_verify(duo_info, txid):
     return verify_mfa
 
 
-def duo_factor_callback(duo_info, verify_mfa):
+def factor_callback(duo_info, verify_mfa):
     """Inform factor callback api of successful challenge.
 
     This request seems to inform this factor's callback url
@@ -263,7 +263,7 @@ def duo_factor_callback(duo_info, verify_mfa):
     :return sig_response: required to sign final Duo callback request.
     """
     factor_callback_url = f"https://{duo_info['host']}{verify_mfa['result_url']}"
-    factor_callback = duo_api_post(factor_callback_url, payload={"sid": duo_info["sid"]})
+    factor_callback = api_post(factor_callback_url, payload={"sid": duo_info["sid"]})
 
     try:
         sig_response = f"{factor_callback.json()['response']['cookie']}:{duo_info['tile_sig']}"
@@ -295,7 +295,7 @@ def get_passcode(mfa_option):
     return passcode
 
 
-def authenticate_duo(selected_okta_factor):
+def authenticate(selected_okta_factor):
     """Accomplish MFA via Duo.
 
     This is the main function that coordinates the Duo
@@ -305,10 +305,10 @@ def authenticate_duo(selected_okta_factor):
     :param selected_okta_factor: Duo factor information retrieved from Okta.
     :return payload: required payload for Okta callback
     """
-    duo_info = prepare_duo_info(selected_okta_factor)
+    duo_info = prepare_info(selected_okta_factor)
     # Collect devices, factors, auth params for Duo
-    (duo_info, duo_auth_response) = get_duo_sid(duo_info)
-    factor_options = get_duo_devices(duo_auth_response)
+    (duo_info, duo_auth_response) = get_sid(duo_info)
+    factor_options = get_devices(duo_auth_response)
     mfa_index = user.select_preferred_mfa_index(
         factor_options, factor_key="factor", subfactor_key="device"
     )
@@ -317,11 +317,11 @@ def authenticate_duo(selected_okta_factor):
     logger.debug(f"Selected MFA is [{mfa_option}]")
     passcode = get_passcode(mfa_option)
 
-    txid = duo_mfa_challenge(duo_info, mfa_option, passcode)
-    verify_mfa = duo_mfa_verify(duo_info, txid)
+    txid = mfa_challenge(duo_info, mfa_option, passcode)
+    verify_mfa = mfa_verify(duo_info, txid)
 
     # Make factor callback to Duo
-    sig_response = duo_factor_callback(duo_info, verify_mfa)
+    sig_response = factor_callback(duo_info, verify_mfa)
 
     # Prepare for Okta callback
     payload = {
@@ -331,5 +331,5 @@ def authenticate_duo(selected_okta_factor):
     }
 
     # Send Okta callback and return payload
-    duo_api_post(duo_info["okta_callback_url"], payload=payload)
+    api_post(duo_info["okta_callback_url"], payload=payload)
     return payload
