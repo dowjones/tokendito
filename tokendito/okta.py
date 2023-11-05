@@ -17,10 +17,13 @@ import os
 import re
 import sys
 import time
+import urllib
+import uuid
 
 import bs4
 from bs4 import BeautifulSoup
-import requests
+
+# import requests
 from tokendito import duo
 from tokendito import user
 from tokendito.http_client import HTTP_client
@@ -49,7 +52,6 @@ def api_error_code_parser(status=None):
         message = f"Okta auth failed: {_status_dict[status]}"
     else:
         message = f"Okta auth failed: {status}. Please verify your settings and try again."
-    logger.error(message)
     logger.debug(f"Parsing error [{message}] ")
     return message
 
@@ -160,8 +162,15 @@ def send_saml_request(saml_request, cookies):
     :param cookies: session cookies with `sid`
     :returns: dict with with SP post_url, relay_state, and saml_response
     """
+    logger.debug(
+        f"""
+                    send_saml_request 
+                    HTTP_client cookies is {HTTP_client.session.cookies}")
+                    
+                    we'll set them to {cookies}
+                    """
+    )
     HTTP_client.set_cookies(cookies)
-
     # Define the payload and headers for the request
     payload = {
         "relayState": saml_request["relay_state"],
@@ -193,13 +202,62 @@ def send_saml_request(saml_request, cookies):
     user.add_sensitive_value_to_be_masked(saml_response["response"])
 
     # Log the formed SAML response
-    logger.debug(f"SAML response is {saml_response}")
+    # logger.debug(f"SAML response is {saml_response}")
+    logger.debug(
+        f"""
+                 After SAML Request call, 
+                 we have HTTP_client.session cookies at {HTTP_client.session.cookies}
+                 """
+    )
 
     # Return the formed SAML response
     return saml_response
 
 
-def send_saml_response(saml_response):
+def set_oauth2_redirect_params_cookies(config, url):
+    """
+    Set OAuth redirect cookies for the HTTP client, needed for SAML2 flow for OIE
+
+    okta-oauth-redirect-params={%22
+    responseType%22:%22code%22%2C%22
+    state%22:%22QkfKcTZ5uBV6dQePa72GdjB0h961QVNo0hgwvo6ya3oSqGQXAzRl1jzwOfnii9no%22%2C%22i
+    nonce%22:%22Q2Bop0CFTqrPszYNc7uvgEpyAn9We2PTdYoKH09VuP2s0axlubkc7zWz7DgcqWtE%22%2C%22
+    scopes%22:[%22openid%22%2C%22profile%22%2C%22email%22%2C%22okta.users.read.self%22%2C%22okta.users.manage.self%22%2C%22okta.internal.enduser.read%22%2C%22okta.intern      al.enduser.manage%22%2C%22okta.enduser.dashboard.read%22%2C%22okta.enduser.dashboard.manage%22]%2C%22
+    clientId%22:%22okta.2b1959c8-bcc0-56eb-a589-cfcfb7422f26%22%2C%22
+    urls%22:{%22issuer%22:%22https://newscorpdev2.oktapreview.com%22%2C%22
+    authorizeUrl%22:%22https://newscorpdev2.oktapreview.com/oauth2/v1/authorize%22%2C%22
+    userinfoUrl%22:%22https://newscorpdev2.oktapreview.com/oauth2/v1/userinfo%22%2C%22
+    tokenUrl%22:%22https://newscorpdev2.oktapreview.com/oauth2/v1/token%22%2C%22
+    revokeUrl%22:%22https://newscorpdev2.oktapreview.com/oauth2/v1/revoke%22%2C%22
+    logoutUrl%22:%22https://newscorpdev2.oktapreview.com/oauth2/v1/logout%22}%2C%22
+    ignoreSignature%22:false};
+    okta-oauth-nonce=Q2Bop0CFTqrPszYNc7uvgEpyAn9We2PTdYoKH09VuP2s0axlubkc7zWz7DgcqWtE;
+    okta-oauth-state=QkfKcTZ5uBV6dQePa72GdjB0h961QVNo0hgwvo6ya3oSqGQXAzRl1jzwOfnii9no; ln=svc_djif_tokendito_okta_aws_sandbox@okta.local;
+    #okta_oauth_redirect_params={
+    #    "responseType":"code",
+    #    "state":"QkfKcTZ5uBV6dQePa72GdjB0h961QVNo0hgwvo6ya3oSqGQXAzRl1jzwOfnii9no",
+    #    "scopes"
+    #}
+    # HTTP_client.session.cookies.set("okta-oauth-redirect-params", oie_data, path="/")
+    """
+    oauth2_config = get_oauth2_configuration(url)
+
+    oauth_config_reformatted = {
+        "responseType": oauth2_config["response_type"],
+        "state": oauth2_config["state"],
+        "clientID": oauth2_config(config),
+        "tokenUrl": oauth2_config["token_endpoint"],
+        "authorizeUrl": oauth2_config["authorization_endpoint"],
+        "revokeUrl": oauth2_config["revocation_endpoint"],
+        "logoutURL": oauth2_config["end_session_endpoint"],
+        "scopes": oauth2_config["scope"],
+        "okta-oauth-state": oauth2_config["state"],
+    }
+    cookies = {"okta-oauth-redirect-params": urllib.parse.urlencode(oauth_config_reformatted)}
+    HTTP_client.set_cookies(cookies)
+
+
+def send_saml_response(config, saml_response):
     """
     Submit SAML response to the SP.
 
@@ -218,7 +276,13 @@ def send_saml_response(saml_response):
     url = saml_response["post_url"]
 
     # Log the SAML response details.
-    logger.debug(f"Sending SAML response back to {url}")
+    logger.debug(
+        f""" send_saml_response
+
+                    Sending SAML response back to {url}
+                    and HTTP_client session cookies is {HTTP_client.session.cookies}
+                    """
+    )
 
     # Use the HTTP client to make a POST request.
     response = HTTP_client.post(url, data=payload, headers=headers)
@@ -227,14 +291,36 @@ def send_saml_response(saml_response):
     session_cookies = response.cookies
 
     # Get the 'sid' value from the cookies.
+
     sid = session_cookies.get("sid")
 
     # If 'sid' is present, mask its value for logging purposes.
-    if sid is not None:
-        user.add_sensitive_value_to_be_masked(sid)
+    #    if sid is not None:
+    #        user.add_sensitive_value_to_be_masked(sid)
 
     # Log the session cookies.
     logger.debug(f"Have session cookies: {session_cookies}")
+    # Extract the state token from the response.
+    state_token = extract_state_token(response.text)
+    if state_token:
+        # set_oauth2_redirect_params_cookies(config, "https://newscorpdev2.oktapreview.com/")
+        # TODO:
+        # add auth cookies
+        # with oie auth params
+
+        myorg = "https://newscorpdev2.oktapreview.com"
+        myurl = f"{myorg}/login/token/redirect"
+        # myurl = f"{myorg}/api/v1/authn"
+        myresponse = HTTP_client.get(
+            # myurl, allow_redirects=False, params={"stateToken": state_token}
+            myurl,
+            params={"stateToken": state_token},
+        )
+        logger.debug(
+            f"State token from {url}: {state_token} - FIXME bring this back the calling stack"
+        )
+        session_cookies = myresponse.cookies
+    logger.debug(f"in send SAML response, we return {session_cookies}")
 
     # Return the session cookies.
     return session_cookies
@@ -268,7 +354,7 @@ def get_session_token(config, primary_auth, headers):
     return session_token
 
 
-def get_oauth2_token(token_endpoint_url, config, code_verifier, authz_code):
+def get_oauth2_token(config, authz_code_flow_data, authorize_code):
     """Get OAuth token from Okta by calling /token endpoint.
 
     https://developer.okta.com/docs/reference/api/oidc/#token-endpoint
@@ -276,21 +362,21 @@ def get_oauth2_token(token_endpoint_url, config, code_verifier, authz_code):
     :return: OAuth token
     """
     payload = {
-        "code": f"{authz_code}",
-        "grant_type": "authorization_code",
-        "redirect_uri": f"{get_redirect_uri(config)}",
-        "client_id": f"{get_client_id(config)}",
-        "code_verifier": f"{code_verifier}",
+        "code": authorize_code,
+        "state": authz_code_flow_data["state"],
+        "grant_type": authz_code_flow_data["grant_type"],
+        "redirect_uri": authz_code_flow_data["redirect_uri"],
+        "client_id": authz_code_flow_data["client_id"],
+        "code_verifier": authz_code_flow_data["code_verifier"],
     }
     # payload = {"resource": f"okta:acct:{userid}"}
     # headers = {"accept": "application/jrd+json"}
     # response = user.request_wrapper("GET", token_endpoint_url , headers=headers, params=payload)
 
     headers = {"accept": "application/json"}
-    payload = {"code": authz_code}
     # Using the http_client to make the POST request
     response_json = HTTP_client.post(
-        token_endpoint_url, data=payload, headers=headers, return_json=True
+        authz_code_flow_data["token_endpoint_url"], data=payload, headers=headers, return_json=True
     )
     return response_json
 
@@ -305,48 +391,37 @@ def extract_authz_code(response_text):
     return authz_code
 
 
-def get_client_id_by_redirect(config):
-    """If implemented by your org, we can make an http get call and get a redirect that has the client_id."""
-    #    local_session = requests.Session()
-    #    local_session.headers.update({"User-Agent": f"tokendito/{__version__}"})
-    #    logger.error(f"calling {config.okta['org']}")
-    #    response = local_session.get(config.okta["org"])
-    #    logger.debug(f"Response from redirect: {response.text}")
-    return None
-
-
 def get_client_id(config):
-    """Return the client id needed by the Authorization Code Flow.
-    If passed, the cmd line value takes precedence.
+    """Returns the client id needed by the Authorization Code Flow.
+
+    If a command line parameter was passed, it will take precedence.
+    Until we figure out how to get is value, is has to be a parameter.
+    see https://developer.okta.com/docs/reference/api/oauth-clients/
     """
     if config.okta["oauth_client_id"] is None:
-        config.okta["oauth_client_id"] = get_client_id_by_redirect(config)
-        if config.okta["oauth_client_id"] is None:
-            logger.error(
-                """
-                Your okta org did not provide a redirect with the client_id,
-                pass it as an argument or set it in the config file.
-                """
-            )
-            sys.exit(1)
-
+        config.okta[
+            "oauth_client_id"
+        ] = f"okta.{str(uuid.uuid4())}"  # note: this client_id does not work.
     return config.okta["oauth_client_id"]
 
 
 def get_redirect_uri(config):
-    """TODO."""
+    "Returns the redirect uri needed by the Authorization Code Flow."
+
     url = f"{config.okta['org']}/enduser/callback"
     return url
 
 
 def get_response_type():
-    """We're only implementing code response type."""
+    "We're only implementing code response type."
     return "code"
 
 
 def get_authorize_scope():
-    """We're only implementing openid scope."""
-    return "openid"
+    "We're only implementing openid scope."
+    # return "openid" # most likely the one to use, to confirm
+    # return "openid profile"
+    return "openid profile email okta.users.read.self okta.users.manage.self okta.internal.enduser.read okta.internal.enduser.manage okta.enduser.dashboard.read okta.enduser.dashboard.manage"
 
 
 def get_oauth2_state():
@@ -394,24 +469,54 @@ def get_pkce_code_verifier():
 
 def pkce_enabled():
     """TODO"""
-    return False
+    return True
 
 
 def get_idx_cookies(cookies):
-    """TODO"""
-    idx_val = cookies.get_dict("idx")
+    """get idx cookies from response"""
+    idx_val = cookies.get("idx")
     return idx_val
 
 
-def oauth2_authorize_request(config, authz_code_flow_data, session_token):
+def get_authorize_code(response, payload):
+    """
+    Get the authorize code
+
+    This will exit with error if we cannot get the code.
+    It will also check the response from the /authorize call for callback errors,
+    And if any, print and exit with error.
+    """
+    callback_url = response.url
+    error_code = re.search(r"(?<=error=)[^&]+", callback_url)
+    error_desc = re.search(r"(?<=error_description=)[^&]+", callback_url)
+    if error_code:
+        logger.error(
+            f"""
+            oath2 callback error:{error_code.group()} - description:{error_desc.group()}
+            payload sent: {payload}
+            """
+        )
+        sys.exit(1)
+    authorize_code = re.search(r"(?<=code=)[^&]+", callback_url)
+    authorize_state = re.search(r"(?<=state=)[^&]+", callback_url).group()
+    if authorize_code:
+        return authorize_code.group()
+
+
+def oauth2_authorize_request(config, authz_code_flow_data, session_cookies):
     """implements authorization code request
     calls /authorize endpoint with authenticated session_token.
     https://developer.okta.com/docs/reference/api/oidc/#_2-okta-as-the-identity-platform-for-your-app-or-api
     :param
     :return: authorization code, needed for /token call
     """
-    logger.debug(f"oauth_code_request({config}, {authz_code_flow_data}, {session_token})")
-    headers = {"accept": "application/json", "content-type": "application/x-www-form-urlencoded"}
+    logger.debug(f"oauth_code_request({config}, {authz_code_flow_data}, {session_cookies})")
+    headers = {"accept": "application/json", "content-type": "application/json"}
+    # headers = {"accept": "application/json", "content-type": "application/x-www-form-urlencoded"}
+
+    session_token = None
+    if session_cookies is not None:
+        session_token = session_cookies.get("session_token")
 
     payload = {
         "client_id": authz_code_flow_data["client_id"],
@@ -420,21 +525,26 @@ def oauth2_authorize_request(config, authz_code_flow_data, session_token):
         "sessionToken": session_token,
         "scope": authz_code_flow_data["scope"],
         "state": authz_code_flow_data["state"],
+        "code_challenge": authz_code_flow_data["code_challenge"],
+        "code_challenge_method": authz_code_flow_data["code_challenge_method"],
+        "prompt": "none",  # dont authenticate
     }
-
-    HTTP_client.get(
+    response = HTTP_client.get(
         authz_code_flow_data["authz_endpoint_url"],
         headers=headers,
         params=payload,
     )
+
+    authorize_code = get_authorize_code(response, payload)
+
     logger.debug(f"Cookies in session: {HTTP_client.session.cookies.get_dict()}")
 
-    session_cookies = get_idx_cookies(HTTP_client.session.cookies)
+    # session_cookies = get_idx_cookies(HTTP_client.session.cookies)
 
-    return session_cookies
+    return authorize_code
 
 
-def authorization_code_flow(config, oauth2_config, session_token):
+def authorization_code_flow(config, oauth2_config, session_cookies):
     # Authorization Code flow (see
     # https://developer.okta.com/docs/guides/implement-grant-type/authcode/main/#about-the-authorization-code-grant
     # )
@@ -447,6 +557,7 @@ def authorization_code_flow(config, oauth2_config, session_token):
         "state": get_oauth2_state(),
         "authz_endpoint_url": oauth2_config["authorization_endpoint"],
         "token_endpoint_url": oauth2_config["token_endpoint"],
+        "grant_type": "authorization_code",
     }
 
     if pkce_enabled():
@@ -456,11 +567,11 @@ def authorization_code_flow(config, oauth2_config, session_token):
         authz_code_flow_data["code_challenge_method"] = get_pkce_code_challenge_method()
 
     # authz_code = oauth2_authorize_request(config, authz_code_flow_data, session_token)
-    oauth2_authorize_request(config, authz_code_flow_data, session_token)
+    authorize_code = oauth2_authorize_request(config, authz_code_flow_data, session_cookies)
 
-    # authz_token = get_oauth2_token(config, authz_code_flow_data, authz_code)
-    # user.add_sensitive_value_to_be_masked(authz_token)
-    # return authz_token
+    authz_token = get_oauth2_token(config, authz_code_flow_data, authorize_code)
+    user.add_sensitive_value_to_be_masked(authz_token)
+    return authz_token
 
 
 def authorization_code_enabled(org_url, oauth2_config):
@@ -516,21 +627,21 @@ def validate_oauth2_configuration(oauth2_config):
         sys.exit(1)
 
 
-def idp_authorize(config, authn_token):
-    """Authorize on the Okta authorization server.
+def oauth2_authorize(config, session_cookies):
+    """Authorize on the Okta authorization server, following oauth2 flows
     returns a token
     """
-    logger.debug(f"oie_auth({config}, {authn_token})")
+    logger.debug(f"oie_authorize({config}, {session_cookies})")
 
     oauth2_config = get_oauth2_configuration(config.okta["org"])
     if authorization_code_enabled(config.okta["org"], oauth2_config):
-        auth_token = authorization_code_flow(config, oauth2_config, authn_token)
+        authz_token = authorization_code_flow(config, oauth2_config, session_cookies)
     else:
         logger.warning(
             f"Authorization Code is not enabled on {config.okta['org']}, skipping oauth2"
         )
-        auth_token = authn_token
-    return authn_token  # for now, pass thru
+        authz_cookies = session_cookies
+    return session_cookies  # for now, pass thru
 
 
 def create_sid_cookies(authn_org_url, session_token):
@@ -558,8 +669,9 @@ def create_sid_cookies(authn_org_url, session_token):
         sys.exit(1)
 
     session_id = response_json["id"]
-    cookies = requests.cookies.RequestsCookieJar()
-    cookies.set("sid", session_id, path="/")  # set global cookies with our session id
+    # cookies = requests.cookies.RequestsCookieJar()
+    # cookies.set("sid", session_id, path="/")  # set global cookies with our session id
+    cookies = None
     return cookies
 
 
@@ -577,25 +689,68 @@ def idp_auth(config):
         logger.error("Okta auth failed: unknown type.")
         sys.exit(1)
 
-    session_cookies = None
-    session_token = None
+    session_cookies = None  # both authn and authz session_cookies
+    session_token = None  # authn token we get when authentating
+    authn_cookies = None  # the authentication cookies
+
+    logger.debug(
+        f"""
+                    ======== >>>>> 
+                    GOING TO {config.okta['org']}
+                    ======= 
+                    """
+    )
 
     if local_authentication_enabled(auth_properties):
-        session_token = authenticate_locally(config)
+        logger.debug(
+            """
+                        idp authenticate
+
+                        """
+        )
+        session_token = user_authenticate(config)
         # session_cookies = create_sid_cookies(config.okta["org"], session_token)
         session_cookies = user.request_cookies(config.okta["org"], session_token)
+        HTTP_client.set_cookies(session_cookies)  # save cookies for later use in authorize call.
+        logger.debug(
+            f"""
+            idp_authenticate returns session cookies:{session_cookies}
+            """
+        )
     elif is_saml2_authentication(auth_properties):
+        logger.debug(
+            f"""
+            saml2_authenticate
+            calling saml2_authenticate, just before we have client cookies: {HTTP_client.session.cookies}
+            """
+        )
         session_cookies = saml2_authenticate(config, auth_properties)
+        logger.debug(
+            f"""
+            Just after saml2_authenticate we have client cookies: {HTTP_client.session.cookies}
+
+            and saml2_authenticate returns session_cookies = {session_cookies}
+
+            """
+        )
     else:
         logger.error(f"{auth_properties['type']} login via IdP Discovery is not curretly supported")
         sys.exit(1)
 
+    # Once we get there, the user is authenticated. The session_cookies is either from local authentication
+    # or the one returned by saml2 if o2o.
     if oie_enabled(config.okta["org"]):
-        # this should a return a session token, but for now pass thru
-        # session_token = idp_authorize(config, session_token)
-        idp_authorize(config, session_token)
+        logger.debug(
+            f"""
+                    oauth2_authorize
+                    _session_cookies: {HTTP_client.session.cookies}
 
-    logger.error(f"Returning session cookies: {session_cookies}")
+                    """
+        )
+        # session_cookies =
+        session_cookies = oauth2_authorize(config, session_cookies)
+
+    logger.debug(f"Returning session cookies: {session_cookies}")
     return session_cookies
 
 
@@ -611,14 +766,14 @@ def oie_enabled(url):
         return False
 
 
-def authenticate_locally(config):
+def user_authenticate(config):
     """Authenticate user on local okta instance.
 
     :param config: Config object
     :return: auth session ID cookie.
     """
 
-    logger.debug(f"authenticate_locally({config}")
+    logger.debug(f"user_authenticate({config}")
     session_token = None
     headers = {"content-type": "application/json", "accept": "application/json"}
     payload = {"username": config.okta["username"], "password": config.okta["password"]}
@@ -694,7 +849,7 @@ def saml2_authenticate(config, auth_properties):
 
     # Send SAML response from the IdP back to the SP, which will generate new
     # session cookies.
-    session_id = send_saml_response(saml_response)
+    session_id = send_saml_response(config, saml_response)
     return session_id
 
 
@@ -836,7 +991,7 @@ def mfa_provider_type(
             f"Sorry, the MFA provider '{mfa_provider}:{factor_type}' is not yet supported."
             " Please retry with another option."
         )
-        exit(1)
+        sys.exit(1)
 
     if "sessionToken" not in mfa_verify:
         logger.error(
@@ -924,6 +1079,7 @@ def mfa_challenge(config, headers, primary_auth):
         payload,
     )
 
+    logger.debug(f"MFA Session Token: [{mfa_session_token}]")
     return mfa_session_token
 
 

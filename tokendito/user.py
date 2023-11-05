@@ -23,6 +23,7 @@ from urllib.parse import urlparse
 from botocore import __version__ as __botocore_version__
 from bs4 import __version__ as __bs4_version__  # type: ignore (bs4 does not have PEP 561 support)
 from bs4 import BeautifulSoup
+
 import requests
 from tokendito import __version__
 from tokendito import aws
@@ -70,6 +71,12 @@ def cmd_interface(args):
     # get authentication and authorization cookies from okta
     session_cookies = okta.idp_auth(config)
     HTTP_client.set_cookies(session_cookies)
+    logger.debug(
+        f"""
+        about to call discover_tile 
+        we have client cookies: {HTTP_client.session.cookies}
+        """
+    )
     if config.okta["tile"]:
         tile_label = ""
         config.okta["tile"] = (config.okta["tile"], tile_label)
@@ -1286,7 +1293,7 @@ def discover_tiles(url):
         "expand": ["items", "items.resource"],
     }
     logger.debug(f"Performing auto-discovery on {url}.")
-    logger.error(f"we have cookies: {HTTP_client.session.cookies}")
+    logger.debug(f"in discover_tiles we have cookies: {HTTP_client.session.cookies}")
     response_with_tabs = HTTP_client.get(url, params=params)
 
     tabs = response_with_tabs.json()
@@ -1337,13 +1344,21 @@ def request_cookies(url, session_token):
         sys.exit(1)
 
     sess_id = response_json["id"]
-    add_sensitive_value_to_be_masked(sess_id)
+    # add_sensitive_value_to_be_masked(sess_id)
 
     # create cookies with sid 'sid'.
     cookies = requests.cookies.RequestsCookieJar()
-    cookies.set("sid", sess_id, domain=urlparse(url).netloc, path="/")
+    domain = urlparse(url).netloc
+    cookies.set("sid", sess_id, domain=domain, path="/")
+    cookies.set("session_token", session_token, domain=domain, path="/")
 
     # Log the session cookies.
-    logger.debug(f"Received session cookies: {cookies}")
+    logger.debug(
+        f"""
+                    setting sid cookies (request_cookies), 
+                    returning cookies: {cookies}
+                    """
+    )
+    logger.debug(f"Setting session cookies: {cookies}")
 
     return cookies

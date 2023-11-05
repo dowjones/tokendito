@@ -25,13 +25,16 @@ class HTTPClient:
         """Update session with additional cookies."""
         self.session.cookies.update(cookies)
 
-    def get(self, url, params=None, headers=None):
+    def get(self, url, params=None, headers=None, allow_redirects=True):
         """Perform a GET request."""
         response = None
         try:
+            logger.debug(f"get to {url}")
             logger.debug(f"Sending cookies: {self.session.cookies}")
             logger.debug(f"Sending headers: {self.session.headers}")
-            response = self.session.get(url, params=params, headers=headers)
+            response = self.session.get(
+                url, params=params, headers=headers, allow_redirects=allow_redirects
+            )
             response.raise_for_status()
             logger.debug(f"Received response from {url}: {response.text}")
             return response
@@ -50,6 +53,7 @@ class HTTPClient:
 
     def post(self, url, data=None, json=None, headers=None, return_json=False):
         """Perform a POST request."""
+        logger.debug(f"post to {url}")
         try:
             response = self.session.post(url, data=data, json=json, headers=headers)
             response.raise_for_status()
