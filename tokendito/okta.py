@@ -18,18 +18,17 @@ import re
 import sys
 import time
 import urllib
+from urllib.parse import urlparse
 import uuid
 
 import bs4
 from bs4 import BeautifulSoup
 
 # import requests
+from tokendito import __version__
 from tokendito import duo
 from tokendito import user
 from tokendito.http_client import HTTP_client
-from tokendito import __version__
-
-from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -615,6 +614,7 @@ def get_oauth2_configuration(url=None):
 
 def validate_oauth2_configuration(oauth2_config):
     """Validate that the oauth2 configuration has our implementation.
+
     :param oauth2_config: dict of configuration values
     """
     mandadory_oauth2_config_items = {
@@ -784,6 +784,7 @@ def idp_auth(config):
 def oie_enabled(url):
     """
     Determines if OIE is enabled.
+
     :pamam url: okta org url
     :return: True if OIE is enabled, False otherwise
     """
@@ -799,7 +800,6 @@ def user_authenticate(config):
     :param config: Config object
     :return: auth session ID cookie.
     """
-
     logger.debug(f"user_authenticate({config}")
     session_token = None
     headers = {"content-type": "application/json", "accept": "application/json"}

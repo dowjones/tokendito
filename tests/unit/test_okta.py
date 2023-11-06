@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """Unit tests, and local fixtures for the Okta module."""
 from unittest.mock import Mock
+from unittest.mock import patch
 
 import pytest
 from tokendito.config import Config
@@ -16,33 +17,43 @@ def sample_headers():
 
 
 @pytest.mark.parametrize(
-    "session_token, expected, mfa_availability",
+    "session_token, expected, mfa_availability, status",
     [
-        (345, 345, "okta_response_no_auth_methods"),
-        (345, 345, "okta_response_mfa"),
-        (345, 345, "okta_response_no_auth_methods"),
-        (None, None, "okta_response_no_mfa_no_session_token"),
+        (345, 345, "okta_response_no_auth_methods", "SUCCESS"),
+        (345, 345, "okta_response_mfa", "MFA_REQUIRED"),
+        (None, None, "okta_response_no_mfa_no_session_token", "UNKNOWN_STATUS"),
+        (None, None, "okta_response_no_mfa_no_session_token", None),
     ],
 )
 def test_get_session_token(
-    sample_json_response,
-    session_token,
-    expected,
-    mocker,
-    sample_headers,
-    mfa_availability,
+    sample_json_response, session_token, expected, mocker, sample_headers, mfa_availability, status
 ):
-    """Test whether function return key on specific status."""
+    """Test whether function returns key on specific status."""
     from tokendito.config import Config
     from tokendito.okta import get_session_token
 
     pytest_config = Config()
-    primary_auth = sample_json_response[mfa_availability]
+    primary_auth = sample_json_response.get(mfa_availability, {})
+    primary_auth["status"] = status
 
-    mocker.patch("tokendito.okta.mfa_challenge", return_value=session_token)
-    assert get_session_token(pytest_config, primary_auth, sample_headers) == expected
-    with pytest.raises(SystemExit) as err:
-        assert get_session_token(pytest_config, None, sample_headers) == err
+    if status == "SUCCESS":
+        primary_auth["sessionToken"] = session_token  # Set sessionToken when status is SUCCESS
+
+    if status == "MFA_REQUIRED":
+        mocker.patch("tokendito.okta.mfa_challenge", return_value=session_token)
+
+    with patch("tokendito.okta.logger") as mock_logger, patch(
+        "tokendito.user.add_sensitive_value_to_be_masked"
+    ) as mock_add_sensitive:
+        if status in ["SUCCESS", "MFA_REQUIRED"]:
+            result = get_session_token(pytest_config, primary_auth, sample_headers)
+            assert result == expected
+            if session_token is not None:
+                mock_add_sensitive.assert_called_with(session_token)
+        elif status == "UNKNOWN_STATUS" or primary_auth is None:
+            with pytest.raises(SystemExit):
+                get_session_token(pytest_config, primary_auth, sample_headers)
+            mock_logger.error.assert_called()
 
 
 def test_bad_session_token(mocker, sample_json_response, sample_headers):
@@ -492,10 +503,14 @@ def test_send_saml_request(mocker):
 def test_send_saml_response(mocker):
     """Test sending SAML response."""
     from tokendito import okta
+    from tokendito.config import Config
     from tokendito.http_client import HTTP_client
+
+    config = Config()
 
     mock_response = Mock()
     mock_response.cookies = {"sid": "pytestcookie"}
+    mock_response.text = "<html>Mocked HTML response content</html>"
 
     saml_response = {
         "response": "pytestresponse",
@@ -505,7 +520,7 @@ def test_send_saml_response(mocker):
 
     mocker.patch.object(HTTP_client, "post", return_value=mock_response)
 
-    assert okta.send_saml_response(saml_response) == mock_response.cookies
+    assert okta.send_saml_response(config, saml_response) == mock_response.cookies
 
 
 def test_authenticate(mocker):
@@ -582,7 +597,8 @@ def test_saml2_auth(mocker):
         "base_url": "https://acme.okta.com",
     }
     mocker.patch("tokendito.okta.get_saml_request", return_value=saml_request)
-    mocker.patch("tokendito.okta.authenticate", return_value="pytestsessioncookie")
+
+    mocker.patch("tokendito.okta.idp_auth", return_value="pytestsessioncookie")
 
     saml_response = {
         "response": "pytestresponse",
@@ -590,4 +606,4 @@ def test_saml2_auth(mocker):
 
     mocker.patch("tokendito.okta.send_saml_request", return_value=saml_response)
     mocker.patch("tokendito.okta.send_saml_response", return_value="pytestsessionid")
-    assert okta.saml2_auth(pytest_config, auth_properties) == "pytestsessionid"
+    assert okta.saml2_authenticate(pytest_config, auth_properties) == "pytestsessionid"

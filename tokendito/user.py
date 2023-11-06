@@ -23,7 +23,6 @@ from urllib.parse import urlparse
 from botocore import __version__ as __botocore_version__
 from bs4 import __version__ as __bs4_version__  # type: ignore (bs4 does not have PEP 561 support)
 from bs4 import BeautifulSoup
-
 import requests
 from tokendito import __version__
 from tokendito import aws

@@ -7,6 +7,7 @@ import re
 import sys
 
 import pytest
+from tokendito import __version__
 from utils import run_process
 
 sys.path.insert(0, path.dirname(path.dirname(path.dirname(path.abspath(__file__)))))
@@ -51,6 +52,45 @@ def test_package_exists():
     assert proc["exit_status"] == 0
 
 
+# Declare package_version and package_regex as an re.Pattern object
+package_version = f"{__version__}"
+package_regex = re.compile(r"^\S+/(?P<version>\d+\.\d+\.\d+(\.\w+)?)\D*")
+
+
+# Helper function for assertions
+def assert_process_successful(proc):
+    """Assert that the process ran successfully.
+
+    Args:
+        proc (dict): The process dictionary.
+
+    Raises:
+        AssertionError: If the process had an error or did not exit with status code 0.
+
+    """
+    assert not proc["stderr"]
+    assert proc["exit_status"] == 0
+
+
+def assert_version_matches(expected_version, stdout, regex):
+    """Assert that the version matches the expected version.
+
+    Args:
+        expected_version (str): The expected version.
+        stdout (str): The output string to search for the version.
+        regex (re.Pattern): The compiled regex pattern to match the version.
+
+    Raises:
+        AssertionError: If the expected version does not match the actual version.
+
+    """
+    match = re.match(regex, stdout)
+    assert match is not None, f"No version found in {stdout}"
+
+    local_version = match.group("version")
+    assert expected_version == local_version, f"Expected {expected_version}, got {local_version}"
+
+
 @pytest.mark.parametrize(
     "runnable",
     [
@@ -59,16 +99,11 @@ def test_package_exists():
         ["tokendito", "--version"],
     ],
 )
-def test_version(package_version, package_regex, runnable):
+def test_version(runnable):
     """Check if the package version is the same when running in different ways."""
-    local_version = None
     proc = run_process(runnable)
-    assert not proc["stderr"]
-    assert proc["exit_status"] == 0
-    match = re.match(package_regex, proc["stdout"])
-    if match:
-        local_version = match.group("version")
-    assert package_version == local_version
+    assert_process_successful(proc)
+    assert_version_matches(package_version, proc["stdout"], package_regex)
 
 
 def test_parameter_collection(monkeypatch, tmpdir):
