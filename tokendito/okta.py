@@ -276,7 +276,7 @@ def send_saml_response(config, saml_response):
     url = saml_response["post_url"]
 
     # Log the SAML response details.
-    logger.debug(
+    logger.critical(
         f""" send_saml_response
 
                     Sending SAML response back to {url}
@@ -305,7 +305,7 @@ def send_saml_response(config, saml_response):
         logger.debug("we dont have a sid cookies.")
 
     # Log the session cookies.
-    logger.debug(
+    logger.critical(
         f"""
                  saml call to {url} 
                  response cookies: {session_cookies}
