@@ -243,15 +243,15 @@ def set_oauth2_redirect_params_cookies(config, url):
     oauth2_config = get_oauth2_configuration(url)
 
     oauth_config_reformatted = {
-        "responseType": oauth2_config["response_type"],
-        "state": oauth2_config["state"],
-        "clientID": oauth2_config(config),
+        "responseType": get_response_type(),  # we'll need this to be the same at authorization
+        "state": get_oauth2_state(),  # we'll need this to be the same at authorization
+        "clientID": "okta.2b1959c8-bcc0-56eb-a589-cfcfb7422f26",
         "tokenUrl": oauth2_config["token_endpoint"],
         "authorizeUrl": oauth2_config["authorization_endpoint"],
         "revokeUrl": oauth2_config["revocation_endpoint"],
         "logoutURL": oauth2_config["end_session_endpoint"],
-        "scopes": oauth2_config["scope"],
-        "okta-oauth-state": oauth2_config["state"],
+        "scopes": get_authorize_scope(),
+        "okta-oauth-state": get_oauth2_state(),
     }
     cookies = {"okta-oauth-redirect-params": urllib.parse.urlencode(oauth_config_reformatted)}
     HTTP_client.set_cookies(cookies)
@@ -284,29 +284,39 @@ def send_saml_response(config, saml_response):
                     """
     )
 
+    session_token = HTTP_client.session.cookies.get("session_token")
+
     # Use the HTTP client to make a POST request.
     response = HTTP_client.post(url, data=payload, headers=headers)
 
     # Extract cookies from the response.
     session_cookies = response.cookies
+    session_cookies.set("session_token", session_token, path="/")
 
     # Get the 'sid' value from the cookies.
 
     sid = session_cookies.get("sid")
 
     # If 'sid' is present, mask its value for logging purposes.
-    #    if sid is not None:
-    #        user.add_sensitive_value_to_be_masked(sid)
+    if sid is not None:
+        pass
+        # user.add_sensitive_value_to_be_masked(sid)
+    else:
+        logger.debug("we dont have a sid cookies.")
 
     # Log the session cookies.
-    logger.debug(f"Have session cookies: {session_cookies}")
+    logger.debug(
+        f"""
+                 saml call to {url} 
+                 response cookies: {session_cookies}
+                 """
+    )
     # Extract the state token from the response.
     state_token = extract_state_token(response.text)
     if state_token:
-        # set_oauth2_redirect_params_cookies(config, "https://newscorpdev2.oktapreview.com/")
+        set_oauth2_redirect_params_cookies(config, "https://newscorpdev2.oktapreview.com/")
         # TODO:
-        # add auth cookies
-        # with oie auth params
+        # get a sesion token from stateToken
 
         myorg = "https://newscorpdev2.oktapreview.com"
         myurl = f"{myorg}/login/token/redirect"
@@ -693,59 +703,76 @@ def idp_auth(config):
     session_token = None  # authn token we get when authentating
     authn_cookies = None  # the authentication cookies
 
-    logger.debug(
+    logger.critical(
         f"""
-                    ======== >>>>> 
-                    GOING TO {config.okta['org']}
-                    ======= 
-                    """
+            ======== >>>>> 
+            GOING TO {config.okta['org']}
+            ======= 
+        """
     )
 
-    if local_authentication_enabled(auth_properties):
-        logger.debug(
-            """
-                        idp authenticate
+    saml_request = None
 
-                        """
+    if is_saml2_authentication(auth_properties):
+        # if we're instructed to do saml2, let's get the saml2 data, plus the authentication server url
+        # and its properties.
+        saml_request = get_saml_request(auth_properties)
+        logger.debug(f"saml_request = {saml_request}")
+        config.okta["authentication_server"] = saml_request["base_url"]
+        auth_properties = get_auth_properties(
+            userid=config.okta["username"], url=config.okta["authentication_server"]
+        )
+    else:
+        config.okta["authentication_server"] = config.okta["org"]
+
+    logger.debug(f"authentication server: {config.okta['authentication_server']}")
+
+    if user_authentication_enabled(auth_properties):
+        logger.critical(
+            f"""
+            user_authenticate
+
+            cookies are {HTTP_client.session.cookies}
+            """
         )
         session_token = user_authenticate(config)
         # session_cookies = create_sid_cookies(config.okta["org"], session_token)
-        session_cookies = user.request_cookies(config.okta["org"], session_token)
+        session_cookies = user.request_cookies(config.okta["authentication_server"], session_token)
         HTTP_client.set_cookies(session_cookies)  # save cookies for later use in authorize call.
-        logger.debug(
+
+    if saml_request is not None:  # we got to authentication via SAML2, send back the saml2 cookies
+        logger.critical(
             f"""
-            idp_authenticate returns session cookies:{session_cookies}
+            send_saml_request
+            cookies are {HTTP_client.session.cookies}
             """
         )
-    elif is_saml2_authentication(auth_properties):
-        logger.debug(
+        # Once we are authenticated, send the SAML request to the IdP.
+        # This call requires session cookies.
+        saml_response = send_saml_request(saml_request, session_cookies)
+        # Send SAML response from the IdP back to the SP, which will generate new
+        # session cookies.
+        session_cookies = send_saml_response(config, saml_response)
+        logger.critical(
             f"""
-            saml2_authenticate
-            calling saml2_authenticate, just before we have client cookies: {HTTP_client.session.cookies}
+            send_saml_response
+            cookies are {HTTP_client.session.cookies}
             """
         )
-        session_cookies = saml2_authenticate(config, auth_properties)
-        logger.debug(
-            f"""
-            Just after saml2_authenticate we have client cookies: {HTTP_client.session.cookies}
+        # what happens with authn session_token?
+    # else: to put back
+    #    logger.error(f"{auth_properties['type']} login via IdP Discovery is not curretly supported")
+    #    sys.exit(1)
 
-            and saml2_authenticate returns session_cookies = {session_cookies}
-
-            """
-        )
-    else:
-        logger.error(f"{auth_properties['type']} login via IdP Discovery is not curretly supported")
-        sys.exit(1)
-
-    # Once we get there, the user is authenticated. The session_cookies is either from local authentication
-    # or the one returned by saml2 if o2o.
+    # Once we get there, the user is authenticated.
     if oie_enabled(config.okta["org"]):
         logger.debug(
             f"""
-                    oauth2_authorize
-                    _session_cookies: {HTTP_client.session.cookies}
+             oauth2_authorize
 
-                    """
+             session_cookies: {HTTP_client.session.cookies}
+
+            """
         )
         # session_cookies =
         session_cookies = oauth2_authorize(config, session_cookies)
@@ -778,11 +805,14 @@ def user_authenticate(config):
     headers = {"content-type": "application/json", "accept": "application/json"}
     payload = {"username": config.okta["username"], "password": config.okta["password"]}
 
-    logger.debug(f"Authenticate user to {config.okta['org']}")
-    logger.debug(f"Sending {headers}, {payload} to {config.okta['org']}")
+    logger.debug(f"Authenticate user to {config.okta['authentication_server']}")
+    logger.debug(f"Sending {headers}, {payload} to {config.okta['authentication_server']}")
 
     primary_auth = HTTP_client.post(
-        f"{config.okta['org']}/api/v1/authn", json=payload, headers=headers, return_json=True
+        f"{config.okta['authentication_server']}/api/v1/authn",
+        json=payload,
+        headers=headers,
+        return_json=True,
     )
 
     if "errorCode" in primary_auth:
@@ -791,11 +821,13 @@ def user_authenticate(config):
 
     while session_token is None:
         session_token = get_session_token(config, primary_auth, headers)
-    logger.info(f"User has been successfully authenticated to {config.okta['org']}.")
+    logger.info(
+        f"User has been successfully authenticated to {config.okta['authentication_server']}."
+    )
     return session_token
 
 
-def local_authentication_enabled(auth_properties):
+def user_authentication_enabled(auth_properties):
     """Check whether authentication happens on the current instance.
 
     :param auth_properties: auth_properties dict
@@ -821,36 +853,6 @@ def is_saml2_authentication(auth_properties):
     except (TypeError, KeyError):
         pass
     return False
-
-
-def saml2_authenticate(config, auth_properties):
-    """SAML2 authentication flow.
-
-    :param config: Config object
-    :param auth_properties: dict with authentication properties
-    :returns: session ID cookie, if successful.
-    """
-    # Get the SAML request details
-    saml_request = get_saml_request(auth_properties)
-
-    # Create a copy of our configuration, so that we can freely reuse it
-    # without Python's pass-as-reference-value interfering with it.
-    saml2_config = deepcopy(config)
-    saml2_config.okta["org"] = saml_request["base_url"]
-    logger.info(f"Authentication is being redirected to {saml2_config.okta['org']}.")
-
-    # Try to authenticate using the new configuration. This could cause
-    # recursive calls, which allows for IdP chaining.
-    session_cookies = idp_auth(saml2_config)
-
-    # Once we are authenticated, send the SAML request to the IdP.
-    # This call requires session cookies.
-    saml_response = send_saml_request(saml_request, session_cookies)
-
-    # Send SAML response from the IdP back to the SP, which will generate new
-    # session cookies.
-    session_id = send_saml_response(config, saml_response)
-    return session_id
 
 
 def extract_saml_response(html, raw=False):
