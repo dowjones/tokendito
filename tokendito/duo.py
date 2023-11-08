@@ -45,7 +45,7 @@ def prepare_info(selected_okta_factor):
     return duo_info
 
 
-def api_post(url, params=None, headers=None, payload=None):
+def api_post(url, params=None, headers=None, payload=None, return_json=True):
     """Error handling and response parsing wrapper for Duo POSTs.
 
     :param url: The URL being connected to.
@@ -54,7 +54,9 @@ def api_post(url, params=None, headers=None, payload=None):
     :param payload: Request body.
     :return response: Response to the API request.
     """
-    response = HTTP_client.post(url, params=params, headers=headers, data=payload, return_json=True)
+    response = HTTP_client.post(
+        url, params=params, headers=headers, data=payload, return_json=return_json
+    )
     return response
 
 
@@ -71,7 +73,7 @@ def get_sid(duo_info):
 
     url = f"https://{duo_info['host']}/frame/web/v1/auth"
     logger.debug(f"Calling Duo {urlparse(url).path} with params {params.keys()}")
-    duo_auth_response = api_post(url, params=params)
+    duo_auth_response = api_post(url, params=params, return_json=False)
 
     try:
         duo_auth_redirect = urlparse(f"{unquote(duo_auth_response.url)}").query
@@ -124,10 +126,9 @@ def parse_mfa_challenge(mfa_challenge):
     :return txid: Duo transaction ID.
     """
     try:
-        mfa_challenge = mfa_challenge.json()
         mfa_status = mfa_challenge["stat"]
         txid = mfa_challenge["response"]["txid"]
-    except (TypeError, ValueError) as err:
+    except (TypeError, ValueError, AttributeError) as err:
         logger.error(f"The Duo API returned a non-json response: {err}")
         sys.exit(1)
     except KeyError as key_error:
@@ -185,10 +186,10 @@ def get_mfa_response(mfa_result):
     :return verify_mfa: json response from mfa api
     """
     try:
-        verify_mfa = mfa_result.json()["response"]
+        verify_mfa = mfa_result["response"]
     except KeyError as key_error:
         logger.error(f"The mfa challenge response is missing a required parameter: {key_error}")
-        logger.debug(json.dumps(mfa_result.json()))
+        logger.debug(mfa_result)
         sys.exit(1)
     except Exception as other_error:
         logger.error(f"There was an error getting the mfa challenge result: {other_error}")
@@ -265,13 +266,17 @@ def factor_callback(duo_info, verify_mfa):
     factor_callback_url = f"https://{duo_info['host']}{verify_mfa['result_url']}"
     factor_callback = api_post(factor_callback_url, payload={"sid": duo_info["sid"]})
 
-    try:
-        sig_response = f"{factor_callback.json()['response']['cookie']}:{duo_info['tile_sig']}"
-    except Exception as sig_error:
+    if type(factor_callback) is not dict:
         logger.error("There was an error getting your application signature. Please try again.")
-        logger.debug(f"from Duo: {sig_error}")
+        logger.debug(f"Response from DUO: {factor_callback}")
         sys.exit(2)
 
+    try:
+        sig_response = f"{factor_callback['response']['cookie']}:{duo_info['tile_sig']}"
+    except (KeyError, TypeError) as err:
+        logger.error("There was an error getting your application signature. Please try again.")
+        logger.debug(f"Response from DUO: {err}")
+        sys.exit(2)
     logger.debug(f"Completed callback to {factor_callback_url} with sig_response {sig_response}")
     return sig_response
 
@@ -331,5 +336,5 @@ def authenticate(selected_okta_factor):
     }
 
     # Send Okta callback and return payload
-    api_post(duo_info["okta_callback_url"], payload=payload)
+    api_post(duo_info["okta_callback_url"], payload=payload, return_json=False)
     return payload

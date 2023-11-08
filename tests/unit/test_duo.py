@@ -104,13 +104,17 @@ def test_get_mfa_response():
     mfa_result = Mock()
 
     # Test if response is correct
-    mfa_result.json = Mock(return_value={"response": "test_value"})
-    assert get_mfa_response(mfa_result) == "test_value"
+    assert get_mfa_response({"response": "test_value"}) == "test_value"
 
     # Test if response is incorrect
-    mfa_result.json = Mock(return_value={"badresponse": "FAIL"})
+    mfa_result = Mock(return_value={"badresponse": "FAIL"})
     with pytest.raises(SystemExit) as err:
         get_mfa_response(mfa_result)
+    assert err.value.code == 1
+
+    # Test no key available
+    with pytest.raises(SystemExit) as err:
+        get_mfa_response({"pytest": "FAIL"})
     assert err.value.code == 1
 
     # Test generic failure
@@ -175,8 +179,7 @@ def test_parse_mfa_challenge():
     mfa_challenge = Mock()
 
     # Test successful challenge
-    mfa_challenge.json = Mock(return_value={"stat": "OK", "response": {"txid": "pytest"}})
-    assert parse_mfa_challenge(mfa_challenge) == "pytest"
+    assert parse_mfa_challenge({"stat": "OK", "response": {"txid": "pytest"}}) == "pytest"
 
     # Test error
     mfa_challenge.json = Mock(return_value={"stat": "OK", "response": "error"})
@@ -184,10 +187,20 @@ def test_parse_mfa_challenge():
         parse_mfa_challenge(mfa_challenge)
     assert err.value.code == 1
 
+    # Test no key in returned content
+    with pytest.raises(SystemExit) as err:
+        parse_mfa_challenge({"pyest": "OK", "badresponse": "error"})
+    assert err.value.code == 1
+
     # Test no response in returned content
     mfa_challenge.json = Mock(return_value={"stat": "OK", "badresponse": "error"})
     with pytest.raises(SystemExit) as err:
         parse_mfa_challenge(mfa_challenge)
+    assert err.value.code == 1
+
+    # Test failure
+    with pytest.raises(SystemExit) as err:
+        parse_mfa_challenge({"stat": "fail", "response": {"txid": "pytest_error"}})
     assert err.value.code == 1
 
     # Test API failure
@@ -220,10 +233,9 @@ def test_mfa_challenge(mocker):
     passcode = "pytest_passcode"
     mfa_option = {"factor": "pytest_factor", "device": "pytest_device - pytest_device_name"}
 
-    duo_api_response = mocker.Mock()
-    duo_api_response.json.return_value = {"stat": "OK", "response": {"txid": "pytest_txid"}}
-
-    mocker.patch("tokendito.duo.api_post", return_value=duo_api_response)
+    mocker.patch(
+        "tokendito.duo.api_post", return_value={"stat": "OK", "response": {"txid": "pytest_txid"}}
+    )
 
     txid = mfa_challenge(duo_info, mfa_option, passcode)
     assert txid == "pytest_txid"
@@ -283,19 +295,26 @@ def test_factor_callback(mocker):
     duo_info = {"host": "pytest_host", "sid": "pytest_sid", "tile_sig": "pytest_tile_sig"}
     verify_mfa = {"result_url": "/pytest_result_url"}
 
-    duo_api_response = mocker.Mock()
-    duo_api_response.json.return_value = {
+    # Test successful retrieval of the cookie
+    duo_api_response = {
         "stat": "OK",
         "response": {"txid": "pytest_txid", "cookie": "pytest_cookie"},
     }
     mocker.patch("tokendito.duo.api_post", return_value=duo_api_response)
-
-    # Test successful retrieval of the cookie
     sig_response = factor_callback(duo_info, verify_mfa)
     assert sig_response == "pytest_cookie:pytest_tile_sig"
 
-    # Test failure to retrieve the cookie
-    duo_api_response.json.return_value = {"stat": "FAIL", "response": "pytest_error"}
+    # Test bad data passed in
+    duo_api_response = "FAIL"
+    mocker.patch("tokendito.duo.api_post", return_value=duo_api_response)
+    with pytest.raises(SystemExit) as err:
+        factor_callback(duo_info, verify_mfa)
+    assert err.value.code == 2
+
+    # Test bad data passed in
+    duo_api_response = {"stat": "FAIL", "response": {"cookie": "pytest_cookie"}}
+    duo_info = {"host": "pytest", "sid": "pytest"}
+    mocker.patch("tokendito.duo.api_post", return_value=duo_api_response)
     with pytest.raises(SystemExit) as err:
         factor_callback(duo_info, verify_mfa)
     assert err.value.code == 2
