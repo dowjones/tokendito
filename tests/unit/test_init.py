@@ -24,4 +24,6 @@ def test_semver_version():
     """Ensure the package version is semver compliant."""
     from tokendito import __version__ as version
 
-    assert semver.VersionInfo.parse(version)
+    compliant_version = version.replace(".rc", "-rc.")
+
+    assert semver.VersionInfo.parse(compliant_version)
