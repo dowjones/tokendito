@@ -634,6 +634,9 @@ def totp_approval(config, selected_mfa_option, headers, mfa_challenge_url, paylo
         user.add_sensitive_value_to_be_masked(mfa_verify["sessionToken"])
     logger.debug(f"mfa_verify [{json.dumps(mfa_verify)}]")
 
+    # Clear out any MFA response since it is no longer valid
+    config.okta["mfa_response"] = None
+
     return mfa_verify
 
 
