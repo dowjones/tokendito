@@ -11,9 +11,9 @@
 [![image](https://img.shields.io/badge/OS-Mac%2C%20Windows%2C%20Linux-9cf)](https://github.com/dowjones/tokendito/)
 [![image](https://img.shields.io/coverallsCoverage/github/dowjones/tokendito)](https://coveralls.io/github/dowjones/tokendito) [![image](https://img.shields.io/pypi/dm/tokendito)](https://pypistats.org/packages/tokendito)
 
-#
-
-![image](https://raw.githubusercontent.com/dowjones/tokendito/main/docs/tokendito-scaled.gif)
+<p>
+  <img src="https://raw.githubusercontent.com/dowjones/tokendito/main/docs/tokendito-scaled.gif">
+</p>
 
 Use `tokendito` to generate temporary AWS credentials via Okta for
 programmatic authentication to AWS. Tokendito signs you into Okta and
@@ -23,8 +23,31 @@ your AWS accounts, returning
 tokens into your local `~/.aws/credentials` file.
 
 ## What's new
-With the release of tokendito 2.0, many changes and fixes were introduced. It is a breaking release: your configuration needs to be updated, the command line arguments have changed, and support for Python < 3.7 has been removed.
+See [Releases](https://github.com/dowjones/tokendito/releases) for a detailed Changelog.
+### Tokendito 2.2.0
+
+Version 2.2.0 of Tokendito introduces the following new features:
+
+- Shared HTTP Client to leverage keepalives and Python's connection pool (by @fsilvamaia)
+- Support for Step-Up Authorization (by @ruhulio)
+- Misc bug fixes
+
+
+### Tokendito 2.1.0
+
+Version 2.1.0 of Tokendito introduces the following new features:
+
+- IdP redirection
+- Docker support (by @opis-mark)
+- Interactive support for AWS profile names (by @opis-mark)
+- Docker container signing to ensure you are on a 'certified' Tokendito container
+- Misc bug fixes
+
+
+### Tokendito 2.0.0
+With the release of tokendito 2.0, many changes and fixes were introduced. **It is a breaking release**: your configuration needs to be updated, the command line arguments have changed, and support for Python < 3.7 has been removed.
 The following changes are part of this release:
+
 - Set the config file to be platform dependent, and follow the XDG standard.
 - Extend configuration capabilities.
 - Modernize output.
