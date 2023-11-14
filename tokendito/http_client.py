@@ -4,6 +4,7 @@
 
 import logging
 import sys
+from urllib.parse import urlparse
 
 import requests
 from tokendito import __title__
@@ -74,6 +75,25 @@ class HTTPClient:
         self.session.cookies.clear()
         self.session.headers = requests.utils.default_headers()
         self.session.headers.update({"User-Agent": user_agent})
+
+    def get_device_token(self):
+        """Get the device token from the current session cookies.
+
+        :return: Device token or None
+        """
+        return self.session.cookies.get("DT", None)
+
+    def set_device_token(self, org_url, device_token):
+        """Set the device token in the current session cookies.
+
+        :param org_url: The organization URL
+        :param device_token: The device token
+        :return: None
+        """
+        if not device_token:
+            return
+
+        self.session.cookies.set("DT", device_token, domain=urlparse(org_url).netloc, path="/")
 
 
 HTTP_client = HTTPClient()

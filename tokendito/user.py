@@ -145,6 +145,13 @@ def parse_cli_args(args):
         "can also use the TOKENDITO_OKTA_MFA_RESPONSE environment variable.",
     )
     parser.add_argument(
+        "--use-device-token",
+        dest="user_use_device_token",
+        action="store_true",
+        default=False,
+        help="Use device token across sessions",
+    )
+    parser.add_argument(
         "--quiet",
         dest="user_quiet",
         action="store_true",
@@ -911,6 +918,27 @@ def update_configuration(config):
     logger.info(f"Updated {ini_file} with profile {profile}")
 
 
+def update_device_token(config):
+    """Update configuration file on local system with device token.
+
+    :param config: the current configuration
+    :return: None
+    """
+    logger.debug("Update configuration file on local system with device token.")
+    ini_file = config.user["config_file"]
+    profile = config.user["config_profile"]
+
+    contents = {}
+    # Copy relevant parts of the configuration into an dictionary that
+    # will be written out to disk
+    if "device_token" in config.okta and config.okta["device_token"] is not None:
+        contents["okta_device_token"] = config.okta["device_token"]
+
+    logger.debug(f"Adding {contents} to config file.")
+    update_ini(profile=profile, ini_file=ini_file, **contents)
+    logger.info(f"Updated {ini_file} with profile {profile}")
+
+
 def set_local_credentials(response={}, role="default", region="us-east-1", output="json"):
     """Write to local files to insert credentials.
 
@@ -1227,8 +1255,11 @@ def request_cookies(url, session_token):
     add_sensitive_value_to_be_masked(sess_id)
 
     # create cookies with sid 'sid'.
+    domain = urlparse(url).netloc
+
     cookies = requests.cookies.RequestsCookieJar()
-    cookies.set("sid", sess_id, domain=urlparse(url).netloc, path="/")
+    cookies.set("sid", sess_id, domain=domain, path="/")
+    cookies.set("sessionToken", session_token, domain=domain, path="/")
 
     # Log the session cookies.
     logger.debug(f"Received session cookies: {cookies}")

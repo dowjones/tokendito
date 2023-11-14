@@ -466,6 +466,26 @@ def test_update_configuration(tmpdir):
     assert ret.okta["mfa"] == "pytest"
 
 
+def test_update_device_token(tmpdir):
+    """Test writing and reading device token to a configuration file."""
+    from tokendito import user
+    from tokendito.config import Config
+
+    path = tmpdir.mkdir("pytest").join("pytest_tokendito.ini")
+
+    device_token = "test-device-token"
+
+    pytest_config = Config(
+        okta={"device_token": device_token},
+        user={"config_file": path, "config_profile": "pytest"},
+    )
+
+    # Write out a config file via configure() and ensure it's functional
+    user.update_device_token(pytest_config)
+    ret = user.process_ini_file(path, "pytest")
+    assert ret.okta["device_token"] == device_token
+
+
 def test_process_ini_file(tmpdir):
     """Test whether ini config elements are set correctly.
 
