@@ -49,10 +49,10 @@ class HTTPClient:
             logger.error(f"The get request to {url} failed with {err}")
             sys.exit(1)
 
-    def post(self, url, data=None, json=None, headers=None, return_json=False):
+    def post(self, url, data=None, json=None, headers=None, params=None, return_json=False):
         """Perform a POST request."""
         try:
-            response = self.session.post(url, data=data, json=json, headers=headers)
+            response = self.session.post(url, data=data, json=json, params=params, headers=headers)
             response.raise_for_status()
             if return_json is True:
                 try:
