@@ -47,11 +47,11 @@ def get_output_types():
     return ["json", "text", "csv", "yaml", "yaml-stream"]
 
 
-def authenticate_to_roles(config, urls, cookies):
+def authenticate_to_roles(config, urls):
     """Authenticate AWS user with saml.
 
-    :param urls: list of tuples or tuple, with tiles info
-    :param cookies: html cookies
+    :param config: configuration object
+    :param urls: list of tuples or tuple, with tiles information
     :return: response text
 
     """
@@ -63,7 +63,8 @@ def authenticate_to_roles(config, urls, cookies):
     logger.info(f"Discovering roles in {tile_count} tile{plural}.")
     for url, label in url_list:
         session_url = config.okta["org"] + "/login/sessionCookieRedirect"
-        params = {"token": cookies.get("sessionToken"), "redirectUrl": url}
+        token = HTTP_client.session.cookies.get("sessionToken", None)
+        params = {"token": token, "redirectUrl": url}
         response = HTTP_client.get(session_url, params=params)
 
         saml_response_string = response.text
@@ -74,7 +75,7 @@ def authenticate_to_roles(config, urls, cookies):
             if "Extra Verification" in saml_response_string and state_token:
                 logger.info(f"Step-Up authentication required for {url}.")
                 if okta.step_up_authenticate(config, state_token):
-                    return authenticate_to_roles(config, urls, cookies)
+                    return authenticate_to_roles(config, urls)
 
                 logger.error("Step-Up Authentication required, but not supported.")
             elif "App Access Locked" in saml_response_string:

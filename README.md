@@ -23,14 +23,17 @@ your AWS accounts, returning
 tokens into your local `~/.aws/credentials` file.
 
 ## What's new
+
 See [Releases](https://github.com/dowjones/tokendito/releases) for a detailed Changelog.
+
 ### Tokendito 2.3.0
+
 Version 2.3.0 of Tokendito introduces the following new features:
-- Basic OIE support while forcing Classic mode.    
+
+- Basic OIE support while forcing Classic mode.
 - Misc bug fixes
 
 Note: This feature currently works with locally enabled OIE organizations, but it does not for Organizations with chained Authentication in mixed OIE/Classic environments.
-
 
 ### Tokendito 2.2.0
 
@@ -39,7 +42,6 @@ Version 2.2.0 of Tokendito introduces the following new features:
 - Shared HTTP Client to leverage keepalives and Python's connection pool (by @fsilvamaia)
 - Support for Step-Up Authorization (by @ruhulio)
 - Misc bug fixes
-
 
 ### Tokendito 2.1.0
 
@@ -51,9 +53,9 @@ Version 2.1.0 of Tokendito introduces the following new features:
 - Docker container signing to ensure you are on a 'certified' Tokendito container
 - Misc bug fixes
 
-
 ### Tokendito 2.0.0
-With the release of tokendito 2.0, many changes and fixes were introduced. **It is a breaking release**: your configuration needs to be updated, the command line arguments have changed, and support for Python < 3.7 has been removed.
+
+With the release of tokendito 2.0, many changes and fixes were introduced. **It is a breaking release**: your configuration needs to be updated, the command line arguments have changed, and support for Python \< 3.7 has been removed.
 The following changes are part of this release:
 
 - Set the config file to be platform dependent, and follow the XDG standard.
@@ -71,24 +73,23 @@ Consult [additional notes](https://github.com/dowjones/tokendito/blob/main/docs/
 
 ## Requirements
 
--   Python 3.7+, or a working Docker environment
--   AWS account(s) federated with Okta
+- Python 3.7+, or a working Docker environment
+- AWS account(s) federated with Okta
 
 Tokendito is compatible with Python 3 and can be installed with either
 pip or pip3.
 
 ## Getting started
 
-1.  Install (via PyPi): `pip install tokendito`
-2.  Run `tokendito --configure`.
-3.  Run `tokendito`.
+1. Install (via PyPi): `pip install tokendito`
+1. Run `tokendito --configure`.
+1. Run `tokendito`.
 
 **NOTE**: Advanced users may shorten the `tokendito` interaction to a [single
 command](https://github.com/dowjones/tokendito/blob/main/docs/README.md#single-command-usage).
 
 Have multiple Okta tiles to switch between? View our [multi-tile
 guide](https://github.com/dowjones/tokendito/blob/main/docs/README.md#multi-tile-guide).
-
 
 ## Docker
 
@@ -98,13 +99,13 @@ Using Docker eliminates the need to install tokendito and its requirements. We a
 
 Run tokendito with the `docker run` command. Tokendito supports [DCT](https://docs.docker.com/engine/security/trust/), and we encourage you to enforce image signature validation before running any containers.
 
-``` shell
+```shell
 export DOCKER_CONTENT_TRUST=1
 ```
 
 then
 
-``` shell
+```shell
 docker run --rm -it tokendito/tokendito  --version
 ```
 
@@ -118,19 +119,21 @@ These can be covered by mapping a single volume to both the host and container u
 Be sure to set the `-it` flags to enable an interactive terminal session.
 
 On Windows, you can do the following:
-``` powershell
+
+```powershell
 docker run --rm -it -v "%USERPROFILE%\.aws":/app/.aws  -v "%USERPROFILE%\.config":/app/.config tokendito/tokendito
 ```
 
 In a Mac OS system, you can run:
-``` shell
+
+```shell
 docker run --rm -it -v "$HOME/.aws":/app/.aws  -v "$HOME/.config":/app/.config tokendito/tokendito
 ```
 
 On a Linux system, however, you must specify the user and group IDs for the mount mappings to work as expected.
 Additionally the mount points within the container move to a different location:
 
-``` shell
+```shell
 docker run --user $(id -u):$(id -g) --rm -it -v "$HOME/.aws":/.aws  -v "$HOME/.config":/.config tokendito/tokendito
 ```
 
@@ -138,7 +141,7 @@ Tokendito command line arguments are supported as well.
 
 **NOTE**: In the following examples the entire home directory is exported for simplicity. This is not recommended as it exposes too much data to the running container:
 
-``` shell
+```shell
 docker run --rm -it -v "$HOME":/ tokendito/tokendito \
   --okta-tile https://acme.okta.com/home/amazon_aws/000000000000000000x0/123 \
   --username username@example.com \
@@ -151,7 +154,7 @@ docker run --rm -it -v "$HOME":/ tokendito/tokendito \
 
 Tokendito profiles are supported while using containers provided the proper volume mapping exists.
 
-``` shell
+```shell
 docker run --rm -ti -v "$HOME":/app tokendito/tokendito \
   --profile my-profile-name
 ```

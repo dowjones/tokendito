@@ -110,7 +110,6 @@ def test_authenticate_to_roles(status_code, monkeypatch):
             "org": "https://acme.okta.org/",
         }
     )
-    cookies = {"some_cookie": "some_value"}
 
     with pytest.raises(SystemExit):
-        authenticate_to_roles(pytest_config, [("http://test.url.com", "")], cookies)
+        authenticate_to_roles(pytest_config, [("http://test.url.com", "")])

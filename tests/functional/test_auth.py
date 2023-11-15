@@ -73,6 +73,9 @@ def test_generate_credentials(custom_args, config_file):
         f"{config.okta['username']}",
         "--password",
         f"{config.okta['password']}",
+        "--config-file",
+        f"{config.user['config_file']}",
+        "--use-device-token",
         "--loglevel",
         "DEBUG",
     ]
@@ -86,6 +89,16 @@ def test_generate_credentials(custom_args, config_file):
     assert f"{config.okta['mfa_response']}" not in proc["stderr"]
     assert '"sessionToken": "*****"' in proc["stderr"]
     assert proc["exit_status"] == 0
+
+    # Ensure the device token is written to the config file, and is correct.
+    device_token = None
+    match = re.search(r"(?<=okta_device_token': ')[^']+", proc["stderr"])
+    if match:
+        device_token = match.group(0)
+    with open(config.user["config_file"]) as cfg:
+        assert f"okta_device_token = {device_token}" in cfg.read()
+
+    # print(f"stderr: {proc['stderr']}")
 
 
 @pytest.mark.run("second")

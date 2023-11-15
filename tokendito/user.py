@@ -64,8 +64,18 @@ def cmd_interface(args):
         )
         sys.exit(1)
 
+    if config.user["use_device_token"]:
+        device_token = config.okta["device_token"]
+        if device_token:
+            HTTP_client.set_device_token(config.okta["org"], device_token)
+        else:
+            logger.warning(
+                f"Device token unavailable for config profile {args.user_config_profile}. "
+                "May see multiple MFA requests this time."
+            )
+
     # get authentication and authorization cookies from okta
-    session_cookies = okta.idp_auth(config)
+    okta.idp_auth(config)
     logger.debug(
         f"""
         about to call discover_tile
@@ -79,7 +89,7 @@ def cmd_interface(args):
         config.okta["tile"] = discover_tiles(config.okta["org"])
 
     # Authenticate to AWS roles
-    auth_tiles = aws.authenticate_to_roles(config, config.okta["tile"], session_cookies)
+    auth_tiles = aws.authenticate_to_roles(config, config.okta["tile"])
 
     (role_response, role_name) = aws.select_assumeable_role(auth_tiles)
 
@@ -98,6 +108,12 @@ def cmd_interface(args):
         region=config.aws["region"],
         output=config.aws["output"],
     )
+
+    device_token = HTTP_client.get_device_token()
+    if config.user["use_device_token"] and device_token:
+        logger.info(f"Saving device token to config profile {args.user_config_profile}")
+        config.okta["device_token"] = device_token
+        update_device_token(config)
 
     display_selected_role(profile_name=config.aws["profile"], role_response=role_response)
 
@@ -353,7 +369,7 @@ def select_role_arn(authenticated_tiles):
         if roles.count(config.aws["profile"]) > 1:
             logger.error(
                 "There are multiple matches for the profile selected, "
-                "please use the --role-arn option to select one"
+                "please use the --aws-role-arn option to select one"
             )
             sys.exit(2)
 
@@ -702,7 +718,6 @@ def process_arguments(args):
     pattern = re.compile(r"^(.*?)_(.*)")
 
     for key, val in vars(args).items():
-        logger.debug(f"key is {key} and val is {val}")
         match = re.search(pattern, key.lower())
         if match:
             if match.group(1) not in get_submodule_names():
