@@ -46,6 +46,7 @@ class Config(object):
             password="",
             mfa=None,
             mfa_response=None,
+            client_id=None,
             tile=None,
             org=None,
             device_token=None,

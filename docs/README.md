@@ -109,6 +109,8 @@ options:
   --okta-org OKTA_ORG   Set the Okta Org base URL. This enables role auto-discovery
   --okta-tile OKTA_TILE
                         Okta tile URL to use.
+  --okta-client-id OKTA_CLIENT_ID
+                        Sets the Okta client ID used in OAuth2. If passed, the authorize code flow will run.
   --okta-mfa OKTA_MFA   Sets the MFA method
   --okta-mfa-response OKTA_MFA_RESPONSE
                         Sets the MFA response to a challenge

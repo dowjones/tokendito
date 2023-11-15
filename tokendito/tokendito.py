@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
-"""Tokendito cli entry point."""
+"""tokendito entry point."""
 import sys
 
 
@@ -12,9 +12,9 @@ def main(args=None):  # needed for console script
 
         path = os.path.dirname(os.path.dirname(__file__))
         sys.path[0:0] = [path]
-    from tokendito.tool import cli
+    from tokendito.user import cmd_interface
 
-    return cli(args)
+    return cmd_interface(args)
 
 
 if __name__ == "__main__":

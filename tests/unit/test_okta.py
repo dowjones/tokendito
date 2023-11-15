@@ -470,11 +470,10 @@ def test_send_saml_request(mocker):
     )
 
     saml_request = {"relay_state": "relay_state", "request": "request", "post_url": "post_url"}
-    cookie = {"sid": "pytestcookie"}
 
     mocker.patch("tokendito.http_client.HTTP_client.get", return_value=mock_response)
 
-    assert okta.send_saml_request(saml_request, cookie) == {
+    assert okta.send_saml_request(saml_request) == {
         "response": "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4=",
         "relay_state": "foobar",
         "post_url": "https://acme.okta.com/app/okta_org2org/akjlkjlksjx0xmdd/sso/saml",
@@ -484,6 +483,7 @@ def test_send_saml_request(mocker):
 def test_send_saml_response(mocker):
     """Test sending SAML response."""
     from tokendito import okta
+    from tokendito.config import Config
     from tokendito.http_client import HTTP_client
 
     mock_response = Mock()
@@ -495,12 +495,16 @@ def test_send_saml_response(mocker):
         "post_url": "https://acme.okta.com/app/okta_org2org/akjlkjlksjx0xmdd/sso/saml",
     }
 
+    mocker.patch("tokendito.okta.extract_state_token", return_value=None)
+
     mocker.patch.object(HTTP_client, "post", return_value=mock_response)
 
-    assert okta.send_saml_response(saml_response) == mock_response.cookies
+    pytest_config = Config()
+
+    assert okta.send_saml_response(pytest_config, saml_response) == mock_response.cookies
 
 
-def test_authenticate(mocker):
+def test_idp_auth(mocker):
     """Test authentication."""
     from tokendito import okta
     from tokendito.config import Config
@@ -513,23 +517,23 @@ def test_authenticate(mocker):
         }
     )
     sid = {"sid": "pytestsid"}
-    mocker.patch("tokendito.user.request_cookies", return_value=sid)
-    mocker.patch("tokendito.okta.local_auth", return_value="foobar")
-    mocker.patch("tokendito.okta.saml2_auth", return_value=sid)
+    mocker.patch("tokendito.okta.create_authn_cookies", return_value=sid)
+    mocker.patch("tokendito.okta.local_authenticate", return_value="foobar")
+    mocker.patch("tokendito.okta.saml2_authenticate", return_value=sid)
 
     mocker.patch("tokendito.okta.get_auth_properties", return_value={"type": "OKTA"})
-    assert okta.authenticate(pytest_config) == sid
+    assert okta.idp_auth(pytest_config) == sid
 
     mocker.patch("tokendito.okta.get_auth_properties", return_value={"type": "SAML2"})
-    assert okta.authenticate(pytest_config) == sid
+    assert okta.idp_auth(pytest_config) == sid
 
     mocker.patch("tokendito.okta.get_auth_properties", return_value={"type": "UNKNOWN"})
     with pytest.raises(SystemExit) as error:
-        assert okta.authenticate(pytest_config) == error
+        assert okta.idp_auth(pytest_config) == error
 
     mocker.patch("tokendito.okta.get_auth_properties", return_value={})
     with pytest.raises(SystemExit) as error:
-        assert okta.authenticate(pytest_config) == error
+        assert okta.idp_auth(pytest_config) == error
 
 
 def test_step_up_authenticate(mocker):
@@ -605,7 +609,7 @@ def test_local_auth(mocker):
     assert okta.local_auth(pytest_config) == "pytesttoken"
 
 
-def test_saml2_auth(mocker):
+def test_saml2_authenticate(mocker):
     """Test saml2 authentication."""
     from tokendito import okta
     from tokendito.config import Config
@@ -623,7 +627,7 @@ def test_saml2_auth(mocker):
         "base_url": "https://acme.okta.com",
     }
     mocker.patch("tokendito.okta.get_saml_request", return_value=saml_request)
-    mocker.patch("tokendito.okta.authenticate", return_value="pytestsessioncookie")
+    mocker.patch("tokendito.okta.idp_auth", return_value="pytestsessioncookie")
 
     saml_response = {
         "response": "pytestresponse",
@@ -631,4 +635,4 @@ def test_saml2_auth(mocker):
 
     mocker.patch("tokendito.okta.send_saml_request", return_value=saml_response)
     mocker.patch("tokendito.okta.send_saml_response", return_value="pytestsessionid")
-    assert okta.saml2_auth(pytest_config, auth_properties) == "pytestsessionid"
+    assert okta.saml2_authenticate(pytest_config, auth_properties) == "pytestsessionid"
