@@ -4,6 +4,7 @@
 from unittest.mock import Mock
 
 import pytest
+import requests.cookies
 from tokendito.config import Config
 from tokendito.http_client import HTTP_client
 
@@ -304,11 +305,11 @@ def test_push_approval(mocker, return_value, side_effect, expected):
         ({"type": "SAML2"}, False),
     ],
 )
-def test_is_local_auth(auth_properties, expected):
+def test_local_authentication_enabled(auth_properties, expected):
     """Test local auth method."""
     from tokendito import okta
 
-    assert okta.is_local_auth(auth_properties) == expected
+    assert okta.local_authentication_enabled(auth_properties) == expected
 
 
 @pytest.mark.parametrize(
@@ -486,8 +487,12 @@ def test_send_saml_response(mocker):
     from tokendito.config import Config
     from tokendito.http_client import HTTP_client
 
+    cookies = requests.cookies.RequestsCookieJar()
+    cookies.set("sid", "pytestcookie")
     mock_response = Mock()
-    mock_response.cookies = {"sid": "pytestcookie"}
+    mock_response.status_code = 201
+    mock_response.session = Mock()
+    mock_response.session.cookies = cookies
 
     saml_response = {
         "response": "pytestresponse",
@@ -501,7 +506,7 @@ def test_send_saml_response(mocker):
 
     pytest_config = Config()
 
-    assert okta.send_saml_response(pytest_config, saml_response) == mock_response.cookies
+    assert okta.send_saml_response(pytest_config, saml_response) is None
 
 
 def test_idp_auth(mocker):
@@ -522,10 +527,10 @@ def test_idp_auth(mocker):
     mocker.patch("tokendito.okta.saml2_authenticate", return_value=sid)
 
     mocker.patch("tokendito.okta.get_auth_properties", return_value={"type": "OKTA"})
-    assert okta.idp_auth(pytest_config) == sid
+    assert okta.idp_auth(pytest_config) is None
 
     mocker.patch("tokendito.okta.get_auth_properties", return_value={"type": "SAML2"})
-    assert okta.idp_auth(pytest_config) == sid
+    assert okta.idp_auth(pytest_config) is None
 
     mocker.patch("tokendito.okta.get_auth_properties", return_value={"type": "UNKNOWN"})
     with pytest.raises(SystemExit) as error:
@@ -585,7 +590,7 @@ def test_step_up_authenticate(mocker):
     assert okta.step_up_authenticate(pytest_config, state_token) is False
 
 
-def test_local_auth(mocker):
+def test_local_authenticate(mocker):
     """Test local auth method."""
     from tokendito import okta
     from tokendito.config import Config
@@ -606,7 +611,7 @@ def test_local_auth(mocker):
         }
     )
 
-    assert okta.local_auth(pytest_config) == "pytesttoken"
+    assert okta.local_authenticate(pytest_config) == "pytesttoken"
 
 
 def test_saml2_authenticate(mocker):
@@ -634,5 +639,5 @@ def test_saml2_authenticate(mocker):
     }
 
     mocker.patch("tokendito.okta.send_saml_request", return_value=saml_response)
-    mocker.patch("tokendito.okta.send_saml_response", return_value="pytestsessionid")
-    assert okta.saml2_authenticate(pytest_config, auth_properties) == "pytestsessionid"
+    mocker.patch("tokendito.okta.send_saml_response", return_value=None)
+    assert okta.saml2_authenticate(pytest_config, auth_properties) is None

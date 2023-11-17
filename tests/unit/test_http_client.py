@@ -17,6 +17,33 @@ def client():
     return HTTPClient()
 
 
+@pytest.mark.parametrize(
+    "base_os, expected",
+    [
+        ("Darwin", "Macintosh"),
+        ("Linux", "X11"),
+        ("Windows", "Windows"),
+        ("Unknown", "compatible"),
+    ],
+)
+def test_generate_user_agent(mocker, base_os, expected):
+    """Test the generate_user_agent function."""
+    import platform
+
+    from tokendito.http_client import generate_user_agent
+
+    mocker.patch("platform.uname", return_value=(base_os, "", "pytest", "", "", ""))
+    python_version = platform.python_version()
+
+    user_agent = generate_user_agent()
+    assert user_agent == (
+        f"{__title__}/{__version__} "
+        f"({expected}; {base_os}/pytest) "
+        f"Python/{python_version}; "
+        f"requests/{requests.__version__})"
+    )
+
+
 def test_init(client):
     """Test initialization of HTTPClient instance."""
     # Check if the session property of the client is an instance of requests.Session
@@ -24,7 +51,7 @@ def test_init(client):
 
     # Check if the User-Agent header was set correctly during initialization
     expected_user_agent = f"{__title__}/{__version__}"
-    assert client.session.headers["User-Agent"] == expected_user_agent
+    assert str(expected_user_agent) in str(client.session.headers["User-Agent"])
 
 
 def test_set_cookies(client):
@@ -166,6 +193,10 @@ def test_get_device_token(client):
     # Check if the device token is set correctly in the session
     assert client.get_device_token() == device_token
 
+    # Check no device token when the cookie is not set
+    client.session.cookies.clear()
+    assert client.get_device_token() is None
+
 
 def test_set_device_token(client):
     """Test setting device token in the session."""
@@ -174,3 +205,7 @@ def test_set_device_token(client):
 
     # Check if the device token is set correctly in the session
     assert client.session.cookies.get("DT") == device_token
+
+    # Check no device token set when the cookie is not set
+    client.session.cookies.clear()
+    assert client.set_device_token("http://test.com", None) is None

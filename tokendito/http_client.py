@@ -3,6 +3,7 @@
 """This module handles HTTP client operations."""
 
 import logging
+import platform
 import sys
 from urllib.parse import urlparse
 
@@ -13,12 +14,37 @@ from tokendito import __version__
 logger = logging.getLogger(__name__)
 
 
+def generate_user_agent():
+    """Generate a user agent string."""
+    python_version = platform.python_version()
+    (system, _, release, _, _, _) = platform.uname()
+
+    base_os = "compatible"
+    if system == "Darwin":
+        base_os = "Macintosh"
+    elif system == "Linux":
+        base_os = "X11"
+    elif system == "Windows":
+        base_os = "Windows"
+    else:
+        logger.warning(f"Unknown platform: {system}")
+
+    user_agent = (
+        f"{__title__}/{__version__} "
+        f"({base_os}; {system}/{release}) "
+        f"Python/{python_version}; "
+        f"requests/{requests.__version__})"
+    )
+    logger.debug(f"User agent: {user_agent}")
+    return user_agent
+
+
 class HTTPClient:
     """Handles HTTP client operations."""
 
     def __init__(self):
         """Initialize the HTTPClient with a session object."""
-        user_agent = f"{__title__}/{__version__}"
+        user_agent = generate_user_agent()
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": user_agent})
 
