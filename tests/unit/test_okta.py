@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """Unit tests, and local fixtures for the Okta module."""
 from unittest.mock import Mock
+from unittest.mock import patch
 
 import pytest
 import requests.cookies
@@ -321,11 +322,11 @@ def test_local_authentication_enabled(auth_properties, expected):
         ({"type": "SAML2"}, True),
     ],
 )
-def test_is_saml2_auth(auth_properties, expected):
+def test_is_saml2_authentication(auth_properties, expected):
     """Test saml2 auth method."""
     from tokendito import okta
 
-    assert okta.is_saml2_auth(auth_properties) == expected
+    assert okta.is_saml2_authentication(auth_properties) == expected
 
 
 @pytest.mark.parametrize(
@@ -461,6 +462,7 @@ def test_get_saml_request(mocker):
 def test_send_saml_request(mocker):
     """Test sending SAML request."""
     from tokendito import okta
+    import base64
 
     mock_response = Mock()
     mock_response.text = (
@@ -472,6 +474,7 @@ def test_send_saml_request(mocker):
 
     saml_request = {"relay_state": "relay_state", "request": "request", "post_url": "post_url"}
 
+    mocker.patch.object(base64, "b64decode", return_value="foo")
     mocker.patch("tokendito.http_client.HTTP_client.get", return_value=mock_response)
 
     assert okta.send_saml_request(saml_request) == {
@@ -486,6 +489,7 @@ def test_send_saml_response(mocker):
     from tokendito import okta
     from tokendito.config import Config
     from tokendito.http_client import HTTP_client
+    import base64
 
     cookies = requests.cookies.RequestsCookieJar()
     cookies.set("sid", "pytestcookie")
@@ -502,6 +506,8 @@ def test_send_saml_response(mocker):
 
     mocker.patch("tokendito.okta.extract_state_token", return_value=None)
 
+    mocker.patch.object(base64, "b64decode", return_value="foo")
+
     mocker.patch.object(HTTP_client, "post", return_value=mock_response)
 
     pytest_config = Config()
@@ -509,7 +515,355 @@ def test_send_saml_response(mocker):
     assert okta.send_saml_response(pytest_config, saml_response) is None
 
 
-def test_idp_auth(mocker):
+def test_get_auth_pipeline(mocker):
+    """Test get_auth_pipeline."""
+    from tokendito import okta
+
+    mock_response = Mock()
+    mock_response.json.return_value = {"pipeline": "idx"}
+    mocker.patch.object(HTTP_client, "get", return_value=mock_response)
+    assert okta.get_auth_pipeline() == "idx"
+
+    mock_response.json.return_value = {"pipeline": "v1"}
+    mocker.patch.object(HTTP_client, "get", return_value=mock_response)
+    assert okta.get_auth_pipeline() == "v1"
+
+    mocker.patch.object(HTTP_client, "get", return_value="invalid format")
+    with pytest.raises(SystemExit) as error:
+        assert okta.get_auth_pipeline() == error
+
+    mock_response.json.return_value = {"pipeline": "future_version"}
+    mocker.patch.object(HTTP_client, "get", return_value=mock_response)
+    with pytest.raises(SystemExit) as error:
+        assert okta.get_auth_pipeline() == error
+
+
+def test_create_authz_cookies():
+    """Test create_authz_cookies."""
+    from tokendito import okta
+
+    pytest_oauth2_session_data = {"state": "pyteststate"}
+
+    pytest_oauth2_config = {
+        "client_id": "123",
+        "org": "acme",
+        "authorization_endpoint": "pytesturl",
+        "token_endpoint": "tokeneurl",
+    }
+    assert okta.create_authz_cookies(pytest_oauth2_config, pytest_oauth2_session_data) is None
+    from tokendito import okta
+
+    pytest_oauth2_config = {}
+    pytest_oauth2_session_data = {"state": "pyteststate"}
+    with pytest.raises(SystemExit) as error:
+        assert okta.create_authz_cookies(pytest_oauth2_config, pytest_oauth2_session_data) == error
+
+
+def test_get_access_token(mocker):
+    """Test get_access_token."""
+    from tokendito import okta
+
+    pytest_oauth2_config = {"client_id": "123", "token_endpoint": "pytesttokenendpoint"}
+    pytest_oauth2_session_data = {
+        "state": "pyteststate",
+        "grant_type": "pytestgrandtype",
+        "redirect_uri": "pytestredirecturi",
+        "code_verifier": "pytestcodeverifier",
+    }
+
+    mock_response_data = {"access_token": "pytesttoken"}
+    mocker.patch.object(HTTP_client, "post", return_value=mock_response_data)
+    assert (
+        okta.get_access_token(pytest_oauth2_config, pytest_oauth2_session_data, "pytestcode")
+        == "pytesttoken"
+    )
+
+    mock_response_data = {}
+    mocker.patch.object(HTTP_client, "post", return_value=mock_response_data)
+    assert (
+        okta.get_access_token(pytest_oauth2_config, pytest_oauth2_session_data, "pytestcode")
+        is None
+    )
+
+
+def test_get_pkce_code_challenge_method():
+    """Test get_pkce_code_challenge_method."""
+    from tokendito import okta
+
+    assert okta.get_pkce_code_challenge_method() == "S256"
+
+
+def test_get_pkce_code_challenge():
+    """Test get_pkce_code_challenge."""
+    from tokendito import okta
+
+    assert (
+        okta.get_pkce_code_challenge("pytestverifier")
+        == "gcJ7mE9WW6euOYlu2Wx45XTPumBk5-8eoU4AF_BBbP4"
+    )
+
+
+@patch("hashlib.sha256")
+def test_get_oauth2_state(mocker):
+    """Test getting OAuth2 state."""
+    from tokendito import okta
+
+    mocker.return_value.hexdigest.return_value = "random_digested"
+    assert okta.get_oauth2_state() == "random_digested"
+
+
+@patch("base64.urlsafe_b64encode")
+def test_get_pkce_code_verifier(mocker):
+    """Test get_pkce_code_verifier."""
+    from tokendito import okta
+
+    mocker.return_value.decode.return_value = "@#!decoded_value%%"
+    assert okta.get_pkce_code_verifier() == "decodedvalue"
+
+
+def test_pkce_enabled():
+    """Test pkce_enabled."""
+    from tokendito import okta
+
+    assert okta.pkce_enabled() is True
+
+
+def test_get_authorize_code():
+    """Test get authorize code."""
+    from tokendito import okta
+
+    response = Mock()
+    response.url = "https://example.com?code=pytest"
+    assert okta.get_authorize_code(response, "sessionToken") == "pytest"
+
+
+def test_authorization_code_enabled():
+    """Test authorization_code_enabled."""
+    from tokendito import okta
+
+    pytest_oauth2_config = {}
+    with pytest.raises(SystemExit) as error:
+        assert okta.authorization_code_enabled(pytest_oauth2_config) == error
+
+    pytest_oauth2_config = {"grant_types_supported": "authorization_code"}
+    with pytest.raises(SystemExit) as error:
+        assert okta.authorization_code_enabled(pytest_oauth2_config) == error
+
+    pytest_oauth2_config = {"grant_types_supported": "authorization_code", "org": "acme"}
+    assert okta.authorization_code_enabled(pytest_oauth2_config) is True
+
+
+def test_authorize_request(mocker):
+    """Test authorize_request."""
+    from tokendito import okta
+
+    pytest_oauth2_config = {
+        "client_id": "123",
+        "token_endpoint": "pytesttokenendpoint",
+    }
+    pytest_oauth2_session_data = {
+        "state": "pyteststate",
+        "scope": "pytestscope",
+        "code_challenge": "pytestchallenge",
+        "code_challenge_method": "pytest",
+        "grant_type": "pytestgrandtype",
+        "redirect_uri": "pytestredirecturi",
+        "code_verifier": "pytestcodeverifier",
+        "response_type": "code",
+    }
+
+    response = Mock()
+    response.url = "https://example.com?code=pytest"
+    mocker.patch.object(HTTP_client, "get", return_value=response)
+    with pytest.raises(SystemExit) as error:
+        assert okta.authorization_code_enabled(pytest_oauth2_config) == error
+
+    pytest_oauth2_config = {
+        "client_id": "123",
+        "token_endpoint": "pytesttokenendpoint",
+        "authorization_endpoint": "pytestauthurl",
+    }
+    assert okta.authorize_request(pytest_oauth2_config, pytest_oauth2_session_data) == "pytest"
+
+
+def test_generate_oauth2_session_data():
+    """Test generate_oauth2_session_data."""
+    from tokendito import okta
+
+    assert (
+        okta.generate_oauth2_session_data("acme.com")["redirect_uri"] == "acme.com/enduser/callback"
+    )
+
+
+def test_get_oauth2_configuration(mocker):
+    """Test get_oauth2_configuration."""
+    from tokendito import okta
+
+    response = Mock()
+    response.json.return_value = {
+        "authorization_endpoint": "pytest",
+        "token_endpoint": "pytest",
+        "scopes_supported": "pytest",
+        "response_types_supported": "code",
+        "grant_types_supported": "authorization_code",
+        "request_parameter_supported": "pytest",
+    }
+    pytest_config = Config(okta={"client_id": "test_client_id", "org": "acme"})
+    mocker.patch.object(HTTP_client, "get", return_value=response)
+    assert okta.get_oauth2_configuration(pytest_config)["org"] == "acme"
+
+
+def test_validate_oauth2_configuration():
+    """Test validate_oauth2_configuration."""
+    from tokendito import okta
+
+    pytest_oauth2_config = {
+        "client_id": "123",
+        "org": "acme",
+        "token_endpoint": "pytesttokenendpoint",
+        "grant_types_supported": "authorization_code",
+        "scopes_supported": "pytest",
+        "response_types_supported": "code",
+        "request_parameter_supported": "pytest",
+    }
+
+    with pytest.raises(SystemExit) as error:
+        assert okta.validate_oauth2_configuration(pytest_oauth2_config) == error
+
+    pytest_oauth2_config = {
+        "client_id": "123",
+        "org": "acme",
+        "token_endpoint": "pytesttokenendpoint",
+        "authorization_endpoint": "pytestauthurl",
+        "grant_types_supported": "authorization_code",
+        "scopes_supported": "pytest",
+        "response_types_supported": "code",
+        "request_parameter_supported": "pytest",
+    }
+    assert okta.validate_oauth2_configuration(pytest_oauth2_config) is None
+
+
+def test_idp_authorize(mocker):
+    """Test idp_authorize."""
+    from tokendito import okta
+
+    oauth2_config = {"client_id": "test_client_id"}
+    oauth2_session_data = {}
+    mocker.patch("tokendito.okta.authorization_code_enabled", return_value=True)
+    mocker.patch("tokendito.okta.authorize_request", return_value="pytest")
+    mocker.patch("tokendito.okta.get_access_token", return_value="token")
+    assert okta.idp_authorize(oauth2_config, oauth2_session_data) is None
+
+    oauth2_config = {}
+    with pytest.raises(SystemExit) as error:
+        assert okta.idp_authorize(oauth2_config, oauth2_session_data) == error
+
+
+@pytest.mark.parametrize(
+    "url, response, expected",
+    [
+        (
+            "https://login.okta.com",
+            "pytest",
+            None,
+        ),
+        (
+            "https://login.okta.com",
+            '<html><head><script src="https://login.okta.com/enduser-v1.0.0.0/enduser.min.js">'
+            "</script></head></html>",
+            "https://login.okta.com/enduser-v1.0.0.0/enduser.min.js",
+        ),
+    ],
+)
+def test_get_enduser_url(mocker, url, response, expected):
+    """Test get_enduser_url."""
+    from tokendito import okta
+
+    mock_response = Mock()
+    mock_response.text = response
+    mock_response.status_code = 201
+    mocker.patch.object(HTTP_client, "get", return_value=mock_response)
+    assert okta.get_enduser_url(url) == expected
+
+
+@pytest.mark.parametrize(
+    "url, response, expected",
+    [
+        (
+            "https://login.okta.com/enduser-v1.0.0.0/enduser.min.js",
+            "pytest",
+            None,
+        ),
+        (
+            "https://login.okta.com/enduser-v1.0.0.0/enduser.min.js",
+            'redirectUri:"".concat(Cn,"/enduser/callback")'
+            ',clientId:"okta.00000000-0000-0000-0000-000000000000",scopes:yn,',
+            "okta.00000000-0000-0000-0000-000000000000",
+        ),
+    ],
+)
+def test_get_client_id_by_url(mocker, url, response, expected):
+    """Test get_client_id_by_url."""
+    from tokendito import okta
+
+    mock_response = Mock()
+    mock_response.text = response
+    mock_response.status_code = 201
+    mocker.patch("tokendito.okta.get_enduser_url", return_value="acme")
+    mocker.patch.object(HTTP_client, "get", return_value=mock_response)
+    assert okta.get_client_id_by_url(url) == expected
+
+
+def test_get_client_id(mocker):
+    """Test getting client ID."""
+    from tokendito import okta
+
+    pytest_config = Config(okta={"client_id": "test_client_id", "org": "acme"})
+
+    assert okta.get_client_id(pytest_config) == "test_client_id"
+
+    pytest_config = Config(okta={"org": "acme"})
+    mocker.patch("tokendito.okta.get_client_id_by_url", return_value=None)
+    assert okta.get_client_id(pytest_config) is None
+
+    mocker.patch("tokendito.okta.get_client_id_by_url", return_value="test_client_id")
+    assert okta.get_client_id(pytest_config) == "test_client_id"
+
+
+def test_oie_enabled(mocker):
+    """Test oie_enabled."""
+    from tokendito import okta
+
+    mocker.patch("tokendito.okta.get_auth_pipeline", return_value="idx")
+
+    assert okta.oie_enabled("pytesturl") is True
+
+    mocker.patch("tokendito.okta.get_auth_pipeline", return_value="foobar")
+    assert okta.oie_enabled("pytesturl") is False
+
+
+def test_get_redirect_uri():
+    """Test getting redirect URI."""
+    from tokendito import okta
+
+    assert okta.get_redirect_uri("testurl") == "testurl/enduser/callback"
+
+
+def test_get_response_type():
+    """Test getting response code."""
+    from tokendito import okta
+
+    assert okta.get_response_type() == "code"
+
+
+def test_get_authorize_scope():
+    """Test getting authorize scope."""
+    from tokendito import okta
+
+    assert okta.get_authorize_scope() == "openid"
+
+
+def test_access_control(mocker):
     """Test authentication."""
     from tokendito import okta
     from tokendito.config import Config
@@ -521,24 +875,50 @@ def test_idp_auth(mocker):
             "org": "https://acme.okta.org/",
         }
     )
-    sid = {"sid": "pytestsid"}
-    mocker.patch("tokendito.okta.create_authn_cookies", return_value=sid)
-    mocker.patch("tokendito.okta.local_authenticate", return_value="foobar")
-    mocker.patch("tokendito.okta.saml2_authenticate", return_value=sid)
+    mocker.patch("tokendito.okta.oie_enabled", return_value=False)
+    mocker.patch("tokendito.okta.idp_authenticate", return_value=None)
+    mocker.patch("tokendito.okta.idp_authorize", return_value=None)
+    assert okta.access_control(pytest_config) is None
 
+    mocker.patch("tokendito.okta.oie_enabled", return_value=True)
+    mocker.patch("tokendito.okta.get_oauth2_configuration", return_value=None)
+    mocker.patch("tokendito.okta.generate_oauth2_session_data", return_value=None)
+    mocker.patch("tokendito.okta.create_authz_cookies", return_value=None)
+    mocker.patch("tokendito.okta.idp_authenticate", return_value=None)
+    mocker.patch("tokendito.okta.idp_authorize", return_value=None)
+    assert okta.access_control(pytest_config) is None
+
+
+def test_idp_authenticate(mocker):
+    """Test IDP authenticate."""
+    from tokendito import okta
+    from tokendito.config import Config
+
+    pytest_config = Config(
+        okta={
+            "username": "XXXXXX",
+            "password": "XXXXXX",
+            "org": "XXXXXXXXXXXXXXXXXXXXXX",
+        }
+    )
+    mocker.patch("tokendito.okta.create_authn_cookies", return_value=None)
+    mocker.patch("tokendito.okta.local_authenticate", return_value=None)
+    mocker.patch("tokendito.okta.oie_enabled", return_value=False)
+    mocker.patch("tokendito.okta.saml2_authenticate", return_value=None)
     mocker.patch("tokendito.okta.get_auth_properties", return_value={"type": "OKTA"})
-    assert okta.idp_auth(pytest_config) is None
+
+    assert okta.idp_authenticate(pytest_config) is None
 
     mocker.patch("tokendito.okta.get_auth_properties", return_value={"type": "SAML2"})
-    assert okta.idp_auth(pytest_config) is None
+    assert okta.idp_authenticate(pytest_config) is None
 
     mocker.patch("tokendito.okta.get_auth_properties", return_value={"type": "UNKNOWN"})
     with pytest.raises(SystemExit) as error:
-        assert okta.idp_auth(pytest_config) == error
+        assert okta.idp_authenticate(pytest_config) == error
 
     mocker.patch("tokendito.okta.get_auth_properties", return_value={})
     with pytest.raises(SystemExit) as error:
-        assert okta.idp_auth(pytest_config) == error
+        assert okta.idp_authenticate(pytest_config) == error
 
 
 def test_step_up_authenticate(mocker):
@@ -628,11 +1008,12 @@ def test_saml2_authenticate(mocker):
             "org": "https://acme.okta.org/",
         }
     )
+
     saml_request = {
         "base_url": "https://acme.okta.com",
     }
     mocker.patch("tokendito.okta.get_saml_request", return_value=saml_request)
-    mocker.patch("tokendito.okta.idp_auth", return_value="pytestsessioncookie")
+    mocker.patch("tokendito.okta.access_control", return_value="pytestsessioncookie")
 
     saml_response = {
         "response": "pytestresponse",
@@ -640,4 +1021,5 @@ def test_saml2_authenticate(mocker):
 
     mocker.patch("tokendito.okta.send_saml_request", return_value=saml_response)
     mocker.patch("tokendito.okta.send_saml_response", return_value=None)
+    mocker.patch("tokendito.okta.idp_authenticate", return_value=None)
     assert okta.saml2_authenticate(pytest_config, auth_properties) is None

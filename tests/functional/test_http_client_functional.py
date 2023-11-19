@@ -38,10 +38,10 @@ def test_post_request(client):
     assert json_data["json"] == {"key": "value"}
 
 
-def test_set_cookies(client):
+def test_add_cookies(client):
     """Test the ability to set cookies using HTTPClient."""
     # Set a test cookie for the client
-    client.set_cookies({"test_cookie": "cookie_value"})
+    client.add_cookies({"test_cookie": "cookie_value"})
 
     # Make a request to the /cookies endpoint of httpbin which returns set cookies
     response = client.get("https://httpbin.org/cookies")
@@ -78,7 +78,7 @@ def test_bad_post_request(client, mocker):
 def test_reset_session(client):
     """Test the reset method to ensure session is reset."""
     # Set a test cookie for the client
-    client.set_cookies({"test_cookie": "cookie_value"})
+    client.add_cookies({"test_cookie": "cookie_value"})
     # Reset the session
     client.reset()
 
