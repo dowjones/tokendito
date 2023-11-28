@@ -48,7 +48,7 @@ class HTTPClient:
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": user_agent})
 
-    def set_cookies(self, cookies):
+    def add_cookies(self, cookies):
         """Update session with additional cookies."""
         self.session.cookies.update(cookies)
 
@@ -60,16 +60,17 @@ class HTTPClient:
             logger.debug(f"Sending cookies: {self.session.cookies}")
             logger.debug(f"Sending headers: {self.session.headers}")
             response = self.session.get(
-                url, params=params, headers=headers, allow_redirects=allow_redirects
+                url,
+                params=params,
+                headers=headers,
+                allow_redirects=allow_redirects,
             )
             response.raise_for_status()
-            logger.debug(f"Received response from {url}: {response.text}")
             return response
         except requests.RequestException as e:
             logger.error(f"Error during GET request to {url}. Error: {e}")
             if response:
                 logger.debug(f"Response Headers: {response.headers}")
-                logger.debug(f"Response Content: {response.content}")
             else:
                 logger.debug("No response received")
             sys.exit(1)

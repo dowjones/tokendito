@@ -54,10 +54,10 @@ def test_init(client):
     assert str(expected_user_agent) in str(client.session.headers["User-Agent"])
 
 
-def test_set_cookies(client):
+def test_add_cookies(client):
     """Test setting cookies in the session."""
     cookies = {"test_cookie": "cookie_value"}
-    client.set_cookies(cookies)
+    client.add_cookies(cookies)
     # Check if the provided cookie is set correctly in the session
     assert client.session.cookies.get_dict() == cookies
 
@@ -188,7 +188,7 @@ def test_get_device_token(client):
     """Test getting device token from the session."""
     device_token = "test-device-token"
     cookies = {"DT": device_token}
-    client.set_cookies(cookies)
+    client.add_cookies(cookies)
 
     # Check if the device token is set correctly in the session
     assert client.get_device_token() == device_token

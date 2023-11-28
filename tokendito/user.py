@@ -75,7 +75,7 @@ def cmd_interface(args):
             )
 
     # get authentication and authorization cookies from okta
-    okta.idp_auth(config)
+    okta.access_control(config)
     logger.debug(
         f"""
         about to call discover_tile
@@ -215,7 +215,8 @@ def parse_cli_args(args):
     )
     parser.add_argument(
         "--okta-client-id",
-        help="Sets the Okta client ID used in OAuth2. If passed, the authorize code flow will run.",
+        help="""For OIE enabled Orgs this sets the Okta client ID to replace the value
+        found by tokendito. It is used in the authorize code flow.""",
     )
     parser.add_argument(
         "--okta-mfa",
