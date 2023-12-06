@@ -303,6 +303,7 @@ def test_push_approval(mocker, return_value, side_effect, expected):
         ({}, False),
         (None, False),
         ({"type": "OKTA"}, True),
+        ({"type": "IWA"}, True),
         ({"type": "SAML2"}, False),
     ],
 )
