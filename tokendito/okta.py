@@ -686,7 +686,9 @@ def idp_authenticate(config):
         # which we then put in our session cookies
         create_authn_cookies(config.okta["org"], session_token)
     else:
-        logger.error(f"{auth_properties['type']} login via IdP Discovery is not curretly supported")
+        logger.error(
+            f"{auth_properties['type']} login via IdP Discovery is not currently supported"
+        )
         sys.exit(1)
 
 
@@ -850,8 +852,10 @@ def local_authentication_enabled(auth_properties):
     :param auth_properties: auth_properties dict
     :return: True if this is the place to authenticate, False otherwise.
     """
+    # IWA (https://help.okta.com/en-us/content/topics/directory/ad-iwa-learn.htm)
+    # should be treated as local authentication
     try:
-        if auth_properties["type"] == "OKTA":
+        if auth_properties["type"] == "OKTA" or auth_properties["type"] == "IWA":
             return True
     except (TypeError, KeyError):
         pass
