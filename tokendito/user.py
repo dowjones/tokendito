@@ -79,12 +79,7 @@ def cmd_interface(args):
 
     # get authentication and authorization cookies from okta
     okta.access_control(config)
-    logger.debug(
-        f"""
-        about to call discover_tile
-        we have client cookies: {HTTP_client.session.cookies}
-        """
-    )
+
     if config.okta["tile"]:
         tile_label = ""
         config.okta["tile"] = (config.okta["tile"], tile_label)

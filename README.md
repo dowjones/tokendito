@@ -1,3 +1,5 @@
+# Tokendito
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/dowjones/tokendito/main/docs/tokendito.png"/>
 </p>
@@ -26,11 +28,19 @@ tokens into your local `~/.aws/credentials` file.
 
 See [Releases](https://github.com/dowjones/tokendito/releases) for a detailed Changelog.
 
+### Tokendito 2.4.0
+
+Version 2.4.0 of Tokendito introduces the following new features:
+
+- Add support for Okta question MFA.
+- Many bug fixes and contributions.
+
 ### Tokendito 2.3.0
 
 Version 2.3.0 of Tokendito introduces the following new features:
 
 - Basic OIE support while forcing Classic mode.
+- Support for saving the Device Token ID for later reuse.
 - Misc bug fixes
 
 Note: This feature currently works with locally enabled OIE organizations, but it does not for Organizations with chained Authentication in mixed OIE/Classic environments.
