@@ -1,7 +1,7 @@
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
 """Unit tests, and local fixtures for the user module."""
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import os
 import sys
 
@@ -466,7 +466,7 @@ def test_update_configuration(tmpdir):
     assert ret.okta["mfa"] == "pytest"
 
 
-def test_update_device_token(tmpdir):
+def test_update_profile_device_token(tmpdir):
     """Test writing and reading device token to a configuration file."""
     from tokendito import user
     from tokendito.config import Config
@@ -481,9 +481,56 @@ def test_update_device_token(tmpdir):
     )
 
     # Write out a config file via configure() and ensure it's functional
-    user.update_device_token(pytest_config)
+    user.update_profile_device_token(pytest_config)
     ret = user.process_ini_file(path, "pytest")
     assert ret.okta["device_token"] == device_token
+
+
+def test_check_profile_expiration():
+    """Test checking profile expiration."""
+    from tokendito import user
+    from tokendito.config import Config
+
+    now = datetime.now(timezone.utc)
+    future = now + timedelta(days=1)
+    past = now + timedelta(days=-1)
+
+    pytest_config = Config(
+        aws={"profile": "test-profile"},
+        okta={"profile_expiration": str(future)},
+        user={"use_profile_expiration": True},
+    )
+
+    # Expiration in the future should exit
+    with pytest.raises(SystemExit):
+        user.check_profile_expiration(pytest_config)
+
+    # Expiration in the past should not exit
+    pytest_config.okta["profile_expiration"] = str(past)
+    try:
+        user.check_profile_expiration(pytest_config)
+    except SystemExit:
+        pytest.fail("Profile expiration was invalid and should not have exited")
+
+
+def test_update_profile_expiration(tmpdir):
+    """Test writing and reading profile expiration to a configuration file."""
+    from tokendito import user
+    from tokendito.config import Config
+
+    path = tmpdir.mkdir("pytest").join("pytest_tokendito.ini")
+
+    expiration = datetime.now(timezone.utc)
+
+    pytest_config = Config(
+        okta={"profile_expiration": expiration},
+        user={"config_file": path, "config_profile": "pytest"},
+    )
+
+    # Write out a config file via configure() and ensure it's functional
+    user.update_profile_expiration(pytest_config)
+    ret = user.process_ini_file(path, "pytest")
+    assert datetime.fromisoformat(ret.okta["profile_expiration"]) == expiration
 
 
 def test_process_ini_file(tmpdir):
