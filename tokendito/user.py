@@ -75,6 +75,7 @@ def cmd_interface(args):
             )
 
     # get authentication and authorization cookies from okta
+    refreshed_at = str(int(time.time()))
     okta.access_control(config)
     logger.debug(
         f"""
@@ -107,6 +108,7 @@ def cmd_interface(args):
         role=config.aws["profile"],
         region=config.aws["region"],
         output=config.aws["output"],
+        refreshed_at=refreshed_at,
     )
 
     device_token = HTTP_client.get_device_token()
@@ -1023,13 +1025,16 @@ def update_device_token(config):
     logger.info(f"Updated {ini_file} with profile {profile}")
 
 
-def set_local_credentials(response={}, role="default", region="us-east-1", output="json"):
+def set_local_credentials(
+    response={}, role="default", region="us-east-1", output="json", refreshed_at=0
+):
     """Write to local files to insert credentials.
 
     :param response: AWS AssumeRoleWithSaml response
     :param role: the name of the assumed role, used for local profile
     :param region: configured region for aws credential profile
     :param output: configured datatype for aws cli output
+    :param refreshed_at: the time that the okta credentials were refreshed
     :return: Role name on a successful call.
     """
     try:
@@ -1046,6 +1051,7 @@ def set_local_credentials(response={}, role="default", region="us-east-1", outpu
         aws_access_key_id=aws_access_key_id,
         aws_secret_access_key=aws_secret_access_key,
         aws_session_token=aws_session_token,
+        refreshed_at=refreshed_at,
     )
 
     update_ini(
