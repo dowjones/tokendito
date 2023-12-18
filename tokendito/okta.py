@@ -1023,7 +1023,10 @@ def mfa_provider_type(
 
     elif mfa_provider == "OKTA" and factor_type == "push":
         mfa_verify = push_approval(mfa_challenge_url, payload)
-    elif mfa_provider in ["OKTA", "GOOGLE"] and factor_type in ["token:software:totp", "sms"]:
+    elif (
+        (mfa_provider in ["OKTA", "GOOGLE"] and factor_type in ["token:software:totp", "sms"])
+        or (mfa_provider == "OKTA" and factor_type == "question")
+    ):
         mfa_verify = totp_approval(
             config, selected_mfa_option, headers, mfa_challenge_url, payload, primary_auth
         )

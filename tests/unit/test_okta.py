@@ -73,6 +73,7 @@ def test_bad_session_token(mocker, sample_json_response, sample_headers):
             {"_embedded": {"factor": {"factorType": "push"}}},
             345,
         ),  # Changed expected value to 2
+        ("OKTA", 321,{"_embedded": {"factor": {"factorType": "question"}}}, 321),
         ("GOOGLE", 456, {"_embedded": {"factor": {"factorType": "sms"}}}, 456),
     ],
 )
