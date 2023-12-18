@@ -64,6 +64,9 @@ def cmd_interface(args):
         )
         sys.exit(1)
 
+    # rm trailing / if provided as such so the urls with this as base dont have //
+    config.okta["org"] = config.okta["org"].strip("/")
+
     if config.user["use_device_token"]:
         device_token = config.okta["device_token"]
         if device_token:

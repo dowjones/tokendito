@@ -17,8 +17,7 @@ import os
 import re
 import sys
 import time
-from urllib.parse import urlencode
-from urllib.parse import urlparse
+import urllib
 
 import bs4
 from bs4 import BeautifulSoup
@@ -208,16 +207,17 @@ def create_authz_cookies(oauth2_config, oauth2_session_data):
             "userInfoUrl": f"{oauth2_url}/userinfo",
             "revokeUrl": f"{oauth2_url}/revoke",
             "logoutUrl": f"{oauth2_url}/logout",
+            "nonce": oauth2_session_data["nonce"],
         }
     except KeyError as e:
         logger.error(f"Missing key in config:{e}")
         sys.exit(1)
 
     cookiejar = requests.cookies.RequestsCookieJar()
-    domain = urlparse(oauth2_config["org"]).netloc
+    domain = urllib.parse.urlparse(oauth2_config["org"]).netloc
     cookiejar.set(
         "okta-oauth-redirect-params",
-        f"{{{urlencode(oauth2_config_reformatted)}}}",
+        f"{{{urllib.parse.urlencode(oauth2_config_reformatted)}}}",
         domain=domain,
         path="/",
     )
@@ -559,9 +559,25 @@ def authorize_request(oauth2_config, oauth2_session_data):
     return authorize_code
 
 
-def generate_oauth2_session_data(url):
+def get_nonce(url):
+    """Get nonce from the org server."""
+    userhome_url = f"{url}/app/UserHome"
+    payload = {"session_hint": "AUTHENTICATED", "iss": urllib.parse.quote(userhome_url, safe="")}
+    response = HTTP_client.get(url, params=payload)
+    # '<script nonce="ABCXXXXXXXXXXXXXXXXYZ" type="text/javascript">'
+    nonce = None
+    pattern = re.compile(r'script nonce="(?P<nonce>.*?)" ', re.MULTILINE)
+    match = pattern.search(response.text)
+    if match:
+        logger.debug(f"Found nonce: {match.group('nonce')}")
+        nonce = match.group("nonce")
+
+    return nonce
+
+
+def get_oauth2_session_data(url):
     """
-    Generate some oauth2 session data.
+    Get some oauth2 session data.
 
     We do this to have the same in oath2 cookies and /authorize call.
     """
@@ -572,6 +588,8 @@ def generate_oauth2_session_data(url):
         "redirect_uri": get_redirect_uri(url),
         "grant_type": "authorization_code",
     }
+    authz_session_data["nonce"] = get_nonce(url)
+
     if pkce_enabled():
         code_verifier = get_pkce_code_verifier()
         authz_session_data["code_verifier"] = code_verifier
@@ -656,8 +674,8 @@ def create_authn_cookies(authn_org_url, session_token):
     user.add_sensitive_value_to_be_masked(session_id)
 
     cookiejar = requests.cookies.RequestsCookieJar()
-    domain = urlparse(url).netloc
-    cookiejar.set("sid", session_id, domain=urlparse(url).netloc, path="/")
+    domain = urllib.parse.urlparse(url).netloc
+    cookiejar.set("sid", session_id, domain=domain, path="/")
     cookiejar.set("sessionToken", session_token, domain=domain, path="/")
     HTTP_client.add_cookies(cookiejar)  # add cookies
 
@@ -714,7 +732,7 @@ def access_control(config):
         logger.debug("OIE enabled")
         # save some oauth2 config data + create session data, and create authz cookies
         oauth2_config = get_oauth2_configuration(config)
-        oauth2_session_data = generate_oauth2_session_data(config.okta["org"])
+        oauth2_session_data = get_oauth2_session_data(config.okta["org"])
         create_authz_cookies(oauth2_config, oauth2_session_data)
         # The flow says to initially call /authorize here, but that doesnt do anything...
         # idp_authorize(oauth2_config, oauth2_session_data)
