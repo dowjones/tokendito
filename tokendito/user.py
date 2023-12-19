@@ -812,7 +812,7 @@ def process_interactive_input(config, skip_password=False):
 
     if ("password" not in config.okta or config.okta["password"] == "") and not skip_password:
         logger.debug("No password set, will try to get one interactively")
-        res["okta"]["password"] = get_password()
+        res["okta"]["password"] = get_secret_input()
         add_sensitive_value_to_be_masked(res["okta"]["password"])
 
     config_int = Config(**res)
@@ -925,22 +925,24 @@ def get_username():
     return res
 
 
-def get_password():
-    """Set okta password interactively.
+def get_secret_input(message=None):
+    """Get secret value interactively.
 
-    :param args: command line arguments
-    :return: okta_password
-
+    :param args: message to display user.
+    :return: secret
     """
-    res = ""
-    logger.debug("Set password.")
+    secret = ""
+    logger.debug("get_secret_value")
 
     tty_assertion()
-    while res == "":
-        password = getpass()
-        res = password
-        logger.debug("password set interactively")
-    return res
+    while secret == "":
+        if message is None:
+            password = getpass()
+        else:
+            password = getpass(message)
+        secret = password
+        logger.debug("secret value set interactively")
+    return secret
 
 
 def get_interactive_profile_name(default):

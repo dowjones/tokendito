@@ -60,13 +60,13 @@ def test_get_username(mocker):
     assert val == "pytest_patched"
 
 
-def test_get_password(mocker):
+def test_get_secret_input(mocker):
     """Test whether data sent is the same as data returned."""
     from tokendito import user
 
     mocker.patch("tokendito.user.tty_assertion", return_value=True)
     mocker.patch("tokendito.user.getpass", return_value="pytest_patched")
-    val = user.get_password()
+    val = user.get_secret_input()
 
     assert val == "pytest_patched"
 
