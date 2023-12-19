@@ -551,6 +551,9 @@ def test_create_authz_cookies():
         "org": "acme",
         "authorization_endpoint": "pytesturl",
         "token_endpoint": "tokeneurl",
+        "nonce": "pytest",
+        "issuer": "pytest",
+        "ln": "pytest",
     }
     assert okta.create_authz_cookies(pytest_oauth2_config, pytest_oauth2_session_data) is None
     from tokendito import okta
@@ -734,7 +737,9 @@ def test_get_oauth2_configuration(mocker):
         "grant_types_supported": "authorization_code",
         "request_parameter_supported": "pytest",
     }
-    pytest_config = Config(okta={"client_id": "test_client_id", "org": "acme"})
+    pytest_config = Config(
+        okta={"client_id": "test_client_id", "org": "acme", "username": "pytest"}
+    )
     mocker.patch.object(HTTP_client, "get", return_value=response)
     assert okta.get_oauth2_configuration(pytest_config)["org"] == "acme"
 
@@ -765,6 +770,8 @@ def test_validate_oauth2_configuration():
         "scopes_supported": "pytest",
         "response_types_supported": "code",
         "request_parameter_supported": "pytest",
+        "ln": "pytest",
+        "nonce": "pytest",
     }
     assert okta.validate_oauth2_configuration(pytest_oauth2_config) is None
 
