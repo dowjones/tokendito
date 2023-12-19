@@ -1023,9 +1023,8 @@ def mfa_provider_type(
 
     elif mfa_provider == "OKTA" and factor_type == "push":
         mfa_verify = push_approval(mfa_challenge_url, payload)
-    elif (
-        (mfa_provider in ["OKTA", "GOOGLE"] and factor_type in ["token:software:totp", "sms"])
-        or (mfa_provider == "OKTA" and factor_type == "question")
+    elif (mfa_provider in ["OKTA", "GOOGLE"] and factor_type in ["token:software:totp", "sms"]) or (
+        mfa_provider == "OKTA" and factor_type == "question"
     ):
         mfa_verify = totp_approval(
             config, selected_mfa_option, headers, mfa_challenge_url, payload, primary_auth
@@ -1142,7 +1141,12 @@ def totp_approval(config, selected_mfa_option, headers, mfa_challenge_url, paylo
     logger.debug(f"User MFA options selected: [{selected_mfa_option['factorType']}]")
     if config.okta["mfa_response"] is None:
         logger.debug("Getting verification code from user.")
-        config.okta["mfa_response"] = user.get_input("Enter your verification code: ")
+        if selected_mfa_option["factorType"] == "question":
+            config.okta["mfa_response"] = user.get_secret_input(
+                selected_mfa_option["profile"]["questionText"]
+            )
+        else:
+            config.okta["mfa_response"] = user.get_input("Enter your verification code: ")
         user.add_sensitive_value_to_be_masked(config.okta["mfa_response"])
 
     # time to verify the mfa
