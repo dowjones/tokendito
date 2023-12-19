@@ -81,6 +81,7 @@ class HTTPClient:
 
     def post(self, url, data=None, json=None, headers=None, params=None, return_json=False):
         """Perform a POST request."""
+        response = None
         logger.debug(f"POST to {url}")
         try:
             response = self.session.post(url, data=data, json=json, params=params, headers=headers)
@@ -95,6 +96,11 @@ class HTTPClient:
                 return response
         except requests.RequestException as e:
             logger.error(f"Error during POST request to {url}. Error: {e}")
+            if response:
+                logger.debug(f"Response Headers: {response.headers}")
+                logger.debug(f"Response Text: {response.text}")
+            else:
+                logger.debug("No response received")
             sys.exit(1)
         except Exception as err:
             logger.error(f"The post request to {url} failed with {err}")

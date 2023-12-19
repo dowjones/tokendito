@@ -7,7 +7,7 @@ import sys
 
 def main(args=None):  # needed for console script
     """Packge entry point."""
-    if __package__ is None:
+    if not __package__:
         import os.path
 
         path = os.path.dirname(os.path.dirname(__file__))

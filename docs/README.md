@@ -74,7 +74,8 @@ tokendito --profile engineer
 usage: tokendito [-h] [--version] [--configure] [--username OKTA_USERNAME] [--password OKTA_PASSWORD] [--profile USER_CONFIG_PROFILE] [--config-file USER_CONFIG_FILE]
                  [--loglevel {DEBUG,INFO,WARN,ERROR}] [--log-output-file USER_LOG_OUTPUT_FILE] [--aws-config-file AWS_CONFIG_FILE] [--aws-output AWS_OUTPUT]
                  [--aws-profile AWS_PROFILE] [--aws-region AWS_REGION] [--aws-role-arn AWS_ROLE_ARN] [--aws-shared-credentials-file AWS_SHARED_CREDENTIALS_FILE]
-                 [--okta-org OKTA_ORG | --okta-tile OKTA_TILE] [--okta-mfa OKTA_MFA] [--okta-mfa-response OKTA_MFA_RESPONSE] [--use-device-token] [--quiet]
+                 [--okta-org OKTA_ORG | --okta-tile OKTA_TILE] [--okta-client-id OKTA_CLIENT_ID] [--okta-mfa OKTA_MFA] [--okta-mfa-response OKTA_MFA_RESPONSE]
+                 [--use-device-token] [--quiet]
 
 Gets an STS token to use with the AWS CLI and SDK.
 
@@ -111,9 +112,9 @@ options:
                         Okta tile URL to use.
   --okta-client-id OKTA_CLIENT_ID
                         For OIE enabled Orgs this sets the Okta client ID to replace the value found by tokendito. It is used in the authorize code flow.
-  --okta-mfa OKTA_MFA   Sets the MFA method
+  --okta-mfa OKTA_MFA   Sets the MFA method. You can also use the TOKENDITO_OKTA_MFA environment variable.
   --okta-mfa-response OKTA_MFA_RESPONSE
-                        Sets the MFA response to a challenge
+                        Sets the MFA response to a challenge. You can also use the TOKENDITO_OKTA_MFA_RESPONSE environment variable.
   --use-device-token    Use device token across sessions
   --quiet               Suppress output
 ```

@@ -129,9 +129,11 @@ def get_saml_request(auth_properties):
     response = HTTP_client.get(url, headers=headers)
 
     # Extract the required parameters from the SAML request.
+    post_url = extract_form_post_url(response.text)
+    base_url = user.get_base_url(post_url)
     saml_request = {
-        "base_url": user.get_base_url(extract_form_post_url(response.text)),
-        "post_url": extract_form_post_url(response.text),
+        "base_url": base_url,
+        "post_url": post_url,
         "relay_state": extract_saml_relaystate(response.text),
         "request": extract_saml_request(response.text, raw=True),
     }
@@ -263,7 +265,6 @@ def send_saml_response(config, saml_response):
 
     # Get the 'sid' value from the reponse cookies.
     sid = response.cookies.get("sid", None)
-    logger.debug(f"New sid is {sid}")
 
     # If 'sid' is present, mask its value for logging purposes.
     if sid:
@@ -564,6 +565,12 @@ def authorize_request(oauth2_config, oauth2_session_data):
         params=payload,
     )
 
+    idx = HTTP_client.session.cookies.get("idx", None)
+    if idx:
+        user.add_sensitive_value_to_be_masked(idx)
+    else:
+        logger.debug("We did not find an 'idx' entry in the cookies.")
+
     authorize_code = get_authorize_code(response, session_token)
     return authorize_code
 
@@ -699,6 +706,7 @@ def idp_authenticate(config):
         logger.error("Okta auth failed: unknown type.")
         sys.exit(1)
 
+    # Possible recursion ahead. The exit condition should be the first if statement.
     if local_authentication_enabled(auth_properties):
         session_token = local_authenticate(config)
         # authentication sends us a token

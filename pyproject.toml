@@ -7,7 +7,7 @@ exclude_lines = [
     "break",
     "except KeyboardInterrupt:",
     "if __name__ == .__main__.:",
-    "if __package__ is None:",
+    "if not __package__:",
     "logger.debug",
     "pragma: no cover",
     "print..Invalid input, try again...",
