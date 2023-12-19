@@ -72,7 +72,7 @@ def authenticate_to_roles(config, urls):
         saml_xml = okta.extract_saml_response(saml_response_string)
         if not saml_xml:
             state_token = okta.extract_state_token(saml_response_string)
-            if "Extra Verification" in saml_response_string and state_token:
+            if state_token:
                 logger.info(f"Step-Up authentication required for {url}.")
                 if okta.step_up_authenticate(config, state_token):
                     return authenticate_to_roles(config, urls)

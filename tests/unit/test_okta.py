@@ -73,6 +73,7 @@ def test_bad_session_token(mocker, sample_json_response, sample_headers):
             {"_embedded": {"factor": {"factorType": "push"}}},
             345,
         ),  # Changed expected value to 2
+        ("OKTA", 321, {"_embedded": {"factor": {"factorType": "question"}}}, 321),
         ("GOOGLE", 456, {"_embedded": {"factor": {"factorType": "sms"}}}, 456),
     ],
 )
@@ -543,13 +544,16 @@ def test_create_authz_cookies():
     """Test create_authz_cookies."""
     from tokendito import okta
 
-    pytest_oauth2_session_data = {"state": "pyteststate"}
+    pytest_oauth2_session_data = {"state": "pyteststate", "nonce": "pytestnonce"}
 
     pytest_oauth2_config = {
         "client_id": "123",
         "org": "acme",
         "authorization_endpoint": "pytesturl",
         "token_endpoint": "tokeneurl",
+        "nonce": "pytest",
+        "issuer": "pytest",
+        "ln": "pytest",
     }
     assert okta.create_authz_cookies(pytest_oauth2_config, pytest_oauth2_session_data) is None
     from tokendito import okta
@@ -637,6 +641,9 @@ def test_get_authorize_code():
     response.url = "https://example.com?code=pytest"
     assert okta.get_authorize_code(response, "sessionToken") == "pytest"
 
+    response.url = "https//example.com?error=login_required"
+    assert okta.get_authorize_code(response, None) is None
+
 
 def test_authorization_code_enabled():
     """Test authorization_code_enabled."""
@@ -687,12 +694,33 @@ def test_authorize_request(mocker):
     assert okta.authorize_request(pytest_oauth2_config, pytest_oauth2_session_data) == "pytest"
 
 
-def test_generate_oauth2_session_data():
-    """Test generate_oauth2_session_data."""
+def test_get_nonce(mocker):
+    """Test get_nonce."""
     from tokendito import okta
 
+    response = Mock()
+    response.text = """
+    <html>
+    <script nonce="PYTEST_NONCE" type="text/javascript">'
+    </html>
+    """
+    mocker.patch.object(HTTP_client, "get", return_value=response)
+
+    assert okta.get_nonce("https://acme.com") == "PYTEST_NONCE"
+
+    response.text = "nonce-non-present"
+    mocker.patch.object(HTTP_client, "get", return_value=response)
+    assert okta.get_nonce("https://acme.com") is None
+
+
+def test_get_oauth2_session_data(mocker):
+    """Test get_oauth2_session_data."""
+    from tokendito import okta
+
+    mocker.patch("tokendito.okta.get_nonce", return_value="ABC")
     assert (
-        okta.generate_oauth2_session_data("acme.com")["redirect_uri"] == "acme.com/enduser/callback"
+        okta.get_oauth2_session_data("https://acme.com")["redirect_uri"]
+        == "https://acme.com/enduser/callback"
     )
 
 
@@ -709,7 +737,9 @@ def test_get_oauth2_configuration(mocker):
         "grant_types_supported": "authorization_code",
         "request_parameter_supported": "pytest",
     }
-    pytest_config = Config(okta={"client_id": "test_client_id", "org": "acme"})
+    pytest_config = Config(
+        okta={"client_id": "test_client_id", "org": "acme", "username": "pytest"}
+    )
     mocker.patch.object(HTTP_client, "get", return_value=response)
     assert okta.get_oauth2_configuration(pytest_config)["org"] == "acme"
 
@@ -740,6 +770,8 @@ def test_validate_oauth2_configuration():
         "scopes_supported": "pytest",
         "response_types_supported": "code",
         "request_parameter_supported": "pytest",
+        "ln": "pytest",
+        "nonce": "pytest",
     }
     assert okta.validate_oauth2_configuration(pytest_oauth2_config) is None
 
@@ -883,7 +915,7 @@ def test_access_control(mocker):
 
     mocker.patch("tokendito.okta.oie_enabled", return_value=True)
     mocker.patch("tokendito.okta.get_oauth2_configuration", return_value=None)
-    mocker.patch("tokendito.okta.generate_oauth2_session_data", return_value=None)
+    mocker.patch("tokendito.okta.get_oauth2_session_data", return_value=None)
     mocker.patch("tokendito.okta.create_authz_cookies", return_value=None)
     mocker.patch("tokendito.okta.idp_authenticate", return_value=None)
     mocker.patch("tokendito.okta.idp_authorize", return_value=None)
