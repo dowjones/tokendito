@@ -4,6 +4,7 @@
 import argparse
 import builtins
 import codecs
+import concurrent.futures
 import configparser
 from datetime import timezone
 from getpass import getpass
@@ -87,8 +88,12 @@ def cmd_interface(args):
         config.okta["tile"] = discover_tiles(config.okta["org"])
 
     # Authenticate to AWS roles
-    auth_tiles = aws.authenticate_to_roles(config, config.okta["tile"])
-
+    results = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=(8 * os.cpu_count() - 1)) as executor:
+        results = executor.map(
+            aws.authenticate_to_roles, [config] * len(config.okta["tile"]), config.okta["tile"]
+        )
+    auth_tiles = list(results)
     (role_response, role_name) = aws.select_assumeable_role(auth_tiles)
 
     identity = aws.assert_credentials(role_response=role_response)

@@ -46,6 +46,8 @@ class HTTPClient:
         """Initialize the HTTPClient with a session object."""
         user_agent = generate_user_agent()
         self.session = requests.Session()
+        adapter = requests.adapters.HTTPAdapter(pool_maxsize=256)
+        self.session.mount("https://", adapter)
         self.session.headers.update({"User-Agent": user_agent})
 
     def add_cookies(self, cookies):

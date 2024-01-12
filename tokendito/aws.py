@@ -89,7 +89,7 @@ def authenticate_to_roles(config, urls):
             sys.exit(1)
         responses.append((url, saml_response_string, saml_xml, label))
 
-    return responses
+    return responses[0] if tile_count == 1 else responses
 
 
 def assume_role(role_arn, provider_arn, saml):
