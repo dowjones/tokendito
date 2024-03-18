@@ -540,7 +540,8 @@ def prompt_role_choices(aut_tiles):
                           ),
         ]
         answers = inquirer.prompt(questions)
-        return answers['role_selection']
+        logger.debug(f"Selected role [{answers.get('role_selection')}]")
+        return answers.get('role_selection')
 
     # print("\nSelect your preferred MFA method and press Enter:")
     # for text, i in mfa_list:
