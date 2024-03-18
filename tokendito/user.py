@@ -544,13 +544,6 @@ def prompt_role_choices(aut_tiles):
         logger.debug(f"Selected role [{answers.get('role_selection')}]")
         return answers['role_selection']
 
-    # print("\nSelect your preferred MFA method and press Enter:")
-    # for text, i in mfa_list:
-    #     print(text)
-    #
-    # user_input = collect_integer(len(mfa_options))
-    #
-    # return user_input
     print("\nPlease select one of the following:")
     for role_item, i in role_list:
         print(role_item)
