@@ -456,6 +456,7 @@ def select_preferred_mfa_index(mfa_options, factor_key="provider", subfactor_key
     logger.debug("Show all the MFA options to the users.")
     logger.debug(json.dumps(mfa_options))
 
+
     longest_index = len(str(len(mfa_options)))
     longest_factor_name = max([len(d[factor_key]) for d in mfa_options])
     longest_subfactor_name = max([len(d[subfactor_key]) for d in mfa_options])
@@ -541,7 +542,7 @@ def prompt_role_choices(aut_tiles):
         ]
         answers = inquirer.prompt(questions)
         logger.debug(f"Selected role [{answers.get('role_selection')}]")
-        return answers.get('role_selection')
+        return answers['role_selection']
 
     # print("\nSelect your preferred MFA method and press Enter:")
     # for text, i in mfa_list:
