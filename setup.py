@@ -60,6 +60,9 @@ setup(
     license=about["__license__"],
     zip_safe=False,
     install_requires=[required],
+    extras_require={
+        'inquirer': ['inquirer'],
+    },
     entry_points={
         "console_scripts": ["tokendito=tokendito.__main__:main"],
     },
