@@ -560,6 +560,9 @@ def test_mfa_option_info(factor_type, output):
 
 def test_select_preferred_mfa_index(mocker, sample_json_response):
     """Test whether the function returns index entered by user."""
+    # Don't enable inquirer for these tests
+    mocker.patch('tokendito.user.INQUIRER_AVAILABLE', False)
+
     from tokendito.user import select_preferred_mfa_index
 
     primary_auth = sample_json_response
@@ -569,6 +572,20 @@ def test_select_preferred_mfa_index(mocker, sample_json_response):
         assert select_preferred_mfa_index(mfa_options) == output
 
 
+def test_select_preferred_mfa_index_inquirer(mocker, sample_json_response):
+    """Test whether the function returns index entered by user."""
+    from tokendito.user import select_preferred_mfa_index
+    from tokendito.user import INQUIRER_AVAILABLE
+
+    if not INQUIRER_AVAILABLE:
+        pytest.skip("No items found")
+    else:
+        primary_auth = sample_json_response
+        mfa_options = primary_auth["okta_response_mfa"]["_embedded"]["factors"]
+        for output in mfa_options:
+            mocker.patch("tokendito.user.inquirer.prompt", return_value={"mfa_selection": output})
+            assert select_preferred_mfa_index(mfa_options) == output
+
 @pytest.mark.parametrize(
     "email",
     [
@@ -577,6 +594,9 @@ def test_select_preferred_mfa_index(mocker, sample_json_response):
 )
 def test_select_preferred_mfa_index_output(email, capsys, mocker, sample_json_response):
     """Test whether the function gives correct output."""
+
+    # Don't enable inquirer for these tests
+    mocker.patch('tokendito.user.INQUIRER_AVAILABLE', False)
     from tokendito.config import config
     from tokendito.user import select_preferred_mfa_index
 

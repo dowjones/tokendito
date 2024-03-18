@@ -34,6 +34,14 @@ try:
 except ModuleNotFoundError:
     pass
 
+INQUIRER_AVAILABLE = False
+try:
+    import inquirer
+
+    INQUIRER_AVAILABLE = True
+except ModuleNotFoundError:
+    pass
+
 logger = logging.getLogger(__name__)
 
 mask_items = []
@@ -447,25 +455,41 @@ def select_preferred_mfa_index(mfa_options, factor_key="provider", subfactor_key
     """
     logger.debug("Show all the MFA options to the users.")
     logger.debug(json.dumps(mfa_options))
-    print("\nSelect your preferred MFA method and press Enter:")
+
 
     longest_index = len(str(len(mfa_options)))
     longest_factor_name = max([len(d[factor_key]) for d in mfa_options])
     longest_subfactor_name = max([len(d[subfactor_key]) for d in mfa_options])
     factor_info_indent = max([len(mfa_option_info(d)) for d in mfa_options])
 
+    mfa_list = []
     for i, mfa_option in enumerate(mfa_options):
         factor_id = mfa_option.get("id", "Not presented")
         factor_info = mfa_option_info(mfa_option)
         mfa = mfa_option.get(subfactor_key, "Not presented")
         provider = mfa_option.get(factor_key, "Not presented")
-        print(
+        mfa_item = (
             f"[{i: >{longest_index}}]  "
             f"{provider: <{longest_factor_name}}  "
             f"{mfa: <{longest_subfactor_name}} "
             f"{factor_info: <{factor_info_indent}} "
             f"Id: {factor_id}"
         )
+        mfa_list.append((mfa_item, i))
+
+    if INQUIRER_AVAILABLE:
+        questions = [
+            inquirer.List('mfa_selection',
+                          message="Select your preferred MFA method and press Enter:",
+                          choices=mfa_list,
+                          ),
+        ]
+        answers = inquirer.prompt(questions)
+        return answers['mfa_selection']
+
+    print("\nSelect your preferred MFA method and press Enter:")
+    for text, i in mfa_list:
+        print(text)
 
     user_input = collect_integer(len(mfa_options))
 
@@ -492,13 +516,13 @@ def prompt_role_choices(aut_tiles):
                 aliases_mapping.append((tile["label"], role.split(":")[4], role, url))
 
     logger.debug("Ask user to select role")
-    print("\nPlease select one of the following:")
 
     longest_alias = max(len(i[1]) for i in aliases_mapping)
     longest_index = len(str(len(aliases_mapping)))
     aliases_mapping = sorted(aliases_mapping)
     print_label = ""
 
+    role_list = []
     for i, data in enumerate(aliases_mapping):
         label, alias, role, _ = data
         padding_index = longest_index - len(str(i))
@@ -506,8 +530,23 @@ def prompt_role_choices(aut_tiles):
             print_label = label
             print(f"\n{label}:")
 
-        print(f"[{i}] {padding_index * ' '}" f"{alias: <{longest_alias}}  {role}")
+        role_item = f"[{i}] {padding_index * ' '}" f"{alias: <{longest_alias}}  {role}"
+        role_list.append((role_item, (aliases_mapping[i][2], aliases_mapping[i][3])))
 
+    if INQUIRER_AVAILABLE:
+        questions = [
+            inquirer.List('role_selection',
+                          message="Please select one of the following:",
+                          choices=role_list,
+                          ),
+        ]
+        answers = inquirer.prompt(questions)
+        logger.debug(f"Selected role [{answers.get('role_selection')}]")
+        return answers['role_selection']
+
+    print("\nPlease select one of the following:")
+    for role_item, i in role_list:
+        print(role_item)
     user_input = collect_integer(len(aliases_mapping))
     selected_role = (aliases_mapping[user_input][2], aliases_mapping[user_input][3])
     logger.debug(f"Selected role [{user_input}]")
