@@ -1,31 +1,33 @@
+# Tokendito Documentation
+
 ## Table of Contents
 
-* [Command line Usage](#command-line-usage)
-    * [Default usage](#default-usage)
-    * [Multi-tile-Guide](#multi-tile-guide)
-    * [Single-command usage](#single-command-usage)
-    * [Additional command line reference](#additional-command-line-reference)
-* [Environment variables and user configuration](#environment-variables-and-user-configuration)
-    * [Precedence](#precedence)
-    * [Environment variables and user configuration table](#environment-variables-and-user-configuration-table)
-* [Configuration file location](#configuration-file-location)
-* [AWS Roles Discovery](#aws-roles-discovery)
-* [Supported MFAs](#supported-mfas)
-* [Upgrading](#to-upgrade)
-* [Installing from GitHub](#installing-from-github)
-* [Troubleshooting](#troubleshooting)
-* [Design and Limitations](#design-and-limitations)
+- [Command line Usage](#command-line-usage)
+  - [Default usage](#default-usage)
+  - [Multi-tile-Guide](#multi-tile-guide)
+  - [Single-command usage](#single-command-usage)
+  - [Additional command line reference](#additional-command-line-reference)
+- [Environment variables and user configuration](#environment-variables-and-user-configuration)
+  - [Precedence](#precedence)
+  - [Environment variables and user configuration table](#environment-variables-and-user-configuration-table)
+- [Configuration file location](#configuration-file-location)
+- [AWS Roles Discovery](#aws-roles-discovery)
+- [Supported MFA methods](#supported-mfa-methods)
+- [Upgrading](#upgrading)
+- [Installing from GitHub](#installing-from-github)
+- [Troubleshooting](#troubleshooting)
+- [Design and Limitations](#design-and-limitations)
 
-# Command line Usage
+## Command line Usage
 
-## Default usage
+### Default usage
 
 Configure your profile by running tokendito with the `--configure` flag, or by populating your `tokendito.ini` file as [here](tokendito.ini.md).
 Using --configure will only set the okta_username, okta_todo
 
 Then execute: `tokendito` in your command line.
 
-## Multi-tile Guide
+### Multi-tile Guide
 
 If you have multiple AWS-type Okta tiles assigned to you, please update
 your local [tokendito.ini](tokendito.ini.md) file with the links to
@@ -37,9 +39,9 @@ name, by passing in the `--profile` parameter.
 Without specifying a specific profile, tokendito will look for a default
 profile within that file.
 
-## Single-command usage
+### Single-command usage
 
-tokendito accepts all of the necessary parameters to be able to generate
+Tokendito accepts all of the necessary parameters to be able to generate
 your STS tokens with a single command. There are a couple of ways to do
 this!
 
@@ -54,7 +56,7 @@ tokendito --username prod_service_user@company.com \
 
 Or you can put your parameters into a single [profile](tokendito.ini.md) and reference that profile.
 
-```
+``` ini
 [engineer]
 okta_aws_tile = https://acme.oktapreview.com/home/amazon_aws/b07384d113edec49eaa6/123
 okta_username = jane.doe@acme.com
@@ -68,7 +70,7 @@ And execute:
 tokendito --profile engineer
 ```
 
-## Additional command line reference
+### Additional command line reference
 
 ``` txt
 usage: tokendito [-h] [--version] [--configure] [--username OKTA_USERNAME] [--password OKTA_PASSWORD] [--profile USER_CONFIG_PROFILE] [--config-file USER_CONFIG_FILE]
@@ -122,12 +124,11 @@ options:
 Regarding the storage of the Okta password, we are fans of automation but do not recommend passing in the password to tokendito via plaintext or storing
 it in your environment locally.
 
+## Environment variables and user configuration
 
-# Environment variables and user configuration
+Tokendito supports the use of environment variables and user configuration equivalents to specify the default values for most options.
 
-tokendito supports the use of environment variables and user configuration equivalents to specify the default values for most options.
-
-## Precedence
+### Precedence
 
 Credentials and configuration settings take precedence in the following order:
 
@@ -135,7 +136,7 @@ Credentials and configuration settings take precedence in the following order:
 1. Environment variables -- You can store values in your system\'s environment variables. It overrides the configuration file.
 1. User configuration file -- The user configuration file is updated when you run the command tokendito \--configure. Tokendito uses [platformdirs](https://github.com/platformdirs/platformdirs) to store user configuration in the [tokendito.ini](tokendito.ini.md) file. This file can contain the credential details for the default profile and any named profiles.
 
-## Environment variables and user configuration table
+### Environment variables and user configuration table
 
 The following table lists the environment variable and user configuration entry equivalent for the given command line option.
 
@@ -160,36 +161,37 @@ The following table lists the environment variable and user configuration entry 
 | `--use-device-token` | `TOKENDITO_USER_USE_DEVICE_TOKEN`        | `user_use_device_token` |
 | `--quiet` | `TOKENDITO_USER_QUIET`        | `quiet` |
 
-# Configuration file location
+## Configuration file location
 
 With Tokendito version 2.0 we changed the location of the configuration file from `$HOME/.aws/okta_auth` to be platform-independent, and following the standard location for configuration files in each supported platform. `tokendito --help` will show the exact location on your system.
 
-* On Linux: `/home/<username>/.config/tokendito/tokendito.ini`
-* On MacOS: `/Users/<username>/Library/Preferences/tokendito/tokendito.ini`
-* On Windows: `%USERPROFILE%\AppData\Local\tokendito\tokendito.ini`
+- On Linux: `/home/<username>/.config/tokendito/tokendito.ini`
+- On MacOS: `/Users/<username>/Library/Preferences/tokendito/tokendito.ini`
+- On Windows: `%USERPROFILE%\AppData\Local\tokendito\tokendito.ini`
 
-# AWS Roles Discovery
-tokendito will discover all your available AWS Roles configured in Okta, returning a list for you to select from, simply by calling:
+## AWS Roles Discovery
+
+Tokendito will discover all your available AWS Roles configured in Okta, returning a list for you to select from, simply by calling:
 `tokendito --okta-org ${YOUR ORG OKTA URL}`. For instance, `tokendito --okta-org https://acme.oktapreview.com`
 
-# Supported MFA methods
+## Supported MFA methods
 
 - Native Okta factors (Push, phone call, SMS, TOTP) except Biometrics (FIDO WebAuthn) and Number Challenge
 - Google Authenticator TOTP
 - Duo Push, phone call, SMS, and TOTP
 
-# Upgrading
+## Upgrading
 
 `pip install --upgrade tokendito`
 
-# Installing from GitHub
+## Installing from GitHub
 
 `pip install git+ssh://git@github.com/dowjones/tokendito.git@<version>`
 
 For instance,
 `pip install git+ssh://git@github.com/dowjones/tokendito.git@2.0.0`
 
-# Troubleshooting
+## Troubleshooting
 
 Configuration issues with tokendito can usually be addressed by
 validating your environment\'s AWS configuration profile(s) located at:
@@ -200,7 +202,7 @@ validating your environment\'s AWS configuration profile(s) located at:
 
 [tokendito.ini](tokendito.ini.md)
 
-# Design and Limitations
+## Design and Limitations
 
 - This tool does not cache and reuse Okta session IDs.
 
