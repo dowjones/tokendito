@@ -5,7 +5,7 @@ import argparse
 import builtins
 import codecs
 import configparser
-from datetime import timezone
+from datetime import datetime, timezone
 from getpass import getpass
 import json
 import logging
@@ -67,6 +67,8 @@ def cmd_interface(args):
     # rm trailing / if provided as such so the urls with this as base dont have //
     config.okta["org"] = config.okta["org"].strip("/")
 
+    check_profile_expiration(config)
+
     if config.user["use_device_token"]:
         device_token = config.okta["device_token"]
         if device_token:
@@ -107,11 +109,7 @@ def cmd_interface(args):
         output=config.aws["output"],
     )
 
-    device_token = HTTP_client.get_device_token()
-    if config.user["use_device_token"] and device_token:
-        logger.info(f"Saving device token to config profile {args.user_config_profile}")
-        config.okta["device_token"] = device_token
-        update_device_token(config)
+    update_profile(config, role_response)
 
     display_selected_role(profile_name=config.aws["profile"], role_response=role_response)
 
@@ -232,6 +230,13 @@ def parse_cli_args(args):
         action="store_true",
         default=False,
         help="Use device token across sessions",
+    )
+    parser.add_argument(
+        "--use-profile-expiration",
+        dest="user_use_profile_expiration",
+        action="store_true",
+        default=False,
+        help="Use profile expiration to bypass re-authenticating",
     )
     parser.add_argument(
         "--quiet",
@@ -515,6 +520,65 @@ def prompt_role_choices(aut_tiles):
     return selected_role
 
 
+def get_role_expiration(role_response={}):
+    """Get the expiration from the role response.
+
+    :param role_response: Assume Role response dict
+    :return expiration
+    """
+    try:
+        return role_response["Credentials"]["Expiration"]
+    except (KeyError, TypeError) as err:
+        logger.error(f"Could not retrieve expiration: {err}")
+        sys.exit(1)
+
+
+def check_profile_expiration(config):
+    """Check profile expiration and exit if still valid.
+
+    :param config: Config object
+    """
+    if not config.user["use_profile_expiration"]:
+        return
+
+    profile = config.aws["profile"]
+
+    profile_expiration_str = config.okta["profile_expiration"]
+    if not profile_expiration_str:
+        logger.warning(f"Expiration unavailable for config profile {profile}. ")
+        return
+
+    profile_expiration = datetime.fromisoformat(profile_expiration_str)
+    now = datetime.now(timezone.utc)
+
+    if now < profile_expiration:
+        logger.info(f"Expiration for config profile {profile} is still valid: {profile_expiration}")
+        sys.exit(0)
+    else:
+        logger.warning(
+            f"Expiration for config profile {profile} is no longer valid: {profile_expiration}"
+        )
+
+
+def update_profile(config, role_response={}):
+    """Update profile with device token and expiration if needed.
+
+    :param config: Config object
+    :param role_response: Assume Role response dict
+    """
+    device_token = HTTP_client.get_device_token()
+    if config.user["use_device_token"] and device_token:
+        logger.info(f"Saving device token to config profile {config.aws['profile']}")
+        config.okta["device_token"] = device_token
+        update_profile_device_token(config)
+
+    role_expiration = get_role_expiration(role_response)
+    if config.user["use_profile_expiration"] and role_expiration:
+        logger.info(f"Saving expiration to config profile {config.aws['profile']}")
+        config.okta["profile_expiration"] = role_expiration
+        update_profile_expiration(config)
+
+
 def display_selected_role(profile_name="", role_response={}):
     """Print details about how to assume role.
 
@@ -523,13 +587,8 @@ def display_selected_role(profile_name="", role_response={}):
     :return: message displayed.
 
     """
-    try:
-        expiration_time = role_response["Credentials"]["Expiration"]
-    except (KeyError, TypeError) as err:
-        logger.error(f"Could not retrieve expiration time: {err}")
-        sys.exit(1)
-
-    expiration_time_local = utc_to_local(expiration_time)
+    role_expiration = get_role_expiration(role_response)
+    role_expiration_local = utc_to_local(role_expiration)
     msg = (
         f"\nGenerated profile '{profile_name}' in "
         f"{config.aws['shared_credentials_file']}.\n"
@@ -537,7 +596,7 @@ def display_selected_role(profile_name="", role_response={}):
         f"aws --profile '{profile_name}' sts get-caller-identity"
         "\nOR\n\t"
         f"export AWS_PROFILE='{profile_name}'\n\n"
-        f"Credentials are valid until {expiration_time} ({expiration_time_local})."
+        f"Credentials are valid until {role_expiration} ({role_expiration_local})."
     )
 
     print(msg)
@@ -773,7 +832,7 @@ def process_environment(prefix="tokendito"):
 
 def process_interactive_input(config, skip_password=False):
     """
-    Request input interactively interactively for elements that are not proesent.
+    Request input interactively interactively for elements that are not present.
 
     :param config: Config object with some values set.
     :param skip_password: Whether or not ask the user for a password.
@@ -1002,7 +1061,7 @@ def update_configuration(config):
     logger.info(f"Updated {ini_file} with profile {profile}")
 
 
-def update_device_token(config):
+def update_profile_device_token(config):
     """Update configuration file on local system with device token.
 
     :param config: the current configuration
@@ -1017,6 +1076,27 @@ def update_device_token(config):
     # will be written out to disk
     if "device_token" in config.okta and config.okta["device_token"] is not None:
         contents["okta_device_token"] = config.okta["device_token"]
+
+    logger.debug(f"Adding {contents} to config file.")
+    update_ini(profile=profile, ini_file=ini_file, **contents)
+    logger.info(f"Updated {ini_file} with profile {profile}")
+
+
+def update_profile_expiration(config):
+    """Update configuration file on local system with profile expiration.
+
+    :param config: the current configuration
+    :return: None
+    """
+    logger.debug("Update configuration file on local system with profile expiration.")
+    ini_file = config.user["config_file"]
+    profile = config.user["config_profile"]
+
+    contents = {}
+    # Copy relevant parts of the configuration into an dictionary that
+    # will be written out to disk
+    if "profile_expiration" in config.okta and config.okta["profile_expiration"] is not None:
+        contents["okta_profile_expiration"] = config.okta["profile_expiration"]
 
     logger.debug(f"Adding {contents} to config file.")
     update_ini(profile=profile, ini_file=ini_file, **contents)

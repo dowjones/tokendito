@@ -30,6 +30,7 @@ class Config(object):
             loglevel="INFO",
             log_output_file="",
             use_device_token=False,
+            use_profile_expiration=False,
             mask_items=[],
             quiet=False,
         ),
@@ -50,6 +51,7 @@ class Config(object):
             tile=None,
             org=None,
             device_token=None,
+            profile_expiration=None,
         ),
     )
 
