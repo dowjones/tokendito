@@ -83,7 +83,7 @@ Consult [additional notes](https://github.com/dowjones/tokendito/blob/main/docs/
 
 ## Requirements
 
-- Python 3.7+, or a working Docker environment
+- Python 3.9+, or a working Docker environment
 - AWS account(s) federated with Okta
 
 Tokendito is compatible with Python 3 and can be installed with either
