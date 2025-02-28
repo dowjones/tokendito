@@ -31,7 +31,7 @@ def test_prepare_info():
                     "verification": {
                         "_links": {
                             "complete": {"href": "http://test.okta.href"},
-                            "script": {"href": "python-v3.7"},
+                            "script": {"href": "python-v3.11"},
                         },
                         "signature": "fdsafdsa:fdsfdfds:fdsfdsfds",
                         "host": "test_host",
@@ -53,7 +53,7 @@ def test_prepare_info():
         "parent": f"{config.okta['org']}/signin/verify/duo/web",
         "host": "test_host",
         "sid": "",
-        "version": "3.7",
+        "version": "3.11",
     }
     assert prepare_info(selected_okta_factor) == expected_duo_info
 
@@ -77,7 +77,7 @@ def test_get_sid(mocker):
         "parent": f"{config.okta['org']}/signin/verify/duo/web",
         "host": "test_host",
         "sid": "",
-        "version": "3.7",
+        "version": "3.11",
     }
 
     test_url = "http://test.token.dito?sid=testval"
@@ -228,7 +228,7 @@ def test_mfa_challenge(mocker):
         "parent": "pytest_parent",
         "host": "pytest_host",
         "sid": "pytest_sid",
-        "version": "3.7",
+        "version": "3.11",
     }
     passcode = "pytest_passcode"
     mfa_option = {"factor": "pytest_factor", "device": "pytest_device - pytest_device_name"}
@@ -353,7 +353,7 @@ def test_authenticate(mocker):
                     "verification": {
                         "_links": {
                             "complete": {"href": "http://test.okta.href"},
-                            "script": {"href": "python-v3.7"},
+                            "script": {"href": "python-v3.11"},
                         },
                         "signature": "fdsafdsa:fdsfdfds:fdsfdsfds",
                         "host": "test_host",
