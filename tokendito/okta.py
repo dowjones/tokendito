@@ -388,12 +388,12 @@ def get_client_id_by_url(url):
     enduser_url = get_enduser_url(url)
     if enduser_url:
         res = HTTP_client.get(enduser_url)
-        pattern = re.compile(r',clientId:"(?P<clientId>.*?)",')
+        pattern = re.compile(r"(okta\..{8}-.{4}-.{4}-.{4}-.{12})")
 
         match = pattern.search(res.text)
         if match:
-            logger.debug(f"Found clientId: {match.group('clientId')}")
-            client_id = match.group("clientId")
+            logger.debug(f"Found clientId: {match.group()}")
+            client_id = match.group()
 
     return client_id
 
