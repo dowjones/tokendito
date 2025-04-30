@@ -52,18 +52,18 @@ def cmd_interface(args):
             "will be overridden by each profile."
         )
 
-        do_auth = True
+        skip_auth = False
         for profile in args.multi_profiles:
             args.user_config_profile = profile
             args.aws_profile = profile
 
-            process_args(args, do_auth)
-            do_auth = False
+            process_args(args, skip_auth)
+            skip_auth = True
     else:
         process_args(args, True)
 
 
-def process_args(args, do_auth=True):
+def process_args(args, skip_auth=False):
     """Process the args and allow for skipping auth with multiple profiles."""
     # Set some required initial values
     process_options(args)
@@ -97,8 +97,7 @@ def process_args(args, do_auth=True):
             )
 
     # get authentication and authorization cookies from okta
-    if do_auth:
-        okta.access_control(config)
+    _ = skip_auth or okta.access_control(config)
 
     if config.okta["tile"]:
         tile_label = ""

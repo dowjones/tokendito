@@ -975,7 +975,7 @@ def test_multiple_profiles(mocker):
 
     assert patched.call_count == 3
 
-    # do_auth parameter should only be called with True the first time
-    assert patched.call_args_list[0].args[1] is True
-    assert patched.call_args_list[1].args[1] is False
-    assert patched.call_args_list[2].args[1] is False
+    # skip_auth parameter should only be called with False the first time
+    assert patched.call_args_list[0].args[1] is False
+    assert patched.call_args_list[1].args[1] is True
+    assert patched.call_args_list[2].args[1] is True
