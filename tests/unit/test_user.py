@@ -955,3 +955,26 @@ def test_extract_arns(saml, expected):
     from tokendito import user
 
     assert user.extract_arns(saml) == expected
+
+
+def test_multiple_profiles(mocker):
+    from tokendito import user
+
+    patched = mocker.patch("tokendito.user.process_args", return_value=None)
+
+    args = [
+        "--multi-profiles",
+        "profile-1",
+        "--multi-profiles",
+        "profile-2",
+        "--multi-profiles",
+        "profile-3",
+    ]
+    user.cmd_interface(args)
+
+    assert patched.call_count == 3
+
+    # do_auth parameter should only be called with True the first time
+    assert patched.call_args_list[0].args[1] == True
+    assert patched.call_args_list[1].args[1] == False
+    assert patched.call_args_list[2].args[1] == False

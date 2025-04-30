@@ -46,6 +46,25 @@ def cmd_interface(args):
     # Early logging, in case the user requests debugging via env/CLI
     setup_early_logging(args)
 
+    if args.multi_profiles:
+        logger.warning(
+            "Multiple profiles have been specified so --aws-profile "
+            "will be overridden by each profile."
+        )
+
+        do_auth = True
+        for profile in args.multi_profiles:
+            args.user_config_profile = profile
+            args.aws_profile = profile
+
+            process_args(args, do_auth)
+            do_auth = False
+    else:
+        process_args(args, True)
+
+
+def process_args(args, do_auth=True):
+    """Process the args and allow for skipping auth with multiple profiles."""
     # Set some required initial values
     process_options(args)
 
@@ -78,7 +97,8 @@ def cmd_interface(args):
             )
 
     # get authentication and authorization cookies from okta
-    okta.access_control(config)
+    if do_auth:
+        okta.access_control(config)
 
     if config.okta["tile"]:
         tile_label = ""
@@ -165,6 +185,11 @@ def parse_cli_args(args):
         dest="user_config_profile",
         default=config.user["config_profile"],
         help="Tokendito configuration profile to use.",
+    )
+    parser.add_argument(
+        "--multi-profiles",
+        action="append",
+        help="Tokendito configuration profiles to use. Can be specified multiple times.",
     )
     parser.add_argument(
         "--config-file",

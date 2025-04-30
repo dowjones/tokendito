@@ -91,6 +91,8 @@ options:
                         password to log in to Okta. You can also use the TOKENDITO_OKTA_PASSWORD environment variable.
   --profile USER_CONFIG_PROFILE
                         Tokendito configuration profile to use.
+  --multi-profiles USER_CONFIG_PROFILE
+                        Similar to --profile, but can be specified multiple times. Note: Using this will override --profile and cause --aws-profile to be ignored and replaced with this value.
   --config-file USER_CONFIG_FILE
                         Use an alternative configuration file. Defaults to tokendito.ini with location depending on the OS.
   --loglevel {DEBUG,INFO,WARN,ERROR}, -l {DEBUG,INFO,WARN,ERROR}
