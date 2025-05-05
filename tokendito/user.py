@@ -60,7 +60,7 @@ def cmd_interface(args):
             process_args(args, skip_auth)
             skip_auth = True
     else:
-        process_args(args, True)
+        process_args(args, False)
 
 
 def process_args(args, skip_auth=False):
@@ -188,7 +188,10 @@ def parse_cli_args(args):
     parser.add_argument(
         "--multi-profiles",
         action="append",
-        help="Tokendito configuration profiles to use. Can be specified multiple times.",
+        help="Tokendito configuration profiles to use. Can be specified multiple times. "
+        "Using this will override --profile and cause --aws-profile to be ignored and "
+        "replaced with this value. This also requires okta_tile to be defined for each "
+        "profile in the config file.",
     )
     parser.add_argument(
         "--config-file",

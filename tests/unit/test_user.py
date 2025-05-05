@@ -957,19 +957,43 @@ def test_extract_arns(saml, expected):
     assert user.extract_arns(saml) == expected
 
 
+def test_single_profile(mocker):
+    """Test single profile support."""
+    from tokendito import user
+
+    patched = mocker.patch("tokendito.user.process_args", return_value=None)
+
+    args = [
+        "--profile",
+        "profile-1",
+    ]
+    user.cmd_interface(args)
+
+    assert patched.call_count == 1
+
+    assert patched.call_args_list[0].args[0].multi_profiles is None
+
+    # skip_auth parameter should only be called with False
+    assert patched.call_args_list[0].args[1] is False
+
+
 def test_multiple_profiles(mocker):
     """Test multiple profiles support."""
     from tokendito import user
 
     patched = mocker.patch("tokendito.user.process_args", return_value=None)
 
+    profile_1 = "profile-1"
+    profile_2 = "profile-2"
+    profile_3 = "profile-3"
+
     args = [
         "--multi-profiles",
-        "profile-1",
+        profile_1,
         "--multi-profiles",
-        "profile-2",
+        profile_2,
         "--multi-profiles",
-        "profile-3",
+        profile_3,
     ]
     user.cmd_interface(args)
 
