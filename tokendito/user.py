@@ -58,6 +58,12 @@ def cmd_interface(args):
             args.aws_profile = profile
 
             process_args(args, skip_auth)
+
+            # Reset config singleton but retain auth
+            auth = config.okta["password"]
+            config.set_defaults()
+            config.okta["password"] = auth
+
             skip_auth = True
     else:
         process_args(args, False)
@@ -190,8 +196,7 @@ def parse_cli_args(args):
         action="append",
         help="Tokendito configuration profiles to use. Can be specified multiple times. "
         "Using this will override --profile and cause --aws-profile to be ignored and "
-        "replaced with this value. This also requires okta_tile to be defined for each "
-        "profile in the config file.",
+        "replaced with this value.",
     )
     parser.add_argument(
         "--config-file",

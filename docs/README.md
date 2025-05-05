@@ -94,7 +94,6 @@ options:
   --multi-profiles USER_CONFIG_PROFILE
                         Similar to --profile, but can be specified multiple times.
                         Note: Using this will override --profile and cause --aws-profile to be ignored and replaced with this value.
-                        This also requires okta_tile to be defined for each profile in the config file.
   --config-file USER_CONFIG_FILE
                         Use an alternative configuration file. Defaults to tokendito.ini with location depending on the OS.
   --loglevel {DEBUG,INFO,WARN,ERROR}, -l {DEBUG,INFO,WARN,ERROR}
