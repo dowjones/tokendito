@@ -701,17 +701,11 @@ def add_sensitive_value_to_be_masked(value, key=None):
         mask_items.append(value)
 
 
-def process_ini_file(file, profile):
-    """Process options from a ConfigParser ini file.
-
-    :param file: filename
-    :param profile: profile to read
-    :return: Config object with configuration values
-    """
+def _read_ini(file, profile, default_section):
     res = dict()
     pattern = re.compile(r"^(.*?)_(.*)")
 
-    ini = configparser.RawConfigParser(default_section=config.user["config_profile"])
+    ini = configparser.RawConfigParser(default_section=default_section)
     # Here, group(1) is the dictionary key, and group(2) the configuration element
     try:
         ini.read(file)
@@ -725,26 +719,33 @@ def process_ini_file(file, profile):
     except configparser.Error as err:
         logger.error(f"Could not load profile '{profile}': {str(err)}")
         sys.exit(2)
+
+    return res
+
+
+def process_ini_file(file, profile):
+    """Process options from a ConfigParser ini file.
+
+    :param file: filename
+    :param profile: profile to read
+    :return: Config object with configuration values
+    """
+    res = _read_ini(file, profile, config.user["config_profile"])
     logger.debug(f"Found ini directives: {res}")
+    if not res:
+        return None
 
     try:
-        config_ini = Config(**res)
-
+        return Config(**res)
     except (AttributeError, KeyError, ValueError) as err:
         logger.error(
             f"The configuration file {file} in [{profile}] is incorrect: {err}"
             ". Please check your settings and try again."
         )
         sys.exit(1)
-    return config_ini
 
 
-def process_arguments(args):
-    """Process command-line arguments.
-
-    :param args: argparse object
-    :return: Config object with configuration values
-    """
+def _read_arguments(args):
     res = dict()
     pattern = re.compile(r"^(.*?)_(.*)")
 
@@ -758,18 +759,29 @@ def process_arguments(args):
             if val:
                 res[match.group(1)][match.group(2)] = val
                 add_sensitive_value_to_be_masked(val, match.group(2))
+
+    return res
+
+
+def process_arguments(args):
+    """Process command-line arguments.
+
+    :param args: argparse object
+    :return: Config object with configuration values
+    """
+    res = _read_arguments(args)
     logger.debug(f"Found arguments: {res}")
+    if not res:
+        return None
 
     try:
-        config_args = Config(**res)
-
+        return Config(**res)
     except (AttributeError, KeyError, ValueError) as err:
         logger.error(
             f"Command line arguments not correct: {err}"
             ". This should not happen, please contact the package maintainers."
         )
         sys.exit(1)
-    return config_args
 
 
 def process_environment(prefix="tokendito"):
@@ -791,43 +803,20 @@ def process_environment(prefix="tokendito"):
                 add_sensitive_value_to_be_masked(val, match.group(3))
     logger.debug(f"Found environment variables: {res}")
 
-    try:
-        config_env = Config(**res)
+    if not res:
+        return None
 
+    try:
+        return Config(**res)
     except (AttributeError, KeyError, ValueError) as err:
         logger.error(
             f"The environment variables are incorrectly set: {err}"
             ". Please check your settings and try again."
         )
         sys.exit(1)
-    return config_env
 
 
-def process_interactive_input(config, skip_password=False):
-    """
-    Request input interactively interactively for elements that are not proesent.
-
-    :param config: Config object with some values set.
-    :param skip_password: Whether or not ask the user for a password.
-    :returns: Config object with necessary values set.
-    """
-    # Return quickly if the user attempts to run in quiet (non-interactive) mode.
-    if config.user["quiet"] is True:
-        logger.debug(f"Skipping interactive config: quiet mode is {config.user['quiet']}")
-        return config
-
-    # Reuse interactive config. It will only request the portions needed.
-    try:
-        details = get_interactive_config(
-            tile=config.okta["tile"],
-            org=config.okta["org"],
-            username=config.okta["username"],
-        )
-    except (AttributeError, KeyError, ValueError) as err:
-        logger.error(f"Interactive arguments are not correct: {err}")
-        sys.exit(1)
-
-    # Create a dict that can be passed to Config later
+def _build_interactive_config(details, skip_password):
     res = dict(okta=dict())
     # Copy the values set by get_interactive_config
     if "okta_tile" in details:
@@ -842,10 +831,39 @@ def process_interactive_input(config, skip_password=False):
         res["okta"]["password"] = get_secret_input()
         add_sensitive_value_to_be_masked(res["okta"]["password"])
 
-    config_int = Config(**res)
-    logger.debug(f"Interactive configuration is: {config_int}")
-    config.update(config_int)
-    return config_int
+    logger.debug(f"Interactive configuration is: {res}")
+
+    return Config(**res)
+
+
+def process_interactive_input(config, skip_password=False):
+    """
+    Request input interactively interactively for elements that are not present.
+
+    :param config: Config object with some values set.
+    :param skip_password: Whether or not ask the user for a password.
+    :returns: Config object with necessary values set.
+    """
+    # Return quickly if the user attempts to run in quiet (non-interactive) mode.
+    if config.user["quiet"] is True:
+        logger.debug(f"Skipping interactive config: quiet mode is {config.user['quiet']}")
+        return None
+
+    # Reuse interactive config. It will only request the portions needed.
+    try:
+        details = get_interactive_config(
+            tile=config.okta["tile"],
+            org=config.okta["org"],
+            username=config.okta["username"],
+        )
+    except (AttributeError, KeyError, ValueError) as err:
+        logger.error(f"Interactive arguments are not correct: {err}")
+        sys.exit(1)
+
+    if not details:
+        return None
+
+    return _build_interactive_config(details, skip_password)
 
 
 def get_interactive_config(tile=None, org=None, username=""):
@@ -1222,23 +1240,25 @@ def process_options(args):
         sys.exit(0)
 
     # 1: read ini file (if it exists)
-    config_ini = Config()
     if not args.configure:
         config_ini = process_ini_file(args.user_config_file, args.user_config_profile)
+        if config_ini:
+            config.update(config_ini)
 
     # 2: override with ENV
     config_env = process_environment()
+    if config_env:
+        config.update(config_env)
 
     # 3: override with args
     config_args = process_arguments(args)
-
-    config.update(config_ini)
-    config.update(config_env)
-    config.update(config_args)
+    if config_args:
+        config.update(config_args)
 
     # 4: Get missing data from the user, if necessary
     config_int = process_interactive_input(config, args.configure)
-    config.update(config_int)
+    if config_int:
+        config.update(config_int)
 
     sanitize_config_values(config)
     logger.debug(f"Final configuration is {config}")

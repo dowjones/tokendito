@@ -727,8 +727,7 @@ def test_process_interactive_input(mocker):
     pytest_config.user["quiet"] = True
     pytest_config.okta["username"] = ""
     ret = user.process_interactive_input(pytest_config)
-    pytest_config.update(ret)
-    assert pytest_config.okta["username"] == ""
+    assert ret is None
 
     # Check that a bad object raises an exception
     with pytest.raises(AttributeError) as error:
