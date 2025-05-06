@@ -47,10 +47,11 @@ def cmd_interface(args):
     setup_early_logging(args)
 
     if args.multi_profiles:
-        logger.warning(
-            "Multiple profiles have been specified so --aws-profile "
-            "will be overridden by each profile."
-        )
+        if args.aws_profile or ("TOKENDITO_AWS_PROFILE" in os.environ):
+            logger.warning(
+                "Multiple profiles have been specified so the AWS profile value "
+                "will be overridden by each profile."
+            )
 
         skip_auth = False
         for profile in args.multi_profiles:
