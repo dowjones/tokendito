@@ -7,6 +7,7 @@ import codecs
 import configparser
 from datetime import timezone
 from getpass import getpass
+import io
 import json
 import logging
 import os
@@ -272,6 +273,13 @@ def parse_cli_args(args):
         action="store_true",
         default=False,
         help="Suppress output",
+    )
+    parser.add_argument(
+        "--timeout",
+        dest="user_login_timeout",
+        type=int,
+        default=10,
+        help="Login timeout in seconds (default: 10, 0 to disable timeout)",
     )
 
     parsed_args = parser.parse_args(args)
@@ -757,7 +765,7 @@ def _read_arguments(args):
                 continue
             if match.group(1) not in res:
                 res[match.group(1)] = dict()
-            if val:
+            if val is not None:
                 res[match.group(1)][match.group(2)] = val
                 add_sensitive_value_to_be_masked(val, match.group(2))
 
@@ -915,6 +923,11 @@ def get_org():
 
     while res == "":
         user_data = get_input(prompt=message)
+        
+        # Handle empty input (no timeout for this function)
+        if user_data is None:
+            continue
+                
         user_data = user_data.strip()
         if user_data == "":
             break
@@ -940,6 +953,11 @@ def get_tile():
 
     while res == "":
         user_data = get_input(prompt=message)
+        
+        # Handle empty input (no timeout for this function)
+        if user_data is None:
+            continue
+                
         user_data = user_data.strip()
         if user_data == "":
             break
@@ -959,9 +977,20 @@ def get_username():
     :return: string with sanitized value.
     """
     message = "Organization username. E.g. jane.doe@acme.com: "
+    timeout = config.user.get("login_timeout", 0)
     res = ""
+    
     while res == "":
-        user_data = get_input(prompt=message)
+        user_data = get_input_with_timeout(prompt=message, timeout=timeout)
+        
+        # Handle timeout case for login
+        if user_data is None:
+            if timeout > 0:
+                logger.error("Login timeout occurred while getting username")
+                sys.exit(1)
+            else:
+                continue
+                
         user_data = user_data.strip()
         if user_data != "":
             res = user_data
@@ -977,18 +1006,25 @@ def get_secret_input(message=None):
     :param args: message to display user.
     :return: secret
     """
-    secret = ""
-    logger.debug("get_secret_value")
+    timeout = config.user.get("login_timeout", 0)
+    
+    if timeout <= 0:
+        # No timeout, use original implementation
+        secret = ""
+        logger.debug("get_secret_value")
 
-    tty_assertion()
-    while secret == "":
-        if message is None:
-            password = getpass()
-        else:
-            password = getpass(message)
-        secret = password
-        logger.debug("secret value set interactively")
-    return secret
+        tty_assertion()
+        while secret == "":
+            if message is None:
+                password = getpass()
+            else:
+                password = getpass(message)
+            secret = password
+            logger.debug("secret value set interactively")
+        return secret
+    else:
+        # Use timeout implementation
+        return get_secret_input_with_timeout(message, timeout)
 
 
 def get_interactive_profile_name(default):
@@ -1001,6 +1037,11 @@ def get_interactive_profile_name(default):
 
     while res == "":
         user_data = get_input(prompt=message)
+        
+        # Handle empty input (no timeout for this function)
+        if user_data is None:
+            continue
+                
         user_data = user_data.strip()
         if user_data == "":
             res = default
@@ -1208,11 +1249,9 @@ def get_input(prompt="-> "):
     :return user_input: raw from user.
     """
     tty_assertion()
-
-    user_input = input(f"{prompt}")
-    logger.debug(f"User input: {user_input}")
-
-    return user_input
+    # No timeout for general input - use regular input() function
+    user_input = input(prompt)
+    return user_input.strip()
 
 
 def collect_integer(valid_range=0):
@@ -1224,8 +1263,14 @@ def collect_integer(valid_range=0):
     :return user_input: validated, casted integer from user.
     """
     user_input = None
+    
     while True:
         user_input = get_input()
+        
+        # Handle empty input (no timeout for this function)
+        if user_input is None:
+            continue
+                
         valid_input = validate_input(user_input, valid_range)
         logger.debug(f"User input validation status is {valid_input}")
         if valid_input:
@@ -1401,3 +1446,328 @@ def discover_tiles(url):
     logger.debug(f"Discovered {len(tile)} URLs.")
 
     return tile
+
+
+def get_input_with_timeout(prompt="-> ", timeout=0):
+    """Collect user input with optional timeout.
+
+    :param prompt: optional string with prompt.
+    :param timeout: timeout in seconds, 0 means no timeout.
+    :return user_input: raw from user or None if timeout.
+    """
+    tty_assertion()
+
+    if timeout <= 0:
+        # No timeout, use regular input
+        tty_assertion()
+        user_input = input(prompt)
+        return user_input.strip()
+
+    # Platform-specific timeout implementation
+    if platform.system() == "Windows":
+        return _get_input_timeout_windows(prompt, timeout)
+    else:
+        return _get_input_timeout_unix(prompt, timeout)
+
+
+def _get_input_timeout_unix(prompt, timeout):
+    """Unix/Linux timeout input implementation - timeout only until first character."""
+    import select
+    import termios
+    import tty
+    
+    sys.stdout.write(prompt)
+    sys.stdout.flush()
+    
+    try:
+        # Save terminal settings
+        if sys.stdin is None:
+            raise OSError("stdin is None")
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+    except (OSError, io.UnsupportedOperation):
+        # Fallback to regular input if in test environment or no TTY
+        user_input = input()
+        return user_input.strip()
+    
+    try:
+        # Set terminal to raw mode for character-by-character input
+        tty.setraw(fd)
+        
+        user_input = ""
+        first_char = True
+        
+        while True:
+            if first_char:
+                # Apply timeout only for the first character
+                ready, _, _ = select.select([sys.stdin], [], [], timeout)
+                if not ready:
+                    builtins.print(f"\nTimeout after {timeout} seconds")
+                    logger.debug(f"Login timeout after {timeout} seconds")
+                    return None
+                first_char = False
+            else:
+                # After first character, wait indefinitely
+                ready, _, _ = select.select([sys.stdin], [], [], None)
+            
+            if ready:
+                char = sys.stdin.read(1)
+                if char in ['\n', '\r']:
+                    # End of input
+                    break
+                elif char == '\x03':  # Ctrl+C
+                    raise KeyboardInterrupt
+                elif char in ['\x7f', '\x08']:  # Backspace
+                    if user_input:
+                        user_input = user_input[:-1]
+                        sys.stdout.write('\b \b')
+                        sys.stdout.flush()
+                else:
+                    user_input += char
+                    sys.stdout.write(char)
+                    sys.stdout.flush()
+        
+        builtins.print()  # New line
+        logger.debug(f"User input: {user_input}")
+        return user_input
+        
+    except (KeyboardInterrupt, EOFError):
+        builtins.print("\nInput cancelled")
+        return None
+    finally:
+        # Restore terminal settings
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+
+def _get_input_timeout_windows(prompt, timeout):
+    """Windows timeout input implementation - timeout only until first character."""
+    try:
+        import msvcrt
+    except ImportError:
+        # Fallback to regular input if msvcrt is not available (e.g., in tests)
+        tty_assertion()
+        user_input = input(prompt)
+        return user_input.strip()
+    
+    import time
+    
+    sys.stdout.write(prompt)
+    sys.stdout.flush()
+    
+    user_input = ""
+    first_char = True
+    start_time = time.time()
+    
+    while True:
+        if first_char and time.time() - start_time > timeout:
+            # Timeout on first character
+            builtins.print(f"\nTimeout after {timeout} seconds")
+            logger.debug(f"Login timeout after {timeout} seconds")
+            return None
+        
+        if msvcrt.kbhit():
+            char = msvcrt.getch()
+            
+            if char in [b'\r', b'\n']:
+                # End of input
+                break
+            elif char == b'\x03':  # Ctrl+C
+                raise KeyboardInterrupt
+            elif char in [b'\x08', b'\x7f']:  # Backspace
+                if user_input:
+                    user_input = user_input[:-1]
+                    sys.stdout.write('\b \b')
+                    sys.stdout.flush()
+            else:
+                try:
+                    char_str = char.decode('utf-8', errors='ignore')
+                    user_input += char_str
+                    sys.stdout.write(char_str)
+                    sys.stdout.flush()
+                    first_char = False  # Disable timeout after first character
+                except UnicodeDecodeError:
+                    continue
+        else:
+            # Small delay to prevent busy waiting
+            time.sleep(0.01)
+    
+    print()  # New line
+    logger.debug(f"User input: {user_input}")
+    return user_input
+
+
+def get_secret_input_with_timeout(message=None, timeout=0):
+    """Get secret value interactively with optional timeout.
+
+    :param message: message to display user.
+    :param timeout: timeout in seconds, 0 means no timeout.
+    :return: secret or None if timeout
+    """
+    if timeout <= 0:
+        # No timeout, use original getpass implementation
+        secret = ""
+        logger.debug("get_secret_value")
+
+        tty_assertion()
+        while secret == "":
+            if message is None:
+                password = getpass()
+            else:
+                password = getpass(message)
+            secret = password
+            logger.debug("secret value set interactively")
+        return secret
+
+    tty_assertion()
+    
+    # For secret input with timeout, we need a different approach
+    # since getpass() doesn't support timeout directly
+    if platform.system() == "Windows":
+        return _get_secret_input_timeout_windows(message, timeout)
+    else:
+        return _get_secret_input_timeout_unix(message, timeout)
+
+
+def _unix_read_password_char():
+    """Read a single character for password input on Unix."""
+    char = sys.stdin.read(1)
+    if char == '\n' or char == '\r':
+        return None  # End of input
+    elif char == '\x03':  # Ctrl+C
+        raise KeyboardInterrupt
+    elif char == '\x7f' or char == '\x08':  # Backspace
+        return '\b'
+    else:
+        return char
+
+
+def _get_secret_input_timeout_unix(message, timeout):
+    """Unix/Linux secret input with timeout."""
+    import signal
+    import termios
+    import tty
+    
+    if message is None:
+        message = "Password: "
+    
+    sys.stdout.write(message)
+    sys.stdout.flush()
+    
+    try:
+        # Save terminal settings
+        if sys.stdin is None:
+            raise OSError("stdin is None")
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+    except (OSError, io.UnsupportedOperation):
+        # Fallback to regular getpass if in test environment or no TTY
+        return getpass("")
+    
+    def timeout_handler(signum, frame):
+        raise TimeoutError("Input timeout")
+    
+    try:
+        # Set terminal to raw mode for password input
+        tty.setraw(fd)
+        
+        # Set up timeout signal
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(timeout)
+        
+        password = ""
+        first_char = True
+        while True:
+            char = _unix_read_password_char()
+            if char is None:  # End of input
+                break
+            elif char == '\b':  # Backspace
+                if password:
+                    password = password[:-1]
+                    sys.stdout.write('\b \b')
+                    sys.stdout.flush()
+            else:
+                if first_char:
+                    # Cancel timeout after first character
+                    signal.alarm(0)
+                    first_char = False
+                password += char
+                sys.stdout.write('*')
+                sys.stdout.flush()
+        
+        signal.alarm(0)  # Cancel timeout (in case no characters were entered)
+        print()  # New line after password input
+        logger.debug("Secret value set interactively with timeout")
+        return password
+        
+    except TimeoutError:
+        builtins.print(f"\nTimeout after {timeout} seconds")
+        logger.debug(f"Secret input timeout after {timeout} seconds")
+        return None
+    except (KeyboardInterrupt, EOFError):
+        builtins.print("\nInput cancelled")
+        logger.debug("Secret input cancelled by user")
+        return None
+    finally:
+        signal.alarm(0)  # Ensure alarm is cancelled
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+
+def _get_secret_input_timeout_windows(message, timeout):
+    """Windows secret input with timeout - timeout only until first character."""
+    try:
+        import msvcrt
+    except ImportError:
+        # Fallback to regular getpass if msvcrt is not available (e.g., in tests)
+        import getpass
+        if message is None:
+            message = "Password: "
+        return getpass.getpass(message)
+    
+    import time
+    
+    if message is None:
+        message = "Password: "
+    
+    sys.stdout.write(message)
+    sys.stdout.flush()
+    
+    password = ""
+    first_char = True
+    start_time = time.time()
+    
+    try:
+        while True:
+            if first_char and time.time() - start_time > timeout:
+                # Timeout on first character
+                builtins.print(f"\nTimeout after {timeout} seconds")
+                logger.debug(f"Secret input timeout after {timeout} seconds")
+                return None
+            
+            if msvcrt.kbhit():
+                char = msvcrt.getch()
+                if char in [b'\r', b'\n']:
+                    break
+                elif char == b'\x03':  # Ctrl+C
+                    raise KeyboardInterrupt
+                elif char in [b'\x08', b'\x7f']:  # Backspace
+                    if password:
+                        password = password[:-1]
+                        sys.stdout.write('\b \b')
+                        sys.stdout.flush()
+                else:
+                    password += char.decode('utf-8', errors='ignore')
+                    sys.stdout.write('*')
+                    sys.stdout.flush()
+                    first_char = False  # Disable timeout after first character
+            else:
+                # Small delay to prevent busy waiting
+                time.sleep(0.01)
+        
+        print()  # New line after password input
+        logger.debug("Secret value set interactively with timeout")
+        return password
+        
+    except (KeyboardInterrupt, EOFError):
+        builtins.print("\nInput cancelled")
+        logger.debug("Secret input cancelled by user")
+        return None

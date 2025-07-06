@@ -123,6 +123,7 @@ options:
                         Sets the MFA response to a challenge. You can also use the TOKENDITO_OKTA_MFA_RESPONSE environment variable.
   --use-device-token    Use device token across sessions
   --quiet               Suppress output
+  --timeout TIMEOUT     Login timeout in seconds (default: 10, 0 to disable timeout)
 ```
 
 Regarding the storage of the Okta password, we are fans of automation but do not recommend passing in the password to tokendito via plaintext or storing
