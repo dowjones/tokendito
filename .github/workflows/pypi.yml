@@ -8,11 +8,16 @@ on:
   pull_request:
     branches:
       - main
+      - '[0-9]+.[0-9]+.[0-9]+'  # Match M.m.hf pattern (e.g., 1.2.3, 2.0.1, etc.)
 
 jobs:
   testpypipublish:
     name: Build and Publish Test Distribution
     runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.base_ref == 'main' || contains(github.base_ref, '.'))
     steps:
     - name: Checkout
       uses: actions/checkout@v3
@@ -31,12 +36,15 @@ jobs:
       env:
         DEVBUILD: 1
     - name: Publish distribution package to Test PyPI
-      if: github.event.pull_request.head.repo.full_name == github.repository
+      if: |
+        github.event.pull_request.head.repo.full_name == github.repository && 
+        github.event_name == 'pull_request' &&
+        (github.base_ref == 'main' || contains(github.base_ref, '.'))
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
         user: __token__
         password: ${{ secrets.PYPITEST_PASSWORD }}
-        repository_url: https://test.pypi.org/legacy/
+        repository-url: https://test.pypi.org/legacy/
   pypipublish:
     name: Build and Publish Production Distribution
     runs-on: ubuntu-latest
