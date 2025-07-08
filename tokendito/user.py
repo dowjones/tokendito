@@ -1502,7 +1502,7 @@ def _get_input_timeout_unix(prompt, timeout):
                 # Apply timeout only for the first character
                 ready, _, _ = select.select([sys.stdin], [], [], timeout)
                 if not ready:
-                    builtins.print(f"\nTimeout after {timeout} seconds")
+                    builtins.print(f"\r\nTimeout after {timeout} seconds")
                     logger.debug(f"Login timeout after {timeout} seconds")
                     return None
                 first_char = False
@@ -1561,7 +1561,7 @@ def _get_input_timeout_windows(prompt, timeout):
     while True:
         if first_char and time.time() - start_time > timeout:
             # Timeout on first character
-            builtins.print(f"\nTimeout after {timeout} seconds")
+            builtins.print(f"\r\nTimeout after {timeout} seconds")
             logger.debug(f"Login timeout after {timeout} seconds")
             return None
         
@@ -1700,7 +1700,7 @@ def _get_secret_input_timeout_unix(message, timeout):
         return password
         
     except TimeoutError:
-        builtins.print(f"\nTimeout after {timeout} seconds")
+        builtins.print(f"\r\nTimeout after {timeout} seconds")
         logger.debug(f"Secret input timeout after {timeout} seconds")
         return None
     except (KeyboardInterrupt, EOFError):
@@ -1739,7 +1739,7 @@ def _get_secret_input_timeout_windows(message, timeout):
         while True:
             if first_char and time.time() - start_time > timeout:
                 # Timeout on first character
-                builtins.print(f"\nTimeout after {timeout} seconds")
+                builtins.print(f"\r\nTimeout after {timeout} seconds")
                 logger.debug(f"Secret input timeout after {timeout} seconds")
                 return None
             
