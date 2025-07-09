@@ -1,11 +1,26 @@
-"""This module contains unit tests for the HTTPClient class."""
+"""This module contains functional tests for the HTTPClient class."""
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
 import pytest
+import requests
 from requests import RequestException
 from tokendito import __title__
 from tokendito import __version__
 from tokendito.http_client import HTTPClient
+
+
+def is_httpbin_available():
+    """Check if httpbin.org is available for testing."""
+    try:
+        response = requests.get("https://httpbin.org/get", timeout=5)
+        return response.status_code == 200
+    except (requests.RequestException, requests.Timeout):
+        return False
+
+
+httpbin_available = pytest.mark.skipif(
+    not is_httpbin_available(), reason="httpbin.org is not available"
+)
 
 
 @pytest.fixture
@@ -16,6 +31,7 @@ def client():
     return client
 
 
+@httpbin_available
 def test_get_request(client):
     """Test the GET request functionality of HTTPClient."""
     # Make a GET request to the /get endpoint of httpbin which reflects the sent request data
@@ -27,6 +43,7 @@ def test_get_request(client):
     assert json_data["headers"]["User-Agent"] == f"{__title__}/{__version__}"
 
 
+@httpbin_available
 def test_post_request(client):
     """Test the POST request functionality of HTTPClient."""
     # Make a POST request to the /post endpoint of httpbin with sample data
@@ -38,6 +55,7 @@ def test_post_request(client):
     assert json_data["json"] == {"key": "value"}
 
 
+@httpbin_available
 def test_add_cookies(client):
     """Test the ability to set cookies using HTTPClient."""
     # Set a test cookie for the client
@@ -51,6 +69,7 @@ def test_add_cookies(client):
     assert json_data["cookies"] == {"test_cookie": "cookie_value"}
 
 
+@httpbin_available
 def test_custom_header(client):
     """Test the ability to send custom headers using HTTPClient."""
     # Make a GET request with a custom header
@@ -75,6 +94,7 @@ def test_bad_post_request(client, mocker):
         client.post("https://httpbin.org/post", json={"key": "value"})
 
 
+@httpbin_available
 def test_reset_session(client):
     """Test the reset method to ensure session is reset."""
     # Set a test cookie for the client
