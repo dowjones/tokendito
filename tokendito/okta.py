@@ -293,6 +293,33 @@ def send_saml_response(config, saml_response):
             sys.exit(2)
 
 
+def update_session_details(config):
+    """Update configuration file on local system with session token.
+
+    :param config: the current configuration
+    :return: None
+    """
+    logger.debug("Update configuration file on local system with session token.")
+    ini_file = config.user["config_file"]
+    profile = "default"
+
+    contents = {}
+    # Copy relevant parts of the configuration into an dictionary that
+    # will be written out to disk
+    if "session_token" in config.okta and config.okta["session_token"] is not None:
+        contents["okta_session_token"] = config.okta["session_token"]
+    if "session_token_expiry" in config.okta and config.okta["session_token_expiry"] is not None:
+        contents["okta_session_token_expiry"] = config.okta["session_token_expiry"]
+    if "session_id" in config.okta and config.okta["session_id"] is not None:
+        contents["okta_session_id"] = config.okta["session_id"]
+    else:
+        contents["okta_session_id"] = ""
+
+    logger.debug(f"Adding {contents} to config file.")
+    user.update_ini(profile=profile, ini_file=ini_file, **contents)
+    logger.debug(f"Updated {ini_file} with profile {profile}")
+
+
 def get_session_token(config, primary_auth, headers):
     """Get session_token.
 
@@ -301,25 +328,73 @@ def get_session_token(config, primary_auth, headers):
     :param primary_auth: Primary authentication
     :return: Session Token from JSON response
     """
-    status = None
-    try:
-        status = primary_auth.get("status", None)
-    except AttributeError:
-        pass
+    status = get_status(primary_auth)
+    if config.user["use_session_token"].lower() == "true":
+        session_token = config.okta.get("session_token")
+    else:
+        session_token = None
 
     if status == "SUCCESS" and "sessionToken" in primary_auth:
         session_token = primary_auth.get("sessionToken")
     elif status == "MFA_REQUIRED":
-        # Note: mfa_challenge should also be modified to accept and use http_client
-        session_token = mfa_challenge(config, headers, primary_auth)
+        session_token = handle_mfa_required(config, headers, primary_auth, session_token)
     else:
-        logger.debug(f"Error parsing response: {json.dumps(primary_auth)}")
-        logger.error(f"Okta auth failed: unknown status {status}")
-        sys.exit(1)
+        handle_unknown_status(primary_auth, status)
 
     user.add_sensitive_value_to_be_masked(session_token)
-
     return session_token
+
+
+def get_status(primary_auth):
+    """Extract status from primary_auth."""
+    try:
+        return primary_auth.get("status", None)
+    except AttributeError:
+        return None
+
+
+def handle_mfa_required(config, headers, primary_auth, session_token):
+    """Handle MFA required scenario."""
+    if session_token:
+        session_token, session_expiry = check_session_token(
+            config,
+            headers,
+            primary_auth,
+            session_token
+        )
+    else:
+        session_token, session_expiry = mfa_challenge(config, headers, primary_auth)
+        save_session_token(config, session_token, session_expiry)
+    return session_token
+
+
+def check_session_token(config, headers, primary_auth, session_token):
+    """Check if the session token is expired."""
+    session_expiry = config.okta["session_token_expiry"]
+    if session_expiry and time.gmtime(time.time()) < time.strptime(session_expiry, "%Y-%m-%dT%H:%M:%S.%fZ"):
+        logger.info("Session token is still valid.")
+    else:
+        logger.info("Session token has expired.")
+        session_token, session_expiry = mfa_challenge(config, headers, primary_auth)
+        save_session_token(config, session_token, session_expiry)
+    return session_token, session_expiry
+
+
+def save_session_token(config, session_token, session_expiry):
+    """Save session token and update session details."""
+    if config.user["use_session_token"].lower() == "true" and session_token:
+        logger.info("Saving session token")
+        config.okta["session_token"] = session_token
+        config.okta["session_token_expiry"] = session_expiry
+        config.okta["session_id"] = None
+        update_session_details(config)
+
+
+def handle_unknown_status(primary_auth, status):
+    """Handle unknown status scenario."""
+    logger.debug(f"Error parsing response: {json.dumps(primary_auth)}")
+    logger.error(f"Okta auth failed: unknown status {status}")
+    sys.exit(1)
 
 
 def get_access_token(oauth2_config, oauth2_session_data, authorize_code):
@@ -664,7 +739,7 @@ def validate_oauth2_configuration(oauth2_config):
         sys.exit(1)
 
 
-def create_authn_cookies(authn_org_url, session_token):
+def create_authn_cookies(authn_org_url, session_token, config):
     """
     Create session cookie.
 
@@ -681,14 +756,19 @@ def create_authn_cookies(authn_org_url, session_token):
 
     # Log the request details.
     logger.debug(f"Requesting session cookies from {url}")
+    if not config.okta["session_id"]:
+        # Use the HTTP client to make a POST request.
+        response_json = HTTP_client.post(url, json=data, headers=headers, return_json=True)
 
-    # Use the HTTP client to make a POST request.
-    response_json = HTTP_client.post(url, json=data, headers=headers, return_json=True)
-
-    if "id" not in response_json:
-        logger.error(f"'id' not found in response. Full response: {response_json}")
-        sys.exit(1)
-    session_id = response_json["id"]
+        if "id" not in response_json:
+            logger.error(f"'id' not found in response. Full response: {response_json}")
+            sys.exit(1)
+        session_id = response_json["id"]
+        config.okta["session_id"] = session_id
+        logger.info("Saving session id")
+        update_session_details(config)
+    else:
+        session_id = config.okta["session_id"]
     user.add_sensitive_value_to_be_masked(session_id)
 
     cookiejar = requests.cookies.RequestsCookieJar()
@@ -711,7 +791,7 @@ def idp_authenticate(config):
         session_token = local_authenticate(config)
         # authentication sends us a token
         # which we then put in our session cookies
-        create_authn_cookies(config.okta["org"], session_token)
+        create_authn_cookies(config.okta["org"], session_token, config)
     elif is_saml2_authentication(auth_properties):
         # We may loop thru the saml2 servers until
         # we find the authentication server.
@@ -1054,7 +1134,10 @@ def mfa_provider_type(
         logger.error(
             f"Could not verify MFA Challenge with {mfa_provider} {primary_auth['factorType']}"
         )
-    return mfa_verify["sessionToken"]
+    if "expiresAt" not in mfa_verify:
+        logger.error("Could not find the expiration time for the MFA Challenge")
+
+    return mfa_verify["sessionToken"], mfa_verify["expiresAt"]
 
 
 def mfa_index(preset_mfa, available_mfas, mfa_options):
@@ -1125,7 +1208,7 @@ def mfa_challenge(config, headers, primary_auth):
     mfa_provider = selected_factor["_embedded"]["factor"]["provider"]
     logger.debug(f"MFA Challenge URL: [{mfa_challenge_url}] headers: {headers}")
 
-    mfa_session_token = mfa_provider_type(
+    mfa_session_token, mfa_expires_at = mfa_provider_type(
         config,
         mfa_provider,
         selected_factor,
@@ -1137,7 +1220,7 @@ def mfa_challenge(config, headers, primary_auth):
     )
 
     logger.debug(f"MFA Session Token: [{mfa_session_token}]")
-    return mfa_session_token
+    return mfa_session_token, mfa_expires_at
 
 
 def totp_approval(config, selected_mfa_option, headers, mfa_challenge_url, payload, primary_auth):
