@@ -727,8 +727,7 @@ def test_process_interactive_input(mocker):
     pytest_config.user["quiet"] = True
     pytest_config.okta["username"] = ""
     ret = user.process_interactive_input(pytest_config)
-    pytest_config.update(ret)
-    assert pytest_config.okta["username"] == ""
+    assert ret is None
 
     # Check that a bad object raises an exception
     with pytest.raises(AttributeError) as error:
@@ -955,3 +954,51 @@ def test_extract_arns(saml, expected):
     from tokendito import user
 
     assert user.extract_arns(saml) == expected
+
+
+def test_single_profile(mocker):
+    """Test single profile support."""
+    from tokendito import user
+
+    patched = mocker.patch("tokendito.user.process_args", return_value=None)
+
+    args = [
+        "--profile",
+        "profile-1",
+    ]
+    user.cmd_interface(args)
+
+    assert patched.call_count == 1
+
+    assert patched.call_args_list[0].args[0].multi_profiles is None
+
+    # skip_auth parameter should only be called with False
+    assert patched.call_args_list[0].args[1] is False
+
+
+def test_multiple_profiles(mocker):
+    """Test multiple profiles support."""
+    from tokendito import user
+
+    patched = mocker.patch("tokendito.user.process_args", return_value=None)
+
+    profile_1 = "profile-1"
+    profile_2 = "profile-2"
+    profile_3 = "profile-3"
+
+    args = [
+        "--multi-profiles",
+        profile_1,
+        "--multi-profiles",
+        profile_2,
+        "--multi-profiles",
+        profile_3,
+    ]
+    user.cmd_interface(args)
+
+    assert patched.call_count == 3
+
+    # skip_auth parameter should only be called with False the first time
+    assert patched.call_args_list[0].args[1] is False
+    assert patched.call_args_list[1].args[1] is True
+    assert patched.call_args_list[2].args[1] is True
