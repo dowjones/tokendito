@@ -5,7 +5,7 @@ Tokendito uses [platformdirs](https://github.com/platformdirs/platformdirs) to m
 okta_org = https://acme.okta.com/
 okta_username = jane.doe@acme.com
 okta_mfa = push
-login_timeout = 10
+login_timeout = 60
 
 [my_prod_okta_tile]
 okta_tile = https://acme.okta.com/home/amazon_aws/b07384d113edec49f00d/272?fromHome=true
