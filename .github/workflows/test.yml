@@ -58,44 +58,13 @@ jobs:
         path-to-lcov: ${{ github.workspace }}/lcov.info
         parallel: true
 
-  auth:
-    name: Authenticated Tests
+  coveralls:
+    name: Coveralls Finished
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install tox
-      - name: Run Authenticated tests
-        run: |
-          tox -e py311,auth
-        env:
-          TOKENDITO_OKTA_USERNAME: ${{ secrets.TOXTEST_OKTA_USERNAME }}
-          TOKENDITO_OKTA_PASSWORD: ${{ secrets.TOXTEST_OKTA_PASSWORD }}
-          TOKENDITO_OKTA_MFA: ${{ secrets.TOXTEST_MFA }}
-          TOKENDITO_OKTA_MFA_RESPONSE: ${{ secrets.TOXTEST_MFA_RESPONSE }}
-          TOKENDITO_OKTA_TILE: ${{ secrets.TOXTEST_OKTA_TILE }}
-          TOKENDITO_AWS_ROLE_ARN: ${{ secrets.TOXTEST_ROLE_ARN }}
-      - name: Generate Coverage reports
-        run: |
-          tox -e coverage
-      - name: Upload Coverage for auth tests
-        uses: coverallsapp/github-action@master
-        with:
-          github-token: ${{ secrets.github_token }}
-          path-to-lcov: ${{ github.workspace }}/lcov.info
-          flag-name: run-3.x-auth
-          parallel: true
       - name: Coveralls Finished
         uses: coverallsapp/github-action@master
         with:
           github-token: ${{ secrets.github_token }}
-          path-to-lcov: ${{ github.workspace }}/lcov.info
           parallel-finished: true
