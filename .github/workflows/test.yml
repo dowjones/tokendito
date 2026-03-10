@@ -32,7 +32,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ['3.9', '3.10', '3.11']
+        python-version: ['3.10', '3.11', '3.12']
     steps:
     - name: Checkout
       uses: actions/checkout@v3
@@ -47,10 +47,10 @@ jobs:
     - name: Test with tox
       run: tox
     - name: Convert coverage to LCOV format
-      if: matrix.python-version == '3.11'
+      if: matrix.python-version == '3.12'
       run: tox -e coverage
     - name: Upload coverage in Parallel
-      if: matrix.python-version == '3.11'
+      if: matrix.python-version == '3.12'
       uses: coverallsapp/github-action@master
       with:
         github-token: ${{ secrets.github_token }}
