@@ -956,6 +956,279 @@ def test_extract_arns(saml, expected):
     assert user.extract_arns(saml) == expected
 
 
+def test_get_input_with_timeout_no_timeout(mocker):
+    """Test get_input_with_timeout with timeout=0 falls back to regular input."""
+    from tokendito import user
+
+    mocker.patch("tokendito.user.tty_assertion", return_value=True)
+    mocker.patch("tokendito.user.input", return_value="  hello  ")
+    result = user.get_input_with_timeout(prompt="test: ", timeout=0)
+    assert result == "hello"
+
+
+def test_get_input_with_timeout_negative(mocker):
+    """Test get_input_with_timeout with negative timeout falls back to regular input."""
+    from tokendito import user
+
+    mocker.patch("tokendito.user.tty_assertion", return_value=True)
+    mocker.patch("tokendito.user.input", return_value="world")
+    result = user.get_input_with_timeout(prompt="test: ", timeout=-5)
+    assert result == "world"
+
+
+def test_get_input_with_timeout_dispatches_unix(mocker):
+    """Test that get_input_with_timeout dispatches to unix impl on non-Windows."""
+    from tokendito import user
+
+    mocker.patch("tokendito.user.tty_assertion", return_value=True)
+    mocker.patch("platform.system", return_value="Linux")
+    mock_unix = mocker.patch(
+        "tokendito.user._get_input_timeout_unix", return_value="unix_input"
+    )
+    result = user.get_input_with_timeout(prompt="test: ", timeout=10)
+    mock_unix.assert_called_once_with("test: ", 10)
+    assert result == "unix_input"
+
+
+def test_get_input_with_timeout_dispatches_windows(mocker):
+    """Test that get_input_with_timeout dispatches to windows impl on Windows."""
+    from tokendito import user
+
+    mocker.patch("tokendito.user.tty_assertion", return_value=True)
+    mocker.patch("platform.system", return_value="Windows")
+    mock_win = mocker.patch(
+        "tokendito.user._get_input_timeout_windows", return_value="win_input"
+    )
+    result = user.get_input_with_timeout(prompt="test: ", timeout=10)
+    mock_win.assert_called_once_with("test: ", 10)
+    assert result == "win_input"
+
+
+def test_get_username_with_timeout(mocker):
+    """Test get_username uses get_input_with_timeout and respects login_timeout."""
+    from tokendito import user
+    from tokendito.config import config
+
+    original_timeout = config.user.get("login_timeout", 0)
+    config.user["login_timeout"] = 30
+
+    mocker.patch("tokendito.user.tty_assertion", return_value=True)
+    mock_timeout_input = mocker.patch(
+        "tokendito.user.get_input_with_timeout", return_value="jane@acme.com"
+    )
+    result = user.get_username()
+    mock_timeout_input.assert_called_once_with(prompt=mocker.ANY, timeout=30)
+    assert result == "jane@acme.com"
+
+    config.user["login_timeout"] = original_timeout
+
+
+def test_get_username_timeout_exits(mocker):
+    """Test get_username exits when timeout occurs and login_timeout > 0."""
+    from tokendito import user
+    from tokendito.config import config
+
+    original_timeout = config.user.get("login_timeout", 0)
+    config.user["login_timeout"] = 5
+
+    mocker.patch("tokendito.user.tty_assertion", return_value=True)
+    mocker.patch("tokendito.user.get_input_with_timeout", return_value=None)
+    mocker.patch("sys.stderr")
+
+    with pytest.raises(SystemExit) as err:
+        user.get_username()
+    assert err.value.code == 1
+
+    config.user["login_timeout"] = original_timeout
+
+
+def test_get_username_no_timeout_retries(mocker):
+    """Test get_username retries on None when login_timeout is 0."""
+    from tokendito import user
+    from tokendito.config import config
+
+    original_timeout = config.user.get("login_timeout", 0)
+    config.user["login_timeout"] = 0
+
+    mocker.patch("tokendito.user.tty_assertion", return_value=True)
+    # Return None first (would be a retry), then a valid username
+    mock_input = mocker.patch(
+        "tokendito.user.get_input_with_timeout", side_effect=[None, "user@acme.com"]
+    )
+    result = user.get_username()
+    assert result == "user@acme.com"
+    assert mock_input.call_count == 2
+
+    config.user["login_timeout"] = original_timeout
+
+
+def test_get_secret_input_no_timeout(mocker):
+    """Test get_secret_input uses getpass when login_timeout is 0."""
+    from tokendito import user
+    from tokendito.config import config
+
+    original_timeout = config.user.get("login_timeout", 0)
+    config.user["login_timeout"] = 0
+
+    mocker.patch("tokendito.user.tty_assertion", return_value=True)
+    mock_getpass = mocker.patch("tokendito.user.getpass", return_value="secret123")
+    result = user.get_secret_input("Enter password: ")
+    mock_getpass.assert_called_once_with("Enter password: ")
+    assert result == "secret123"
+
+    config.user["login_timeout"] = original_timeout
+
+
+def test_get_secret_input_with_timeout_delegates(mocker):
+    """Test get_secret_input delegates to get_secret_input_with_timeout when timeout > 0."""
+    from tokendito import user
+    from tokendito.config import config
+
+    original_timeout = config.user.get("login_timeout", 0)
+    config.user["login_timeout"] = 15
+
+    mocker.patch("tokendito.user.tty_assertion", return_value=True)
+    mock_secret_timeout = mocker.patch(
+        "tokendito.user.get_secret_input_with_timeout", return_value="topsecret"
+    )
+    result = user.get_secret_input("Password: ")
+    mock_secret_timeout.assert_called_once_with("Password: ", 15)
+    assert result == "topsecret"
+
+    config.user["login_timeout"] = original_timeout
+
+
+def test_get_secret_input_default_message(mocker):
+    """Test get_secret_input uses default 'Password: ' message when None."""
+    from tokendito import user
+    from tokendito.config import config
+
+    original_timeout = config.user.get("login_timeout", 0)
+    config.user["login_timeout"] = 0
+
+    mocker.patch("tokendito.user.tty_assertion", return_value=True)
+    mock_getpass = mocker.patch("tokendito.user.getpass", return_value="pass")
+    user.get_secret_input(None)
+    mock_getpass.assert_called_once_with("Password: ")
+
+    config.user["login_timeout"] = original_timeout
+
+
+def test_get_secret_input_with_timeout_dispatches_unix(mocker):
+    """Test get_secret_input_with_timeout dispatches to unix impl."""
+    from tokendito import user
+
+    mocker.patch("tokendito.user.tty_assertion", return_value=True)
+    mocker.patch("platform.system", return_value="Linux")
+    mock_unix = mocker.patch(
+        "tokendito.user._get_secret_input_timeout_unix", return_value="secret"
+    )
+    result = user.get_secret_input_with_timeout("Password: ", 10)
+    mock_unix.assert_called_once_with("Password: ", 10)
+    assert result == "secret"
+
+
+def test_get_secret_input_with_timeout_dispatches_windows(mocker):
+    """Test get_secret_input_with_timeout dispatches to windows impl."""
+    from tokendito import user
+
+    mocker.patch("tokendito.user.tty_assertion", return_value=True)
+    mocker.patch("platform.system", return_value="Windows")
+    mock_win = mocker.patch(
+        "tokendito.user._get_secret_input_timeout_windows", return_value="secret"
+    )
+    result = user.get_secret_input_with_timeout("Password: ", 10)
+    mock_win.assert_called_once_with("Password: ", 10)
+    assert result == "secret"
+
+
+def test_unix_read_password_char_newline(mocker):
+    """Test _unix_read_password_char returns None on newline."""
+    import io
+
+    from tokendito import user
+
+    mocker.patch("sys.stdin", new=io.StringIO("\n"))
+    assert user._unix_read_password_char() is None
+
+
+def test_unix_read_password_char_carriage_return(mocker):
+    """Test _unix_read_password_char returns None on carriage return."""
+    import io
+
+    from tokendito import user
+
+    mocker.patch("sys.stdin", new=io.StringIO("\r"))
+    assert user._unix_read_password_char() is None
+
+
+def test_unix_read_password_char_ctrl_c(mocker):
+    """Test _unix_read_password_char raises KeyboardInterrupt on Ctrl+C."""
+    import io
+
+    from tokendito import user
+
+    mocker.patch("sys.stdin", new=io.StringIO("\x03"))
+    with pytest.raises(KeyboardInterrupt):
+        user._unix_read_password_char()
+
+
+def test_unix_read_password_char_backspace(mocker):
+    """Test _unix_read_password_char returns backspace marker."""
+    import io
+
+    from tokendito import user
+
+    mocker.patch("sys.stdin", new=io.StringIO("\x7f"))
+    assert user._unix_read_password_char() == "\b"
+
+    mocker.patch("sys.stdin", new=io.StringIO("\x08"))
+    assert user._unix_read_password_char() == "\b"
+
+
+def test_unix_read_password_char_regular(mocker):
+    """Test _unix_read_password_char returns regular characters."""
+    import io
+
+    from tokendito import user
+
+    mocker.patch("sys.stdin", new=io.StringIO("a"))
+    assert user._unix_read_password_char() == "a"
+
+
+def test_login_timeout_cli_arg():
+    """Test that --login-timeout CLI argument is parsed correctly."""
+    from tokendito import user
+
+    # Default value
+    args = user.parse_cli_args([])
+    assert args.user_login_timeout == 0
+
+    # Custom value
+    args = user.parse_cli_args(["--login-timeout", "30"])
+    assert args.user_login_timeout == 30
+
+    # Zero explicitly
+    args = user.parse_cli_args(["--login-timeout", "0"])
+    assert args.user_login_timeout == 0
+
+
+def test_login_timeout_config_default():
+    """Test that login_timeout default in Config is 0."""
+    from tokendito.config import Config
+
+    cfg = Config()
+    assert cfg.user["login_timeout"] == 0
+
+
+def test_login_timeout_config_custom():
+    """Test that login_timeout can be set via Config."""
+    from tokendito.config import Config
+
+    cfg = Config(user={"login_timeout": 45})
+    assert cfg.user["login_timeout"] == 45
+
+
 def test_single_profile(mocker):
     """Test single profile support."""
     from tokendito import user

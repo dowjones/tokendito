@@ -83,9 +83,9 @@ usage: tokendito [-h] [--version] [--configure] [--username OKTA_USERNAME] [--pa
 Gets an STS token to use with the AWS CLI and SDK.
 
 options:
-  -h, --help            show this help message and exit
-  --version             Displays version and exit
-  --configure           Prompt user for configuration parameters
+  -h, --help            show this help message and exit.
+  --version             Displays version and exit.
+  --configure           Prompt user for configuration parameters.
   --username OKTA_USERNAME
                         username to log in to Okta. You can also use the TOKENDITO_OKTA_USERNAME environment variable.
   --password OKTA_PASSWORD
@@ -113,7 +113,7 @@ options:
                         Sets the IAM role.
   --aws-shared-credentials-file AWS_SHARED_CREDENTIALS_FILE
                         AWS credentials file to write to.
-  --okta-org OKTA_ORG   Set the Okta Org base URL. This enables role auto-discovery
+  --okta-org OKTA_ORG   Set the Okta Org base URL. This enables role auto-discovery.
   --okta-tile OKTA_TILE
                         Okta tile URL to use.
   --okta-client-id OKTA_CLIENT_ID
@@ -121,8 +121,10 @@ options:
   --okta-mfa OKTA_MFA   Sets the MFA method. You can also use the TOKENDITO_OKTA_MFA environment variable.
   --okta-mfa-response OKTA_MFA_RESPONSE
                         Sets the MFA response to a challenge. You can also use the TOKENDITO_OKTA_MFA_RESPONSE environment variable.
-  --use-device-token    Use device token across sessions
-  --quiet               Suppress output
+  --use-device-token    Use device token across sessions.
+  --quiet               Suppress output.
+  --login-timeout TIMEOUT     
+                        Login timeout in seconds (default: 0 for disabled). You can also use the TOKENDITO_LOGIN_TIMEOUT environment variable.
 ```
 
 Regarding the storage of the Okta password, we are fans of automation but do not recommend passing in the password to tokendito via plaintext or storing
@@ -164,6 +166,7 @@ The following table lists the environment variable and user configuration entry 
 | `--okta-mfa-response` | `TOKENDITO_OKTA_MFA_RESPONSE`        | `okta_mfa_response` |
 | `--use-device-token` | `TOKENDITO_USER_USE_DEVICE_TOKEN`        | `user_use_device_token` |
 | `--quiet` | `TOKENDITO_USER_QUIET`        | `quiet` |
+| `--login-timeout` | `TOKENDITO_USER_LOGIN_TIMEOUT`        | `login_timeout` |
 
 ## Configuration file location
 
