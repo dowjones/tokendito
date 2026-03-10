@@ -32,7 +32,9 @@ See [Releases](https://github.com/dowjones/tokendito/releases) for a detailed Ch
 
 Version 2.5.0 of Tokendito introduces the following changes:
 
-- Cross-platform input timeout feature with configurable timeout (default: disabled).
+- Support for multiple AWS profiles in a single configuration file.
+- Cross-platform input timeout feature with configurable login timeout (default: disabled).
+- System-wide installation instructions for multi-user environments.
 - Monthly Docker image rebuild to keep base layers current (fixes #164).
 
 ### Tokendito 2.4.0
