@@ -13,6 +13,7 @@
 - [Configuration file location](#configuration-file-location)
 - [AWS Roles Discovery](#aws-roles-discovery)
 - [Supported MFA methods](#supported-mfa-methods)
+- [Installation](#installation)
 - [Upgrading](#upgrading)
 - [Installing from GitHub](#installing-from-github)
 - [Troubleshooting](#troubleshooting)
@@ -183,9 +184,47 @@ Tokendito will discover all your available AWS Roles configured in Okta, returni
 - Google Authenticator TOTP
 - Duo Push, phone call, SMS, and TOTP
 
+## Installation
+
+### Standard Installation
+
+```bash
+pip install tokendito
+```
+
+### System-wide Installation (Multiple Users)
+
+For enterprise Linux systems (RHEL, Amazon Linux, CentOS, etc.), use a shared virtual environment:
+
+```bash
+# Create and set up the virtual environment
+sudo python3 -m venv /opt/tokendito
+sudo /opt/tokendito/bin/pip install tokendito
+
+# Make it accessible to all users
+sudo chmod -R a+rX /opt/tokendito
+sudo ln -s /opt/tokendito/bin/tokendito /usr/bin/tokendito
+
+# Verify installation
+tokendito --version
+```
+
+**Note:** The system-wide installation approach using a virtual environment ensures:
+- All users can access tokendito
+- No conflicts with system Python packages
+- Clean upgrades and dependency management
+- Works reliably across different Linux distributions
+
 ## Upgrading
 
-`pip install --upgrade tokendito`
+```bash
+pip install --upgrade tokendito
+```
+
+For system-wide venv-based installations:
+```bash
+sudo /opt/tokendito/bin/pip install --upgrade tokendito
+```
 
 ## Installing from GitHub
 
