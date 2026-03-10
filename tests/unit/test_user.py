@@ -982,9 +982,7 @@ def test_get_input_with_timeout_dispatches_unix(mocker):
 
     mocker.patch("tokendito.user.tty_assertion", return_value=True)
     mocker.patch("platform.system", return_value="Linux")
-    mock_unix = mocker.patch(
-        "tokendito.user._get_input_timeout_unix", return_value="unix_input"
-    )
+    mock_unix = mocker.patch("tokendito.user._get_input_timeout_unix", return_value="unix_input")
     result = user.get_input_with_timeout(prompt="test: ", timeout=10)
     mock_unix.assert_called_once_with("test: ", 10)
     assert result == "unix_input"
@@ -996,9 +994,7 @@ def test_get_input_with_timeout_dispatches_windows(mocker):
 
     mocker.patch("tokendito.user.tty_assertion", return_value=True)
     mocker.patch("platform.system", return_value="Windows")
-    mock_win = mocker.patch(
-        "tokendito.user._get_input_timeout_windows", return_value="win_input"
-    )
+    mock_win = mocker.patch("tokendito.user._get_input_timeout_windows", return_value="win_input")
     result = user.get_input_with_timeout(prompt="test: ", timeout=10)
     mock_win.assert_called_once_with("test: ", 10)
     assert result == "win_input"
@@ -1120,9 +1116,7 @@ def test_get_secret_input_with_timeout_dispatches_unix(mocker):
 
     mocker.patch("tokendito.user.tty_assertion", return_value=True)
     mocker.patch("platform.system", return_value="Linux")
-    mock_unix = mocker.patch(
-        "tokendito.user._get_secret_input_timeout_unix", return_value="secret"
-    )
+    mock_unix = mocker.patch("tokendito.user._get_secret_input_timeout_unix", return_value="secret")
     result = user.get_secret_input_with_timeout("Password: ", 10)
     mock_unix.assert_called_once_with("Password: ", 10)
     assert result == "secret"
