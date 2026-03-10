@@ -30,9 +30,10 @@ See [Releases](https://github.com/dowjones/tokendito/releases) for a detailed Ch
 
 ### Tokendito 2.5.0
 
-Version 2.5.0 of Tokendito introduces the following new features:
+Version 2.5.0 of Tokendito introduces the following changes:
 
 - Cross-platform input timeout feature with configurable timeout (default: disabled).
+- Monthly Docker image rebuild to keep base layers current (fixes #164).
 
 ### Tokendito 2.4.0
 
