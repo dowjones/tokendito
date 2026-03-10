@@ -33,7 +33,7 @@ class Config(object):
             use_device_token=False,
             mask_items=[],
             quiet=False,
-            login_timeout=60,
+            login_timeout=0,
         ),
         aws=dict(
             config_file=os.path.join(expanduser("~"), ".aws", "config"),

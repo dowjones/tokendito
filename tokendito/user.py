@@ -15,8 +15,25 @@ from pathlib import Path
 from pkgutil import iter_modules
 import platform
 import re
+import signal
 import sys
+import time
 from urllib.parse import urlparse
+
+# Unix-specific imports (will be handled with try/except in functions)
+try:
+    import fcntl
+    import select
+    import termios
+    import tty
+except ImportError:
+    pass
+
+# Windows-specific imports (will be handled with try/except in functions)
+try:
+    import msvcrt
+except ImportError:
+    pass
 
 from botocore import __version__ as __botocore_version__
 from bs4 import __version__ as __bs4_version__  # type: ignore (bs4 does not have PEP 561 support)
@@ -29,16 +46,9 @@ from tokendito.config import Config
 from tokendito.config import config
 from tokendito.http_client import HTTP_client
 
-# Unfortunately, readline is only available in non-Windows systems. There is no substitution.
-try:
-    import readline  # noqa: F401
-except ModuleNotFoundError:
-    pass
-
 logger = logging.getLogger(__name__)
 
-mask_items = []
-
+mask_items = [] # Holds values to mask
 
 def cmd_interface(args):
     """Tokendito retrieves AWS credentials after authenticating with Okta."""
@@ -85,6 +95,9 @@ def process_args(args, skip_auth=False):
         quiet_msg = ""
         if config.user["quiet"] is not False:
             quiet_msg = " to run in quiet mode"
+        # Ensure stderr starts at beginning of line
+        sys.stderr.write('\r')
+        sys.stderr.flush()
         logger.error(
             f"Could not validate configuration{quiet_msg}: {'. '.join(message)}. "
             "Please check your settings, and try again."
@@ -275,11 +288,12 @@ def parse_cli_args(args):
         help="Suppress output",
     )
     parser.add_argument(
-        "--timeout",
+        "--login-timeout",
         dest="user_login_timeout",
         type=int,
-        default=10,
-        help="Login timeout in seconds (default: 10, 0 to disable timeout)",
+        default=0,
+        help="Login timeout in seconds (default: 0, which is disabled). "
+        "You can also use the TOKENDITO_USER_LOGIN_TIMEOUT environment variable.",
     )
 
     parsed_args = parser.parse_args(args)
@@ -707,7 +721,10 @@ def add_sensitive_value_to_be_masked(value, key=None):
     """If a key is passed only add it if the key refers to a secret element."""
     sensitive_keys = ("password", "mfa_response", "sessionToken")
     if key is None or key in sensitive_keys:
-        mask_items.append(value)
+        # Only mask non-empty values that are longer than 1 character to prevent
+        # masking common single characters that appear in log messages
+        if value and isinstance(value, str) and len(value) > 1:
+            mask_items.append(value)
 
 
 def _read_ini(file, profile, default_section):
@@ -808,8 +825,17 @@ def process_environment(prefix="tokendito"):
             if match.group(2) not in res:
                 res[match.group(2)] = dict()
             if val:
-                res[match.group(2)][match.group(3)] = val
-                add_sensitive_value_to_be_masked(val, match.group(3))
+                # Convert to appropriate type based on the parameter
+                param_name = match.group(3)
+                if param_name == 'login_timeout':
+                    try:
+                        val = int(val)
+                    except ValueError:
+                        logger.warning(f"Invalid value for {key}: {val}. Must be an integer.")
+                        continue
+                
+                res[match.group(2)][param_name] = val
+                add_sensitive_value_to_be_masked(val, param_name)
     logger.debug(f"Found environment variables: {res}")
 
     if not res:
@@ -837,7 +863,7 @@ def _build_interactive_config(details, skip_password):
 
     if ("password" not in config.okta or config.okta["password"] == "") and not skip_password:
         logger.debug("No password set, will try to get one interactively")
-        res["okta"]["password"] = get_secret_input()
+        res["okta"]["password"] = get_secret_input("Password: ")
         add_sensitive_value_to_be_masked(res["okta"]["password"])
 
     logger.debug(f"Interactive configuration is: {res}")
@@ -936,7 +962,7 @@ def get_org():
         if validate_okta_org(user_data):
             res = user_data
         else:
-            print("Invalid input, try again.")
+            builtins.print("Invalid input, try again.")
     logger.debug(f"Org URL is: {res}")
     return res
 
@@ -954,7 +980,7 @@ def get_tile():
     while res == "":
         user_data = get_input(prompt=message)
         
-        # Handle empty input (no timeout for this function)
+        # Handle empty input
         if user_data is None:
             continue
                 
@@ -966,7 +992,7 @@ def get_tile():
         if validate_okta_tile(user_data):
             res = user_data
         else:
-            print("Invalid input, try again.")
+            builtins.print("Invalid input, try again.")
     logger.debug(f"App URL is: {res}")
     return res
 
@@ -986,6 +1012,9 @@ def get_username():
         # Handle timeout case for login
         if user_data is None:
             if timeout > 0:
+                # Ensure stderr starts at beginning of line
+                sys.stderr.write('\r')
+                sys.stderr.flush()
                 logger.error("Login timeout occurred while getting username")
                 sys.exit(1)
             else:
@@ -995,7 +1024,7 @@ def get_username():
         if user_data != "":
             res = user_data
         else:
-            print("Invalid input, try again.")
+            builtins.print("Invalid input, try again.")
     logger.debug(f"Username is {res}")
     return res
 
@@ -1009,21 +1038,15 @@ def get_secret_input(message=None):
     timeout = config.user.get("login_timeout", 0)
     
     if timeout <= 0:
-        # No timeout, use original implementation
-        secret = ""
-        logger.debug("get_secret_value")
-
+        # No timeout, use regular getpass (no character display)
+        if message is None:
+            message = "Password: "
+        
         tty_assertion()
-        while secret == "":
-            if message is None:
-                password = getpass()
-            else:
-                password = getpass(message)
-            secret = password
-            logger.debug("secret value set interactively")
-        return secret
+        
+        return getpass(message)
     else:
-        # Use timeout implementation
+        # Use timeout implementation with no character display
         return get_secret_input_with_timeout(message, timeout)
 
 
@@ -1049,7 +1072,7 @@ def get_interactive_profile_name(default):
         if re.fullmatch("[a-zA-Z][a-zA-Z0-9_-]*", user_data):
             res = user_data
         else:
-            print("Invalid input, try again.")
+            builtins.print("Invalid input, try again.")
     logger.debug(f"Profile name is: {res}")
     return res
 
@@ -1451,6 +1474,8 @@ def discover_tiles(url):
 def get_input_with_timeout(prompt="-> ", timeout=0):
     """Collect user input with optional timeout.
 
+    Timeout only applies to the first character input.
+
     :param prompt: optional string with prompt.
     :param timeout: timeout in seconds, 0 means no timeout.
     :return user_input: raw from user or None if timeout.
@@ -1471,10 +1496,7 @@ def get_input_with_timeout(prompt="-> ", timeout=0):
 
 
 def _get_input_timeout_unix(prompt, timeout):
-    """Unix/Linux timeout input implementation - timeout only until first character."""
-    import select
-    import termios
-    import tty
+    """Unix/Linux timeout input implementation."""
     
     sys.stdout.write(prompt)
     sys.stdout.flush()
@@ -1495,44 +1517,91 @@ def _get_input_timeout_unix(prompt, timeout):
         tty.setraw(fd)
         
         user_input = ""
-        first_char = True
+        start_time = time.time()
         
         while True:
-            if first_char:
-                # Apply timeout only for the first character
-                ready, _, _ = select.select([sys.stdin], [], [], timeout)
-                if not ready:
-                    builtins.print(f"\r\nTimeout after {timeout} seconds")
-                    logger.debug(f"Login timeout after {timeout} seconds")
-                    return None
-                first_char = False
-            else:
-                # After first character, wait indefinitely
-                ready, _, _ = select.select([sys.stdin], [], [], None)
+            # Check for timeout on every iteration
+            if time.time() - start_time > timeout:
+                sys.stdout.write('\r\n')  # Move to next line first
+                sys.stdout.flush()
+                sys.stdout.write(f"Timeout after {timeout} seconds\r\n")
+                sys.stdout.flush()
+                logger.debug(f"Login timeout after {timeout} seconds")
+                return None
+            
+            # Check for input with a short timeout to allow for timeout checking
+            ready, _, _ = select.select([sys.stdin], [], [], 0.1)
             
             if ready:
-                char = sys.stdin.read(1)
-                if char in ['\n', '\r']:
-                    # End of input
-                    break
-                elif char == '\x03':  # Ctrl+C
-                    raise KeyboardInterrupt
-                elif char in ['\x7f', '\x08']:  # Backspace
-                    if user_input:
-                        user_input = user_input[:-1]
-                        sys.stdout.write('\b \b')
+                # Try to read multiple characters at once to handle paste better
+                try:
+                    # Use os.read to potentially get multiple characters
+                    # Set non-blocking mode temporarily
+                    flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+                    fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+                    
+                    try:
+                        # Try to read up to 1024 characters
+                        data = os.read(fd, 1024).decode('utf-8', errors='ignore')
+                    except BlockingIOError:
+                        # No data available, continue
+                        data = ""
+                    finally:
+                        # Restore blocking mode
+                        fcntl.fcntl(fd, fcntl.F_SETFL, flags)
+                    
+                    if data:
+                        for char in data:
+                            if char in ['\n', '\r']:
+                                # End of input - ensure we always move to next line
+                                # Force move to start of next line regardless of which char we got
+                                sys.stdout.write('\r\n')
+                                sys.stdout.flush()
+                                logger.debug(f"User input: {user_input}")
+                                return user_input
+                            elif char == '\x03':  # Ctrl+C
+                                raise KeyboardInterrupt
+                            elif char in ['\x7f', '\x08']:  # Backspace
+                                if user_input:
+                                    user_input = user_input[:-1]
+                                    sys.stdout.write('\b \b')
+                                    sys.stdout.flush()
+                            else:
+                                user_input += char
+                                sys.stdout.write(char)
+                                sys.stdout.flush()
+                        
+                except (ImportError, OSError):
+                    # Fallback to single character reading if fcntl is not available
+                    char = sys.stdin.read(1)
+                    if char in ['\n', '\r']:
+                        # End of input - handle both newline and carriage return
+                        # Force move to start of next line regardless of which char we got
+                        sys.stdout.write('\r\n')
                         sys.stdout.flush()
-                else:
-                    user_input += char
-                    sys.stdout.write(char)
-                    sys.stdout.flush()
+                        break
+                    elif char == '\x03':  # Ctrl+C
+                        raise KeyboardInterrupt
+                    elif char in ['\x7f', '\x08']:  # Backspace
+                        if user_input:
+                            user_input = user_input[:-1]
+                            sys.stdout.write('\b \b')
+                            sys.stdout.flush()
+                    else:
+                        user_input += char
+                        sys.stdout.write(char)
+                        sys.stdout.flush()
         
-        builtins.print()  # New line
+        sys.stdout.write('\r\n')  # Force move to start of next line
+        sys.stdout.flush()
         logger.debug(f"User input: {user_input}")
         return user_input
         
     except (KeyboardInterrupt, EOFError):
-        builtins.print("\nInput cancelled")
+        sys.stdout.write('\r\n')  # Move to next line first
+        sys.stdout.flush()
+        sys.stdout.write("Input cancelled\r\n")
+        sys.stdout.flush()
         return None
     finally:
         # Restore terminal settings
@@ -1540,58 +1609,65 @@ def _get_input_timeout_unix(prompt, timeout):
 
 
 def _get_input_timeout_windows(prompt, timeout):
-    """Windows timeout input implementation - timeout only until first character."""
+    """Windows timeout input implementation."""
     try:
-        import msvcrt
-    except ImportError:
+        # Test if msvcrt is available
+        msvcrt.getch
+    except (ImportError, NameError):
         # Fallback to regular input if msvcrt is not available (e.g., in tests)
         tty_assertion()
         user_input = input(prompt)
         return user_input.strip()
     
-    import time
-    
     sys.stdout.write(prompt)
     sys.stdout.flush()
     
     user_input = ""
-    first_char = True
     start_time = time.time()
     
     while True:
-        if first_char and time.time() - start_time > timeout:
-            # Timeout on first character
-            builtins.print(f"\r\nTimeout after {timeout} seconds")
+        # Check for timeout
+        if time.time() - start_time > timeout:
+            sys.stdout.write('\r\n')  # Move to next line first
+            sys.stdout.flush()
+            sys.stdout.write(f"Timeout after {timeout} seconds\r\n")
+            sys.stdout.flush()
             logger.debug(f"Login timeout after {timeout} seconds")
             return None
         
         if msvcrt.kbhit():
-            char = msvcrt.getch()
+            # Process all available characters to handle paste operations
+            while msvcrt.kbhit():
+                char = msvcrt.getch()
+                
+                if char in [b'\r', b'\n']:
+                    # End of input - exit both loops
+                    break
+                elif char == b'\x03':  # Ctrl+C
+                    raise KeyboardInterrupt
+                elif char in [b'\x08', b'\x7f']:  # Backspace
+                    if user_input:
+                        user_input = user_input[:-1]
+                        sys.stdout.write('\b \b')
+                        sys.stdout.flush()
+                else:
+                    try:
+                        char_str = char.decode('utf-8', errors='ignore')
+                        user_input += char_str
+                        sys.stdout.write(char_str)
+                        sys.stdout.flush()
+                    except UnicodeDecodeError:
+                        continue
             
+            # If we broke out due to newline, exit the main loop
             if char in [b'\r', b'\n']:
-                # End of input
                 break
-            elif char == b'\x03':  # Ctrl+C
-                raise KeyboardInterrupt
-            elif char in [b'\x08', b'\x7f']:  # Backspace
-                if user_input:
-                    user_input = user_input[:-1]
-                    sys.stdout.write('\b \b')
-                    sys.stdout.flush()
-            else:
-                try:
-                    char_str = char.decode('utf-8', errors='ignore')
-                    user_input += char_str
-                    sys.stdout.write(char_str)
-                    sys.stdout.flush()
-                    first_char = False  # Disable timeout after first character
-                except UnicodeDecodeError:
-                    continue
         else:
             # Small delay to prevent busy waiting
             time.sleep(0.01)
     
-    print()  # New line
+    sys.stdout.write('\r\n')  # Force move to start of next line
+    sys.stdout.flush()
     logger.debug(f"User input: {user_input}")
     return user_input
 
@@ -1603,25 +1679,10 @@ def get_secret_input_with_timeout(message=None, timeout=0):
     :param timeout: timeout in seconds, 0 means no timeout.
     :return: secret or None if timeout
     """
-    if timeout <= 0:
-        # No timeout, use original getpass implementation
-        secret = ""
-        logger.debug("get_secret_value")
-
-        tty_assertion()
-        while secret == "":
-            if message is None:
-                password = getpass()
-            else:
-                password = getpass(message)
-            secret = password
-            logger.debug("secret value set interactively")
-        return secret
-
     tty_assertion()
     
-    # For secret input with timeout, we need a different approach
-    # since getpass() doesn't support timeout directly
+    # Use our custom implementation for both timeout and non-timeout cases
+    # for consistent * character display behavior
     if platform.system() == "Windows":
         return _get_secret_input_timeout_windows(message, timeout)
     else:
@@ -1643,9 +1704,6 @@ def _unix_read_password_char():
 
 def _get_secret_input_timeout_unix(message, timeout):
     """Unix/Linux secret input with timeout."""
-    import signal
-    import termios
-    import tty
     
     if message is None:
         message = "Password: "
@@ -1670,12 +1728,12 @@ def _get_secret_input_timeout_unix(message, timeout):
         # Set terminal to raw mode for password input
         tty.setraw(fd)
         
-        # Set up timeout signal
-        signal.signal(signal.SIGALRM, timeout_handler)
-        signal.alarm(timeout)
+        # Set up timeout signal only if timeout > 0
+        if timeout > 0:
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(timeout)
         
         password = ""
-        first_char = True
         while True:
             char = _unix_read_password_char()
             if char is None:  # End of input
@@ -1683,47 +1741,47 @@ def _get_secret_input_timeout_unix(message, timeout):
             elif char == '\b':  # Backspace
                 if password:
                     password = password[:-1]
-                    sys.stdout.write('\b \b')
-                    sys.stdout.flush()
+                    # Don't show visual feedback for backspace
             else:
-                if first_char:
-                    # Cancel timeout after first character
-                    signal.alarm(0)
-                    first_char = False
                 password += char
-                sys.stdout.write('*')
-                sys.stdout.flush()
+                # Don't show any visual feedback for characters
         
-        signal.alarm(0)  # Cancel timeout (in case no characters were entered)
-        print()  # New line after password input
+        signal.alarm(0) if timeout > 0 else None  # Cancel timeout only if it was set
+        sys.stdout.write('\r\n')  # Force move to start of next line
+        sys.stdout.flush()
         logger.debug("Secret value set interactively with timeout")
         return password
         
     except TimeoutError:
-        builtins.print(f"\r\nTimeout after {timeout} seconds")
+        sys.stdout.write('\r\n')  # Move to next line first
+        sys.stdout.flush()
+        sys.stdout.write(f"Timeout after {timeout} seconds\r\n")
+        sys.stdout.flush()
         logger.debug(f"Secret input timeout after {timeout} seconds")
         return None
     except (KeyboardInterrupt, EOFError):
-        builtins.print("\nInput cancelled")
+        sys.stdout.write('\r\n')  # Move to next line first
+        sys.stdout.flush()
+        sys.stdout.write("Input cancelled\r\n")
+        sys.stdout.flush()
         logger.debug("Secret input cancelled by user")
         return None
     finally:
-        signal.alarm(0)  # Ensure alarm is cancelled
+        signal.alarm(0) if timeout > 0 else None  # Ensure alarm is cancelled only if it was set
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
 
 def _get_secret_input_timeout_windows(message, timeout):
-    """Windows secret input with timeout - timeout only until first character."""
+    """Windows secret input with timeout."""
     try:
-        import msvcrt
-    except ImportError:
+        # Test if msvcrt is available
+        msvcrt.getch
+    except (ImportError, NameError):
         # Fallback to regular getpass if msvcrt is not available (e.g., in tests)
         import getpass
         if message is None:
             message = "Password: "
         return getpass.getpass(message)
-    
-    import time
     
     if message is None:
         message = "Password: "
@@ -1732,14 +1790,16 @@ def _get_secret_input_timeout_windows(message, timeout):
     sys.stdout.flush()
     
     password = ""
-    first_char = True
     start_time = time.time()
     
     try:
         while True:
-            if first_char and time.time() - start_time > timeout:
-                # Timeout on first character
-                builtins.print(f"\r\nTimeout after {timeout} seconds")
+            # Check for timeout only if timeout > 0
+            if timeout > 0 and time.time() - start_time > timeout:
+                sys.stdout.write('\r\n')  # Move to next line first
+                sys.stdout.flush()
+                sys.stdout.write(f"Timeout after {timeout} seconds\r\n")
+                sys.stdout.flush()
                 logger.debug(f"Secret input timeout after {timeout} seconds")
                 return None
             
@@ -1752,22 +1812,23 @@ def _get_secret_input_timeout_windows(message, timeout):
                 elif char in [b'\x08', b'\x7f']:  # Backspace
                     if password:
                         password = password[:-1]
-                        sys.stdout.write('\b \b')
-                        sys.stdout.flush()
+                        # Don't show visual feedback for backspace
                 else:
                     password += char.decode('utf-8', errors='ignore')
-                    sys.stdout.write('*')
-                    sys.stdout.flush()
-                    first_char = False  # Disable timeout after first character
+                    # Don't show any visual feedback for characters
             else:
                 # Small delay to prevent busy waiting
                 time.sleep(0.01)
         
-        print()  # New line after password input
+        sys.stdout.write('\r\n')  # Force move to start of next line
+        sys.stdout.flush()
         logger.debug("Secret value set interactively with timeout")
         return password
         
     except (KeyboardInterrupt, EOFError):
-        builtins.print("\nInput cancelled")
+        sys.stdout.write('\r\n')  # Move to next line first
+        sys.stdout.flush()
+        sys.stdout.write("Input cancelled\r\n")
+        sys.stdout.flush()
         logger.debug("Secret input cancelled by user")
         return None

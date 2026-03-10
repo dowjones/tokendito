@@ -28,12 +28,17 @@ tokens into your local `~/.aws/credentials` file.
 
 See [Releases](https://github.com/dowjones/tokendito/releases) for a detailed Changelog.
 
+### Tokendito 2.5.0
+
+Version 2.5.0 of Tokendito introduces the following new features:
+
+- Cross-platform input timeout feature with configurable timeout (default: disabled).
+
 ### Tokendito 2.4.0
 
 Version 2.4.0 of Tokendito introduces the following new features:
 
 - Add support for Okta question MFA.
-- Cross-platform input timeout feature with configurable timeout (default 60 seconds).
 - Many bug fixes and contributions.
 
 ### Tokendito 2.3.0
