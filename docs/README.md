@@ -6,6 +6,7 @@
   - [Default usage](#default-usage)
   - [Multi-tile-Guide](#multi-tile-guide)
   - [Single-command usage](#single-command-usage)
+  - [Listing current configuration](#listing-current-configuration)
   - [Additional command line reference](#additional-command-line-reference)
 - [Environment variables and user configuration](#environment-variables-and-user-configuration)
   - [Precedence](#precedence)
@@ -71,6 +72,40 @@ And execute:
 tokendito --profile engineer
 ```
 
+### Listing current configuration
+
+To view your current configuration values and where they are set from, use:
+
+``` txt
+tokendito --configure list
+```
+
+This displays a table showing each setting's name, current value, source type (default, ini-file, or env-var), and location:
+
+``` txt
+                        Name    Value                             Source          Location
+                        ----    -----                             ------          --------
+  [user]
+                  config_dir    /Users/you/.config/tokendito      default
+                 config_file    /Users/you/.config/tokendito...   default
+              config_profile    default                           default
+               login_timeout    0                                 default
+                    loglevel    INFO                              default
+  [aws]
+                     profile    <not set>                         default
+                      region    us-east-1                         default
+  [okta]
+                    username    jane.doe@acme.com                 ini-file        /Users/you/.config/tokendito/tokendito.ini
+                    password    ****                              ini-file        /Users/you/.config/tokendito/tokendito.ini
+                         org    https://acme.okta.com             env-var         TOKENDITO_OKTA_ORG
+```
+
+You can combine it with `--profile` to inspect a specific profile:
+
+``` txt
+tokendito --profile engineer --configure list
+```
+
 ### Additional command line reference
 
 ``` txt
@@ -85,7 +120,8 @@ Gets an STS token to use with the AWS CLI and SDK.
 options:
   -h, --help            show this help message and exit.
   --version             Displays version and exit.
-  --configure           Prompt user for configuration parameters.
+  --configure [list]    Prompt user for configuration parameters.
+                        Use '--configure list' to display current settings and their sources.
   --username OKTA_USERNAME
                         username to log in to Okta. You can also use the TOKENDITO_OKTA_USERNAME environment variable.
   --password OKTA_PASSWORD

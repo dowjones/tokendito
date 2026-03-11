@@ -1269,3 +1269,279 @@ def test_multiple_profiles(mocker):
     assert patched.call_args_list[0].args[1] is False
     assert patched.call_args_list[1].args[1] is True
     assert patched.call_args_list[2].args[1] is True
+
+
+def test_configure_list_arg_parsing():
+    """Test that --configure list is parsed correctly."""
+    from tokendito import user
+
+    # No --configure
+    args = user.parse_cli_args([])
+    assert args.configure is False
+
+    # --configure (no subcommand, backward compat)
+    args = user.parse_cli_args(["--configure"])
+    assert args.configure is True
+
+    # --configure list
+    args = user.parse_cli_args(["--configure", "list"])
+    assert args.configure == "list"
+
+
+def test_configure_list_invalid_option(mocker):
+    """Test that --configure with invalid option exits with error."""
+    from tokendito import user
+
+    mocker.patch("tokendito.user.logger")
+    args = user.parse_cli_args(["--configure", "invalid"])
+    with pytest.raises(SystemExit) as exc_info:
+        user._handle_configure_subcommand(args)
+    assert exc_info.value.code == 1
+
+
+def test_get_value_source_env_var():
+    """Test _get_value_source returns env-var when set in environment config."""
+    from tokendito.config import Config
+    from tokendito.user import _get_value_source
+
+    config_env = Config(okta={"username": "testuser"})
+    source, location = _get_value_source(
+        "okta", "username", None, config_env, "/path/to/ini"
+    )
+    assert source == "env-var"
+    assert location == "TOKENDITO_OKTA_USERNAME"
+
+
+def test_get_value_source_ini_file():
+    """Test _get_value_source returns ini-file when set in INI config."""
+    from tokendito.config import Config
+    from tokendito.user import _get_value_source
+
+    config_ini = Config(okta={"org": "https://acme.okta.com"})
+    source, location = _get_value_source(
+        "okta", "org", config_ini, None, "/path/to/tokendito.ini"
+    )
+    assert source == "ini-file"
+    assert location == "/path/to/tokendito.ini"
+
+
+def test_get_value_source_default():
+    """Test _get_value_source returns default when not set anywhere."""
+    from tokendito.user import _get_value_source
+
+    source, location = _get_value_source(
+        "aws", "region", None, None, "/path/to/ini"
+    )
+    assert source == "default"
+    assert location == ""
+
+
+def test_get_value_source_env_overrides_ini():
+    """Test that env-var takes priority over ini-file."""
+    from tokendito.config import Config
+    from tokendito.user import _get_value_source
+
+    config_ini = Config(okta={"username": "ini-user"})
+    config_env = Config(okta={"username": "env-user"})
+    source, location = _get_value_source(
+        "okta", "username", config_ini, config_env, "/path/to/ini"
+    )
+    assert source == "env-var"
+    assert location == "TOKENDITO_OKTA_USERNAME"
+
+
+def test_resolve_profile_cli_over_env(monkeypatch):
+    """Test that CLI --profile takes precedence over env var."""
+    import argparse
+
+    from tokendito.user import _resolve_profile
+
+    monkeypatch.setenv("TOKENDITO_USER_CONFIG_PROFILE", "env-profile")
+    args = argparse.Namespace(user_config_profile="cli-profile")
+    assert _resolve_profile(args) == "cli-profile"
+
+
+def test_resolve_profile_env_over_default(monkeypatch):
+    """Test that env var overrides the default profile."""
+    import argparse
+
+    from tokendito.user import _resolve_profile
+
+    monkeypatch.setenv("TOKENDITO_USER_CONFIG_PROFILE", "env-profile")
+    args = argparse.Namespace(user_config_profile="default")
+    assert _resolve_profile(args) == "env-profile"
+
+
+def test_resolve_profile_default(monkeypatch):
+    """Test that default profile is returned when no overrides."""
+    import argparse
+
+    from tokendito.user import _resolve_profile
+
+    monkeypatch.delenv("TOKENDITO_USER_CONFIG_PROFILE", raising=False)
+    args = argparse.Namespace(user_config_profile="default")
+    assert _resolve_profile(args) == "default"
+
+
+def test_format_value_masks_password():
+    """Test that sensitive keys are masked."""
+    from tokendito.user import _format_value
+
+    assert _format_value("password", "secret123", {"password"}) == "****"
+    assert _format_value("device_token", "tok123", {"device_token"}) == "****"
+
+
+def test_format_value_not_set():
+    """Test display of empty/None values."""
+    from tokendito.user import _format_value
+
+    assert _format_value("username", "", set()) == "<not set>"
+    assert _format_value("tile", None, set()) == "<not set>"
+    assert _format_value("mask_items", [], set()) == "<not set>"
+
+
+def test_format_value_boolean():
+    """Test boolean display."""
+    from tokendito.user import _format_value
+
+    assert _format_value("quiet", False, set()) == "false"
+    assert _format_value("use_device_token", True, set()) == "true"
+
+
+def test_format_value_normal():
+    """Test normal value display."""
+    from tokendito.user import _format_value
+
+    assert _format_value("region", "us-east-1", set()) == "us-east-1"
+    assert _format_value("login_timeout", 0, set()) == "0"
+
+
+def test_configure_list_output(capsys, mocker, tmpdir):
+    """Test configure_list produces formatted table output."""
+    import argparse
+
+    from tokendito import user
+
+    mocker.patch(
+        "tokendito.user._safe_load_ini", return_value=None
+    )
+    mocker.patch(
+        "tokendito.user.process_environment", return_value=None
+    )
+
+    args = argparse.Namespace(
+        user_config_file=str(tmpdir.join("tokendito.ini")),
+        user_config_profile="default",
+    )
+
+    user.configure_list(args)
+
+    captured = capsys.readouterr()
+    assert "Name" in captured.out
+    assert "Value" in captured.out
+    assert "Source" in captured.out
+    assert "Location" in captured.out
+    assert "[user]" in captured.out
+    assert "[aws]" in captured.out
+    assert "[okta]" in captured.out
+    assert "default" in captured.out
+
+
+def test_configure_list_with_ini(capsys, mocker, tmpdir):
+    """Test configure_list shows ini-file source for INI values."""
+    import argparse
+
+    from tokendito.config import Config
+    from tokendito import user
+
+    ini_path = str(tmpdir.join("tokendito.ini"))
+    ini_config = Config(okta={"org": "https://acme.okta.com"})
+    mocker.patch(
+        "tokendito.user._safe_load_ini", return_value=ini_config
+    )
+    mocker.patch(
+        "tokendito.user.process_environment", return_value=None
+    )
+
+    args = argparse.Namespace(
+        user_config_file=ini_path,
+        user_config_profile="default",
+    )
+
+    user.configure_list(args)
+
+    captured = capsys.readouterr()
+    assert "ini-file" in captured.out
+    assert ini_path in captured.out
+    assert "https://acme.okta.com" in captured.out
+
+
+def test_configure_list_with_env(capsys, mocker, tmpdir):
+    """Test configure_list shows env-var source for env values."""
+    import argparse
+
+    from tokendito.config import Config
+    from tokendito import user
+
+    env_config = Config(
+        okta={"username": "envuser@example.com"}
+    )
+    mocker.patch(
+        "tokendito.user._safe_load_ini", return_value=None
+    )
+    mocker.patch(
+        "tokendito.user.process_environment", return_value=env_config
+    )
+
+    args = argparse.Namespace(
+        user_config_file=str(tmpdir.join("tokendito.ini")),
+        user_config_profile="default",
+    )
+
+    user.configure_list(args)
+
+    captured = capsys.readouterr()
+    assert "env-var" in captured.out
+    assert "TOKENDITO_OKTA_USERNAME" in captured.out
+    assert "envuser@example.com" in captured.out
+
+
+def test_configure_list_masks_password(capsys, mocker, tmpdir):
+    """Test configure_list masks sensitive values."""
+    import argparse
+
+    from tokendito.config import Config
+    from tokendito import user
+
+    env_config = Config(okta={"password": "supersecret"})
+    mocker.patch(
+        "tokendito.user._safe_load_ini", return_value=None
+    )
+    mocker.patch(
+        "tokendito.user.process_environment", return_value=env_config
+    )
+
+    args = argparse.Namespace(
+        user_config_file=str(tmpdir.join("tokendito.ini")),
+        user_config_profile="default",
+    )
+
+    user.configure_list(args)
+
+    captured = capsys.readouterr()
+    assert "supersecret" not in captured.out
+    assert "****" in captured.out
+
+
+def test_configure_list_process_options_dispatch(mocker):
+    """Test that process_options dispatches to configure_list."""
+    from tokendito import user
+
+    mock_list = mocker.patch("tokendito.user.configure_list")
+    args = user.parse_cli_args(["--configure", "list"])
+
+    with pytest.raises(SystemExit):
+        user._handle_configure_subcommand(args)
+
+    # configure_list was called before sys.exit
+    mock_list.assert_called_once_with(args)

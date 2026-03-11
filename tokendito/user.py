@@ -186,8 +186,11 @@ def parse_cli_args(args):
     parser.add_argument("--version", action="store_true", help="Displays version and exit")
     parser.add_argument(
         "--configure",
-        action="store_true",
-        help="Prompt user for configuration parameters",
+        nargs="?",
+        const=True,
+        default=False,
+        help="Prompt user for configuration parameters. "
+        "Use '--configure list' to display current settings and their sources.",
     )
     parser.add_argument(
         "--username",
@@ -1313,12 +1316,149 @@ def collect_integer(valid_range=0):
     return user_input
 
 
-def process_options(args):
-    """Collect all user-specific credentials and config params."""
-    if args.version:
-        display_version()
-        sys.exit(0)
+def _get_value_source(section, key, config_ini, config_env, ini_file):
+    """Determine the source of a configuration value.
 
+    Check in reverse priority order to find the highest-priority source
+    that set the value.
+
+    :param section: config section name (user, aws, okta).
+    :param key: config key name.
+    :param config_ini: Config object from INI file, or None.
+    :param config_env: Config object from environment, or None.
+    :param ini_file: path to the INI file.
+    :returns: tuple of (source_type, location).
+    """
+    if config_env and key in getattr(config_env, section, {}):
+        env_name = f"TOKENDITO_{section}_{key}".upper()
+        return ("env-var", env_name)
+
+    if config_ini and key in getattr(config_ini, section, {}):
+        return ("ini-file", ini_file)
+
+    return ("default", "")
+
+
+def _format_value(key, value, sensitive_keys):
+    """Format a configuration value for display.
+
+    :param key: config key name.
+    :param value: the config value.
+    :param sensitive_keys: set of key names to mask.
+    :returns: formatted display string.
+    """
+    if key in sensitive_keys and value:
+        return "****"
+    if value is None or value == "" or value == []:
+        return "<not set>"
+    if isinstance(value, bool):
+        return str(value).lower()
+    return str(value)
+
+
+def _safe_load_ini(file, profile):
+    """Load INI file without exiting if the profile is missing.
+
+    :param file: path to the INI file.
+    :param profile: profile section to read.
+    :returns: Config object or None if profile not found.
+    """
+    try:
+        ini = configparser.RawConfigParser()
+        ini.read(file)
+        if ini.has_section(profile):
+            return process_ini_file(file, profile)
+    except configparser.Error:
+        pass
+    return None
+
+
+def _resolve_profile(args):
+    """Resolve the active profile from CLI args or environment.
+
+    CLI args take precedence over env vars per documented precedence.
+
+    :param args: argparse namespace.
+    :returns: profile name string.
+    """
+    default_profile = config.get_defaults()["user"]["config_profile"]
+    if args.user_config_profile != default_profile:
+        return args.user_config_profile
+    env_profile = os.environ.get("TOKENDITO_USER_CONFIG_PROFILE")
+    if env_profile:
+        return env_profile
+    return args.user_config_profile
+
+
+def configure_list(args):
+    """Display current configuration values and their sources."""
+    profile = _resolve_profile(args)
+
+    config_ini = _safe_load_ini(args.user_config_file, profile)
+    config_env = process_environment()
+
+    merged = Config()
+    if config_ini:
+        merged.update(config_ini)
+    if config_env:
+        merged.update(config_env)
+
+    sensitive_keys = {"password", "device_token"}
+    skip_keys = {"mask_items"}
+
+    builtins.print(
+        f"{'Name':>28s}    {'Value':30s}    {'Source':12s}    Location"
+    )
+    builtins.print(
+        f"{'----':>28s}    {'-----':30s}    {'------':12s}    --------"
+    )
+
+    for section in ["user", "aws", "okta"]:
+        builtins.print(f"  [{section}]")
+        section_data = getattr(merged, section)
+
+        for key in sorted(section_data.keys()):
+            if key in skip_keys:
+                continue
+            value = section_data[key]
+
+            source_type, location = _get_value_source(
+                section, key, config_ini, config_env,
+                args.user_config_file,
+            )
+
+            display_value = _format_value(key, value, sensitive_keys)
+
+            builtins.print(
+                f"{key:>28s}    {display_value:30s}    "
+                f"{source_type:12s}    {location}"
+            )
+
+        builtins.print()
+
+
+def _handle_configure_subcommand(args):
+    """Handle --configure subcommands like 'list'.
+
+    :param args: argparse namespace.
+    """
+    if args.configure != "list":
+        logger.error(
+            f"Unknown configure option: {args.configure}. "
+            "Use '--configure list' to display settings."
+        )
+        sys.exit(1)
+    configure_list(args)
+    sys.exit(0)
+
+
+def _load_config_sources(args):
+    """Load configuration from all sources and merge into config.
+
+    Priority order: ini file < environment < CLI args < interactive.
+
+    :param args: argparse namespace.
+    """
     # 1: read ini file (if it exists)
     if not args.configure:
         config_ini = process_ini_file(args.user_config_file, args.user_config_profile)
@@ -1339,6 +1479,18 @@ def process_options(args):
     config_int = process_interactive_input(config, args.configure)
     if config_int:
         config.update(config_int)
+
+
+def process_options(args):
+    """Collect all user-specific credentials and config params."""
+    if args.version:
+        display_version()
+        sys.exit(0)
+
+    if args.configure and args.configure is not True:
+        _handle_configure_subcommand(args)
+
+    _load_config_sources(args)
 
     sanitize_config_values(config)
     logger.debug(f"Final configuration is {config}")

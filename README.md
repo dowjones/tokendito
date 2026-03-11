@@ -34,6 +34,7 @@ Version 2.5.0 of Tokendito introduces the following changes:
 
 - Support for multiple AWS profiles in a single configuration file.
 - Cross-platform input timeout feature with configurable login timeout (default: disabled).
+- Configuration listing with `--configure list` to display current settings and their sources.
 - System-wide installation instructions for multi-user environments.
 - Monthly Docker image rebuild to keep base layers current (fixes #164).
 
