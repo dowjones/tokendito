@@ -1305,9 +1305,7 @@ def test_get_value_source_env_var():
     from tokendito.user import _get_value_source
 
     config_env = Config(okta={"username": "testuser"})
-    source, location = _get_value_source(
-        "okta", "username", None, config_env, "/path/to/ini"
-    )
+    source, location = _get_value_source("okta", "username", None, config_env, "/path/to/ini")
     assert source == "env-var"
     assert location == "TOKENDITO_OKTA_USERNAME"
 
@@ -1318,9 +1316,7 @@ def test_get_value_source_ini_file():
     from tokendito.user import _get_value_source
 
     config_ini = Config(okta={"org": "https://acme.okta.com"})
-    source, location = _get_value_source(
-        "okta", "org", config_ini, None, "/path/to/tokendito.ini"
-    )
+    source, location = _get_value_source("okta", "org", config_ini, None, "/path/to/tokendito.ini")
     assert source == "ini-file"
     assert location == "/path/to/tokendito.ini"
 
@@ -1329,9 +1325,7 @@ def test_get_value_source_default():
     """Test _get_value_source returns default when not set anywhere."""
     from tokendito.user import _get_value_source
 
-    source, location = _get_value_source(
-        "aws", "region", None, None, "/path/to/ini"
-    )
+    source, location = _get_value_source("aws", "region", None, None, "/path/to/ini")
     assert source == "default"
     assert location == ""
 
@@ -1343,9 +1337,7 @@ def test_get_value_source_env_overrides_ini():
 
     config_ini = Config(okta={"username": "ini-user"})
     config_env = Config(okta={"username": "env-user"})
-    source, location = _get_value_source(
-        "okta", "username", config_ini, config_env, "/path/to/ini"
-    )
+    source, location = _get_value_source("okta", "username", config_ini, config_env, "/path/to/ini")
     assert source == "env-var"
     assert location == "TOKENDITO_OKTA_USERNAME"
 
@@ -1422,12 +1414,8 @@ def test_configure_list_output(capsys, mocker, tmpdir):
 
     from tokendito import user
 
-    mocker.patch(
-        "tokendito.user._safe_load_ini", return_value=None
-    )
-    mocker.patch(
-        "tokendito.user.process_environment", return_value=None
-    )
+    mocker.patch("tokendito.user._safe_load_ini", return_value=None)
+    mocker.patch("tokendito.user.process_environment", return_value=None)
 
     args = argparse.Namespace(
         user_config_file=str(tmpdir.join("tokendito.ini")),
@@ -1456,12 +1444,8 @@ def test_configure_list_with_ini(capsys, mocker, tmpdir):
 
     ini_path = str(tmpdir.join("tokendito.ini"))
     ini_config = Config(okta={"org": "https://acme.okta.com"})
-    mocker.patch(
-        "tokendito.user._safe_load_ini", return_value=ini_config
-    )
-    mocker.patch(
-        "tokendito.user.process_environment", return_value=None
-    )
+    mocker.patch("tokendito.user._safe_load_ini", return_value=ini_config)
+    mocker.patch("tokendito.user.process_environment", return_value=None)
 
     args = argparse.Namespace(
         user_config_file=ini_path,
@@ -1483,15 +1467,9 @@ def test_configure_list_with_env(capsys, mocker, tmpdir):
     from tokendito.config import Config
     from tokendito import user
 
-    env_config = Config(
-        okta={"username": "envuser@example.com"}
-    )
-    mocker.patch(
-        "tokendito.user._safe_load_ini", return_value=None
-    )
-    mocker.patch(
-        "tokendito.user.process_environment", return_value=env_config
-    )
+    env_config = Config(okta={"username": "envuser@example.com"})
+    mocker.patch("tokendito.user._safe_load_ini", return_value=None)
+    mocker.patch("tokendito.user.process_environment", return_value=env_config)
 
     args = argparse.Namespace(
         user_config_file=str(tmpdir.join("tokendito.ini")),
@@ -1514,12 +1492,8 @@ def test_configure_list_masks_password(capsys, mocker, tmpdir):
     from tokendito import user
 
     env_config = Config(okta={"password": "supersecret"})
-    mocker.patch(
-        "tokendito.user._safe_load_ini", return_value=None
-    )
-    mocker.patch(
-        "tokendito.user.process_environment", return_value=env_config
-    )
+    mocker.patch("tokendito.user._safe_load_ini", return_value=None)
+    mocker.patch("tokendito.user.process_environment", return_value=env_config)
 
     args = argparse.Namespace(
         user_config_file=str(tmpdir.join("tokendito.ini")),

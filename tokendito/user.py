@@ -1406,12 +1406,8 @@ def configure_list(args):
     sensitive_keys = {"password", "device_token"}
     skip_keys = {"mask_items"}
 
-    builtins.print(
-        f"{'Name':>28s}    {'Value':30s}    {'Source':12s}    Location"
-    )
-    builtins.print(
-        f"{'----':>28s}    {'-----':30s}    {'------':12s}    --------"
-    )
+    builtins.print(f"{'Name':>28s}    {'Value':30s}    {'Source':12s}    Location")
+    builtins.print(f"{'----':>28s}    {'-----':30s}    {'------':12s}    --------")
 
     for section in ["user", "aws", "okta"]:
         builtins.print(f"  [{section}]")
@@ -1423,15 +1419,17 @@ def configure_list(args):
             value = section_data[key]
 
             source_type, location = _get_value_source(
-                section, key, config_ini, config_env,
+                section,
+                key,
+                config_ini,
+                config_env,
                 args.user_config_file,
             )
 
             display_value = _format_value(key, value, sensitive_keys)
 
             builtins.print(
-                f"{key:>28s}    {display_value:30s}    "
-                f"{source_type:12s}    {location}"
+                f"{key:>28s}    {display_value:30s}    " f"{source_type:12s}    {location}"
             )
 
         builtins.print()
