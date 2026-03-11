@@ -1350,6 +1350,39 @@ def test_get_value_source_env_overrides_ini():
     assert location == "TOKENDITO_OKTA_USERNAME"
 
 
+def test_resolve_profile_cli_over_env(monkeypatch):
+    """Test that CLI --profile takes precedence over env var."""
+    import argparse
+
+    from tokendito.user import _resolve_profile
+
+    monkeypatch.setenv("TOKENDITO_USER_CONFIG_PROFILE", "env-profile")
+    args = argparse.Namespace(user_config_profile="cli-profile")
+    assert _resolve_profile(args) == "cli-profile"
+
+
+def test_resolve_profile_env_over_default(monkeypatch):
+    """Test that env var overrides the default profile."""
+    import argparse
+
+    from tokendito.user import _resolve_profile
+
+    monkeypatch.setenv("TOKENDITO_USER_CONFIG_PROFILE", "env-profile")
+    args = argparse.Namespace(user_config_profile="default")
+    assert _resolve_profile(args) == "env-profile"
+
+
+def test_resolve_profile_default(monkeypatch):
+    """Test that default profile is returned when no overrides."""
+    import argparse
+
+    from tokendito.user import _resolve_profile
+
+    monkeypatch.delenv("TOKENDITO_USER_CONFIG_PROFILE", raising=False)
+    args = argparse.Namespace(user_config_profile="default")
+    assert _resolve_profile(args) == "default"
+
+
 def test_format_value_masks_password():
     """Test that sensitive keys are masked."""
     from tokendito.user import _format_value

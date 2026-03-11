@@ -1376,9 +1376,14 @@ def _safe_load_ini(file, profile):
 def _resolve_profile(args):
     """Resolve the active profile from CLI args or environment.
 
+    CLI args take precedence over env vars per documented precedence.
+
     :param args: argparse namespace.
     :returns: profile name string.
     """
+    default_profile = config.get_defaults()["user"]["config_profile"]
+    if args.user_config_profile != default_profile:
+        return args.user_config_profile
     env_profile = os.environ.get("TOKENDITO_USER_CONFIG_PROFILE")
     if env_profile:
         return env_profile
