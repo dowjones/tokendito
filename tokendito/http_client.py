@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 def generate_user_agent():
     """Generate a user agent string."""
     python_version = platform.python_version()
-    (system, _, release, _, _, _) = platform.uname()
+    system, _, release, _, _, _ = platform.uname()
 
     base_os = "compatible"
     if system == "Darwin":

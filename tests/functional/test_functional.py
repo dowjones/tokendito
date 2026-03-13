@@ -1,6 +1,7 @@
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
 """Functional non-authenticated tests, and local fixtures."""
+
 import os
 from os import path
 import re

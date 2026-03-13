@@ -1,6 +1,7 @@
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
 """Tokendito module initialization."""
+
 __version__ = "2.5.0"
 __title__ = "tokendito"
 __description__ = "Get AWS STS tokens from Okta SSO"

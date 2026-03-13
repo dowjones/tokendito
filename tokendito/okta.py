@@ -7,6 +7,7 @@ Handle the all Okta operations.
 2. Update Okta Config File
 
 """
+
 import base64
 import codecs
 from copy import deepcopy

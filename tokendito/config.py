@@ -1,6 +1,7 @@
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
 """Tokendito configuration class."""
+
 import copy
 import json
 import os

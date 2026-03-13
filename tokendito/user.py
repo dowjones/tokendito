@@ -1,6 +1,7 @@
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
 """Helper module for AWS and Okta configuration, management and data flow."""
+
 import argparse
 import builtins
 import codecs
@@ -130,7 +131,7 @@ def process_args(args, skip_auth=False):
     # Authenticate to AWS roles
     auth_tiles = aws.authenticate_to_roles(config, config.okta["tile"])
 
-    (role_response, role_name) = aws.select_assumeable_role(auth_tiles)
+    role_response, role_name = aws.select_assumeable_role(auth_tiles)
 
     identity = aws.assert_credentials(role_response=role_response)
     if "Arn" not in identity and "UserId" not in identity:
@@ -708,7 +709,7 @@ def get_account_aliases(saml_xml, saml_response_string):
 def display_version():
     """Print program version and exit."""
     python_version = platform.python_version()
-    (system, _, release, _, _, _) = platform.uname()
+    system, _, release, _, _, _ = platform.uname()
     logger.debug(f"Display version: {__version__}")
     print(
         f"tokendito/{__version__} "
