@@ -6,7 +6,7 @@ flake8>=5.0.0
 flake8-black
 flake8-docstrings
 flake8-import-order
-moto==4.2.10
+moto==5.1.22
 pep8-naming
 pexpect
 pydocstyle
