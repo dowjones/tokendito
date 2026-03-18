@@ -6,6 +6,7 @@
   - [Default usage](#default-usage)
   - [Multi-tile-Guide](#multi-tile-guide)
   - [Single-command usage](#single-command-usage)
+  - [Multi-profile usage](#multi-profile-usage)
   - [Listing current configuration](#listing-current-configuration)
   - [Additional command line reference](#additional-command-line-reference)
 - [Environment variables and user configuration](#environment-variables-and-user-configuration)
@@ -71,6 +72,66 @@ And execute:
 ``` txt
 tokendito --profile engineer
 ```
+
+### Multi-profile usage
+
+If you need to authenticate to multiple AWS accounts or roles in a single invocation, use `--multi-profiles`. This is useful when you regularly work across several environments (e.g. dev, staging, production) and want to refresh all credentials at once.
+
+`--multi-profiles` can be specified multiple times, with each value referencing a profile section in your [tokendito.ini](tokendito.ini.md) file. Tokendito will authenticate once and then iterate through each profile, assuming the corresponding role and writing credentials to `~/.aws/credentials`. **The tokendito profile name is used as the AWS profile name** — for example, `--multi-profiles dev` will write credentials under the `[dev]` profile in your AWS credentials file.
+
+#### INI file setup
+
+Define each profile in your `tokendito.ini` with its own tile and role:
+
+``` ini
+[default]
+okta_org = https://acme.okta.com/
+okta_username = jane.doe@acme.com
+okta_mfa = push
+
+[dev]
+okta_tile = https://acme.okta.com/home/amazon_aws/0123456789abcdef/123
+aws_role_arn = arn:aws:iam::111111111111:role/dev-engineer
+
+[staging]
+okta_tile = https://acme.okta.com/home/amazon_aws/abcdef0123456789/456
+aws_role_arn = arn:aws:iam::222222222222:role/staging-engineer
+
+[prod]
+okta_tile = https://acme.okta.com/home/amazon_aws/fedcba9876543210/789
+aws_role_arn = arn:aws:iam::333333333333:role/prod-readonly
+```
+
+Note that values from the `[default]` section (such as `okta_org`, `okta_username`, and `okta_mfa`) are inherited by the other profiles, so you only need to specify what differs in each one.
+
+#### Running with multi-profiles
+
+Refresh credentials for all three environments at once:
+
+``` txt
+tokendito --multi-profiles dev --multi-profiles staging --multi-profiles prod
+```
+
+This will:
+
+1. Authenticate to Okta once (you are prompted for your password and MFA only on the first profile).
+2. For each profile, read its configuration from the INI file, assume the AWS role, and write credentials.
+3. Save each set of credentials to `~/.aws/credentials` using the tokendito profile name as the AWS profile name (i.e. `[dev]`, `[staging]`, `[prod]`).
+
+Afterwards you can use the credentials directly with the AWS CLI:
+
+``` txt
+aws --profile dev s3 ls
+aws --profile staging sts get-caller-identity
+aws --profile prod ec2 describe-instances
+```
+
+#### Behavior notes
+
+- **Overrides `--profile`**: When `--multi-profiles` is used, any `--profile` argument is ignored.
+- **Overrides `--aws-profile`**: The `--aws-profile` flag and the `TOKENDITO_AWS_PROFILE` environment variable are ignored. Instead, the tokendito INI profile name (e.g. `dev`, `staging`) is always used as the AWS profile name in `~/.aws/credentials`.
+- **Authentication is shared**: Okta authentication happens only once. Subsequent profiles reuse the session, so you will only see a single MFA prompt.
+- **Configuration inheritance**: Each profile inherits values from the `[default]` section of the INI file, so common settings only need to be specified once.
 
 ### Listing current configuration
 
@@ -187,6 +248,7 @@ The following table lists the environment variable and user configuration entry 
 | `--username` | `TOKENDITO_OKTA_USERNAME`        | `okta_username` |
 | `--password` | `TOKENDITO_OKTA_PASSWORD` |   |
 | `--profile`  | `TOKENDITO_USER_CONFIG_PROFILE` | `profile` |
+| `--multi-profiles` | | |
 | `--config-file` | `TOKENDITO_USER_CONFIG_FILE` | |
 | `--loglevel` | `TOKENDITO_USER_LOGLEVEL` | `loglevel` |
 | `--log-output-file` | `TOKENDITO_USER_LOG_OUTPUT_FILE`        | `log_output_file` |

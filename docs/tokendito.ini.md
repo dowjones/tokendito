@@ -16,6 +16,14 @@ okta_username = jane.doe@acme.com
 login_timeout = 0
 ```
 
-to select a given profile, use the `--profile $name` option, otherwise the default profile will be selected. In the above tokendito.ini file, using `--profile my_dev_okta_tile` would select the configuration values for the `[my_dev_okta_tile]` profile.
+To select a given profile, use the `--profile $name` option, otherwise the default profile will be selected. In the above tokendito.ini file, using `--profile my_dev_okta_tile` would select the configuration values for the `[my_dev_okta_tile]` profile.
+
+To authenticate to multiple profiles in a single invocation, use `--multi-profiles` (can be repeated):
+
+```
+tokendito --multi-profiles my_prod_okta_tile --multi-profiles my_dev_okta_tile
+```
+
+This will authenticate once and then iterate through each profile, writing AWS credentials to `~/.aws/credentials` using the tokendito profile name as the AWS profile name (e.g. `my_prod_okta_tile`, `my_dev_okta_tile`). See the [multi-profile usage](README.md#multi-profile-usage) section for more details.
 
 The `login_timeout` option controls how long tokendito will wait for username and password input before timing out. Once the user starts typing, the timeout is disabled. The default is 0 (disabled). Set to a positive value (in seconds) to enable timeout.
