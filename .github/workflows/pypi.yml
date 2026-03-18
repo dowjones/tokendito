@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     if: |
       github.event_name == 'pull_request' &&
+      github.actor != 'dependabot[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       (github.base_ref == 'main' || contains(github.base_ref, '.'))
     steps:
