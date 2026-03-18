@@ -13,7 +13,7 @@ pydocstyle
 pylint
 pyotp
 pyroma
-pytest>=7.0.0,<8.0.0
+pytest>=7.0.0,<9.0.0
 pytest-cov
 pytest-env
 pytest-mock
