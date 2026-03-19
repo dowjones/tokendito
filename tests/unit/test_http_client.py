@@ -1,4 +1,5 @@
 """Unit tests for the HTTPClient class."""
+
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
 import pytest

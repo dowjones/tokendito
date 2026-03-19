@@ -1,0 +1,136 @@
+name: Monthly Docker Image Refresh
+on:
+  schedule:
+    # Run at midnight UTC on the 1st of every month
+    - cron: '0 0 1 * *'
+  workflow_dispatch:
+
+env:
+  REGISTRY: docker.io
+  REGISTRY_IMAGE: tokendito/tokendito
+
+jobs:
+  get_latest_release:
+    name: Get Latest Release Tag
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.get_tag.outputs.tag }}
+    steps:
+      -
+        name: Get latest release tag
+        id: get_tag
+        run: |
+          TAG=$(gh api repos/${{ github.repository }}/releases/latest --jq '.tag_name')
+          if [ -z "$TAG" ]; then
+            echo "No release found"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Latest release tag: $TAG"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build_archs:
+    name: Build ${{ matrix.arch }}
+    needs: get_latest_release
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, amd64]
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ needs.get_latest_release.outputs.tag }}
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      -
+        name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: tokendito
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      -
+        name: Build and push linux/${{ matrix.arch }}
+        run: |
+          docker buildx build . --provenance=false \
+            --platform linux/${{ matrix.arch }} \
+            --tag ${{ env.REGISTRY }}/${{ env.REGISTRY_IMAGE }}:${{ needs.get_latest_release.outputs.tag }}-${{ matrix.arch }} \
+            --push
+
+  create_manifest:
+    name: Create and Sign Manifest
+    needs: [get_latest_release, build_archs]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        version:
+          - latest
+          - ${{ needs.get_latest_release.outputs.tag }}
+    steps:
+      -
+        name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: tokendito
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      -
+        name: Create files for signing
+        run: |
+          mkdir -p ~/.docker/trust/private
+          echo "${DOCKER_PRIVATE_KEY}" > ~/.docker/trust/private/${DOCKER_PRIVATE_KEY_ID}.key
+          chmod 0600 ~/.docker/trust/private/${DOCKER_PRIVATE_KEY_ID}.key
+          docker trust key load ~/.docker/trust/private/${DOCKER_PRIVATE_KEY_ID}.key --name "${DOCKER_PRIVATE_KEY_ID}"
+        env:
+          DOCKER_PRIVATE_KEY_ID: "${{ secrets.DOCKER_PRIVATE_KEY_ID }}"
+          DOCKER_PRIVATE_KEY: "${{ secrets.DOCKER_PRIVATE_KEY }}"
+          DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE: "${{ secrets.DOCKER_PRIVATE_KEY_PASSPHRASE }}"
+      -
+        name: Create manifest and push
+        run: |
+          TAG=${{ needs.get_latest_release.outputs.tag }}
+          DOCKER_CLI_EXPERIMENTAL=enabled docker manifest create \
+            ${{ env.REGISTRY_IMAGE }}:${{ matrix.version }} \
+            --amend ${{ env.REGISTRY_IMAGE }}:${TAG}-amd64 \
+            --amend ${{ env.REGISTRY_IMAGE }}:${TAG}-arm64
+          docker manifest push ${{ env.REGISTRY_IMAGE }}:${{ matrix.version }}
+          docker pull ${{ env.REGISTRY_IMAGE }}:${{ matrix.version }}
+          docker trust sign ${{ env.REGISTRY_IMAGE }}:${{ matrix.version }}
+          docker manifest push ${{ env.REGISTRY_IMAGE }}:${{ matrix.version }}
+        env:
+          DOCKER_CONTENT_TRUST: 0
+          DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE: "${{ secrets.DOCKER_PRIVATE_KEY_PASSPHRASE }}"
+
+  verify_signatures:
+    name: Verify Signatures
+    needs: [get_latest_release, create_manifest]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        version:
+          - latest
+          - ${{ needs.get_latest_release.outputs.tag }}
+    steps:
+      -
+        name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: tokendito
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      -
+        name: Verify signatures
+        run: |
+          docker trust inspect --pretty ${{ env.REGISTRY_IMAGE }}:${{ matrix.version }}
+      -
+        name: Verify download works
+        run: |
+          docker pull ${{ env.REGISTRY_IMAGE }}:${{ matrix.version }}
+          docker run ${{ env.REGISTRY_IMAGE }}:${{ matrix.version }} --version
+        env:
+          DOCKER_CONTENT_TRUST: 1

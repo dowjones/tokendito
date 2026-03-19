@@ -1,6 +1,8 @@
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
 """Tokendito configuration class."""
+
+import copy
 import json
 import os
 from os.path import expanduser
@@ -32,6 +34,7 @@ class Config(object):
             use_device_token=False,
             mask_items=[],
             quiet=False,
+            login_timeout=0,
         ),
         aws=dict(
             config_file=os.path.join(expanduser("~"), ".aws", "config"),
@@ -119,7 +122,7 @@ class Config(object):
     def set_defaults(self):
         """Update the object to default settings."""
         for key in self._defaults.keys():
-            setattr(self, key, self._defaults[key])
+            setattr(self, key, copy.deepcopy(self._defaults[key]))
 
     def get_defaults(self):
         """Retrieve default settings."""

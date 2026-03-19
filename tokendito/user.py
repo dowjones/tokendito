@@ -1,12 +1,14 @@
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
 """Helper module for AWS and Okta configuration, management and data flow."""
+
 import argparse
 import builtins
 import codecs
 import configparser
 from datetime import timezone
 from getpass import getpass
+import io
 import json
 import logging
 import os
@@ -14,8 +16,25 @@ from pathlib import Path
 from pkgutil import iter_modules
 import platform
 import re
+import signal
 import sys
+import time
 from urllib.parse import urlparse
+
+# Unix-specific imports (will be handled with try/except in functions)
+try:
+    import fcntl
+    import select
+    import termios
+    import tty
+except ImportError:
+    pass
+
+# Windows-specific imports (will be handled with try/except in functions)
+try:
+    import msvcrt
+except ImportError:
+    pass
 
 from botocore import __version__ as __botocore_version__
 from bs4 import __version__ as __bs4_version__  # type: ignore (bs4 does not have PEP 561 support)
@@ -28,15 +47,9 @@ from tokendito.config import Config
 from tokendito.config import config
 from tokendito.http_client import HTTP_client
 
-# Unfortunately, readline is only available in non-Windows systems. There is no substitution.
-try:
-    import readline  # noqa: F401
-except ModuleNotFoundError:
-    pass
-
 logger = logging.getLogger(__name__)
 
-mask_items = []
+mask_items = []  # Holds values to mask
 
 
 def cmd_interface(args):
@@ -46,6 +59,32 @@ def cmd_interface(args):
     # Early logging, in case the user requests debugging via env/CLI
     setup_early_logging(args)
 
+    if args.multi_profiles:
+        if args.aws_profile or ("TOKENDITO_AWS_PROFILE" in os.environ):
+            logger.warning(
+                "Multiple profiles have been specified so the AWS profile value "
+                "will be overridden by each profile."
+            )
+
+        skip_auth = False
+        for profile in args.multi_profiles:
+            args.user_config_profile = profile
+            args.aws_profile = profile
+
+            process_args(args, skip_auth)
+
+            # Reset config singleton but retain auth
+            auth = config.okta["password"]
+            config.set_defaults()
+            config.okta["password"] = auth
+
+            skip_auth = True
+    else:
+        process_args(args, False)
+
+
+def process_args(args, skip_auth=False):
+    """Process the args and allow for skipping auth with multiple profiles."""
     # Set some required initial values
     process_options(args)
 
@@ -58,6 +97,9 @@ def cmd_interface(args):
         quiet_msg = ""
         if config.user["quiet"] is not False:
             quiet_msg = " to run in quiet mode"
+        # Ensure stderr starts at beginning of line
+        sys.stderr.write("\r")
+        sys.stderr.flush()
         logger.error(
             f"Could not validate configuration{quiet_msg}: {'. '.join(message)}. "
             "Please check your settings, and try again."
@@ -78,7 +120,7 @@ def cmd_interface(args):
             )
 
     # get authentication and authorization cookies from okta
-    okta.access_control(config)
+    _ = skip_auth or okta.access_control(config)
 
     if config.okta["tile"]:
         tile_label = ""
@@ -89,7 +131,7 @@ def cmd_interface(args):
     # Authenticate to AWS roles
     auth_tiles = aws.authenticate_to_roles(config, config.okta["tile"])
 
-    (role_response, role_name) = aws.select_assumeable_role(auth_tiles)
+    role_response, role_name = aws.select_assumeable_role(auth_tiles)
 
     identity = aws.assert_credentials(role_response=role_response)
     if "Arn" not in identity and "UserId" not in identity:
@@ -145,8 +187,11 @@ def parse_cli_args(args):
     parser.add_argument("--version", action="store_true", help="Displays version and exit")
     parser.add_argument(
         "--configure",
-        action="store_true",
-        help="Prompt user for configuration parameters",
+        nargs="?",
+        const=True,
+        default=False,
+        help="Prompt user for configuration parameters. "
+        "Use '--configure list' to display current settings and their sources.",
     )
     parser.add_argument(
         "--username",
@@ -165,6 +210,13 @@ def parse_cli_args(args):
         dest="user_config_profile",
         default=config.user["config_profile"],
         help="Tokendito configuration profile to use.",
+    )
+    parser.add_argument(
+        "--multi-profiles",
+        action="append",
+        help="Tokendito configuration profiles to use. Can be specified multiple times. "
+        "Using this will override --profile and cause --aws-profile to be ignored and "
+        "replaced with this value.",
     )
     parser.add_argument(
         "--config-file",
@@ -239,6 +291,14 @@ def parse_cli_args(args):
         action="store_true",
         default=False,
         help="Suppress output",
+    )
+    parser.add_argument(
+        "--login-timeout",
+        dest="user_login_timeout",
+        type=int,
+        default=0,
+        help="Login timeout in seconds (default: 0, which is disabled). "
+        "You can also use the TOKENDITO_USER_LOGIN_TIMEOUT environment variable.",
     )
 
     parsed_args = parser.parse_args(args)
@@ -649,7 +709,7 @@ def get_account_aliases(saml_xml, saml_response_string):
 def display_version():
     """Print program version and exit."""
     python_version = platform.python_version()
-    (system, _, release, _, _, _) = platform.uname()
+    system, _, release, _, _, _ = platform.uname()
     logger.debug(f"Display version: {__version__}")
     print(
         f"tokendito/{__version__} "
@@ -666,20 +726,17 @@ def add_sensitive_value_to_be_masked(value, key=None):
     """If a key is passed only add it if the key refers to a secret element."""
     sensitive_keys = ("password", "mfa_response", "sessionToken")
     if key is None or key in sensitive_keys:
-        mask_items.append(value)
+        # Only mask non-empty values that are longer than 1 character to prevent
+        # masking common single characters that appear in log messages
+        if value and isinstance(value, str) and len(value) > 1:
+            mask_items.append(value)
 
 
-def process_ini_file(file, profile):
-    """Process options from a ConfigParser ini file.
-
-    :param file: filename
-    :param profile: profile to read
-    :return: Config object with configuration values
-    """
+def _read_ini(file, profile, default_section):
     res = dict()
     pattern = re.compile(r"^(.*?)_(.*)")
 
-    ini = configparser.RawConfigParser(default_section=config.user["config_profile"])
+    ini = configparser.RawConfigParser(default_section=default_section)
     # Here, group(1) is the dictionary key, and group(2) the configuration element
     try:
         ini.read(file)
@@ -693,26 +750,33 @@ def process_ini_file(file, profile):
     except configparser.Error as err:
         logger.error(f"Could not load profile '{profile}': {str(err)}")
         sys.exit(2)
+
+    return res
+
+
+def process_ini_file(file, profile):
+    """Process options from a ConfigParser ini file.
+
+    :param file: filename
+    :param profile: profile to read
+    :return: Config object with configuration values
+    """
+    res = _read_ini(file, profile, config.user["config_profile"])
     logger.debug(f"Found ini directives: {res}")
+    if not res:
+        return None
 
     try:
-        config_ini = Config(**res)
-
+        return Config(**res)
     except (AttributeError, KeyError, ValueError) as err:
         logger.error(
             f"The configuration file {file} in [{profile}] is incorrect: {err}"
             ". Please check your settings and try again."
         )
         sys.exit(1)
-    return config_ini
 
 
-def process_arguments(args):
-    """Process command-line arguments.
-
-    :param args: argparse object
-    :return: Config object with configuration values
-    """
+def _read_arguments(args):
     res = dict()
     pattern = re.compile(r"^(.*?)_(.*)")
 
@@ -723,21 +787,46 @@ def process_arguments(args):
                 continue
             if match.group(1) not in res:
                 res[match.group(1)] = dict()
-            if val:
+            if val is not None:
                 res[match.group(1)][match.group(2)] = val
                 add_sensitive_value_to_be_masked(val, match.group(2))
+
+    return res
+
+
+def process_arguments(args):
+    """Process command-line arguments.
+
+    :param args: argparse object
+    :return: Config object with configuration values
+    """
+    res = _read_arguments(args)
     logger.debug(f"Found arguments: {res}")
+    if not res:
+        return None
 
     try:
-        config_args = Config(**res)
-
+        return Config(**res)
     except (AttributeError, KeyError, ValueError) as err:
         logger.error(
             f"Command line arguments not correct: {err}"
             ". This should not happen, please contact the package maintainers."
         )
         sys.exit(1)
-    return config_args
+
+
+def _convert_env_value(key, val, param_name):
+    """Convert environment variable value to the appropriate type.
+
+    :returns: converted value, or None if conversion fails.
+    """
+    if param_name == "login_timeout":
+        try:
+            return int(val)
+        except ValueError:
+            logger.warning(f"Invalid value for {key}: {val}. Must be an integer.")
+            return None
+    return val
 
 
 def process_environment(prefix="tokendito"):
@@ -751,29 +840,55 @@ def process_environment(prefix="tokendito"):
     # and group(3) the configuration element.
     for key, val in os.environ.items():
         match = re.search(pattern, key.lower())
-        if match:
-            if match.group(2) not in res:
-                res[match.group(2)] = dict()
-            if val:
-                res[match.group(2)][match.group(3)] = val
-                add_sensitive_value_to_be_masked(val, match.group(3))
+        if not match or not val:
+            continue
+        if match.group(2) not in res:
+            res[match.group(2)] = dict()
+        param_name = match.group(3)
+        converted = _convert_env_value(key, val, param_name)
+        if converted is None:
+            continue
+        res[match.group(2)][param_name] = converted
+        add_sensitive_value_to_be_masked(converted, param_name)
+
     logger.debug(f"Found environment variables: {res}")
 
-    try:
-        config_env = Config(**res)
+    if not res:
+        return None
 
+    try:
+        return Config(**res)
     except (AttributeError, KeyError, ValueError) as err:
         logger.error(
             f"The environment variables are incorrectly set: {err}"
             ". Please check your settings and try again."
         )
         sys.exit(1)
-    return config_env
+
+
+def _build_interactive_config(details, skip_password):
+    res = dict(okta=dict())
+    # Copy the values set by get_interactive_config
+    if "okta_tile" in details:
+        res["okta"]["tile"] = details["okta_tile"]
+    if "okta_org" in details:
+        res["okta"]["org"] = details["okta_org"]
+    if "okta_username" in details:
+        res["okta"]["username"] = details["okta_username"]
+
+    if ("password" not in config.okta or config.okta["password"] == "") and not skip_password:
+        logger.debug("No password set, will try to get one interactively")
+        res["okta"]["password"] = get_secret_input("Password: ")
+        add_sensitive_value_to_be_masked(res["okta"]["password"])
+
+    logger.debug(f"Interactive configuration is: {res}")
+
+    return Config(**res)
 
 
 def process_interactive_input(config, skip_password=False):
     """
-    Request input interactively interactively for elements that are not proesent.
+    Request input interactively interactively for elements that are not present.
 
     :param config: Config object with some values set.
     :param skip_password: Whether or not ask the user for a password.
@@ -782,7 +897,7 @@ def process_interactive_input(config, skip_password=False):
     # Return quickly if the user attempts to run in quiet (non-interactive) mode.
     if config.user["quiet"] is True:
         logger.debug(f"Skipping interactive config: quiet mode is {config.user['quiet']}")
-        return config
+        return None
 
     # Reuse interactive config. It will only request the portions needed.
     try:
@@ -795,25 +910,10 @@ def process_interactive_input(config, skip_password=False):
         logger.error(f"Interactive arguments are not correct: {err}")
         sys.exit(1)
 
-    # Create a dict that can be passed to Config later
-    res = dict(okta=dict())
-    # Copy the values set by get_interactive_config
-    if "okta_tile" in details:
-        res["okta"]["tile"] = details["okta_tile"]
-    if "okta_org" in details:
-        res["okta"]["org"] = details["okta_org"]
-    if "okta_username" in details:
-        res["okta"]["username"] = details["okta_username"]
+    if not details:
+        return None
 
-    if ("password" not in config.okta or config.okta["password"] == "") and not skip_password:
-        logger.debug("No password set, will try to get one interactively")
-        res["okta"]["password"] = get_secret_input()
-        add_sensitive_value_to_be_masked(res["okta"]["password"])
-
-    config_int = Config(**res)
-    logger.debug(f"Interactive configuration is: {config_int}")
-    config.update(config_int)
-    return config_int
+    return _build_interactive_config(details, skip_password)
 
 
 def get_interactive_config(tile=None, org=None, username=""):
@@ -864,6 +964,11 @@ def get_org():
 
     while res == "":
         user_data = get_input(prompt=message)
+
+        # Handle empty input (no timeout for this function)
+        if user_data is None:
+            continue
+
         user_data = user_data.strip()
         if user_data == "":
             break
@@ -872,7 +977,7 @@ def get_org():
         if validate_okta_org(user_data):
             res = user_data
         else:
-            print("Invalid input, try again.")
+            builtins.print("Invalid input, try again.")
     logger.debug(f"Org URL is: {res}")
     return res
 
@@ -889,6 +994,11 @@ def get_tile():
 
     while res == "":
         user_data = get_input(prompt=message)
+
+        # Handle empty input
+        if user_data is None:
+            continue
+
         user_data = user_data.strip()
         if user_data == "":
             break
@@ -897,7 +1007,7 @@ def get_tile():
         if validate_okta_tile(user_data):
             res = user_data
         else:
-            print("Invalid input, try again.")
+            builtins.print("Invalid input, try again.")
     logger.debug(f"App URL is: {res}")
     return res
 
@@ -908,14 +1018,28 @@ def get_username():
     :return: string with sanitized value.
     """
     message = "Organization username. E.g. jane.doe@acme.com: "
+    timeout = config.user.get("login_timeout", 0)
     res = ""
+
     while res == "":
-        user_data = get_input(prompt=message)
+        user_data = get_input_with_timeout(prompt=message, timeout=timeout)
+
+        # Handle timeout case for login
+        if user_data is None:
+            if timeout > 0:
+                # Ensure stderr starts at beginning of line
+                sys.stderr.write("\r")
+                sys.stderr.flush()
+                logger.error("Login timeout occurred while getting username")
+                sys.exit(1)
+            else:
+                continue
+
         user_data = user_data.strip()
         if user_data != "":
             res = user_data
         else:
-            print("Invalid input, try again.")
+            builtins.print("Invalid input, try again.")
     logger.debug(f"Username is {res}")
     return res
 
@@ -926,18 +1050,19 @@ def get_secret_input(message=None):
     :param args: message to display user.
     :return: secret
     """
-    secret = ""
-    logger.debug("get_secret_value")
+    timeout = config.user.get("login_timeout", 0)
 
-    tty_assertion()
-    while secret == "":
+    if timeout <= 0:
+        # No timeout, use regular getpass (no character display)
         if message is None:
-            password = getpass()
-        else:
-            password = getpass(message)
-        secret = password
-        logger.debug("secret value set interactively")
-    return secret
+            message = "Password: "
+
+        tty_assertion()
+
+        return getpass(message)
+    else:
+        # Use timeout implementation with no character display
+        return get_secret_input_with_timeout(message, timeout)
 
 
 def get_interactive_profile_name(default):
@@ -950,6 +1075,11 @@ def get_interactive_profile_name(default):
 
     while res == "":
         user_data = get_input(prompt=message)
+
+        # Handle empty input (no timeout for this function)
+        if user_data is None:
+            continue
+
         user_data = user_data.strip()
         if user_data == "":
             res = default
@@ -957,7 +1087,7 @@ def get_interactive_profile_name(default):
         if re.fullmatch("[a-zA-Z][a-zA-Z0-9_-]*", user_data):
             res = user_data
         else:
-            print("Invalid input, try again.")
+            builtins.print("Invalid input, try again.")
     logger.debug(f"Profile name is: {res}")
     return res
 
@@ -1157,11 +1287,9 @@ def get_input(prompt="-> "):
     :return user_input: raw from user.
     """
     tty_assertion()
-
-    user_input = input(f"{prompt}")
-    logger.debug(f"User input: {user_input}")
-
-    return user_input
+    # No timeout for general input - use regular input() function
+    user_input = input(prompt)
+    return user_input.strip()
 
 
 def collect_integer(valid_range=0):
@@ -1173,8 +1301,14 @@ def collect_integer(valid_range=0):
     :return user_input: validated, casted integer from user.
     """
     user_input = None
+
     while True:
         user_input = get_input()
+
+        # Handle empty input (no timeout for this function)
+        if user_input is None:
+            continue
+
         valid_input = validate_input(user_input, valid_range)
         logger.debug(f"User input validation status is {valid_input}")
         if valid_input:
@@ -1183,30 +1317,179 @@ def collect_integer(valid_range=0):
     return user_input
 
 
+def _get_value_source(section, key, config_ini, config_env, ini_file):
+    """Determine the source of a configuration value.
+
+    Check in reverse priority order to find the highest-priority source
+    that set the value.
+
+    :param section: config section name (user, aws, okta).
+    :param key: config key name.
+    :param config_ini: Config object from INI file, or None.
+    :param config_env: Config object from environment, or None.
+    :param ini_file: path to the INI file.
+    :returns: tuple of (source_type, location).
+    """
+    if config_env and key in getattr(config_env, section, {}):
+        env_name = f"TOKENDITO_{section}_{key}".upper()
+        return ("env-var", env_name)
+
+    if config_ini and key in getattr(config_ini, section, {}):
+        return ("ini-file", ini_file)
+
+    return ("default", "")
+
+
+def _format_value(key, value, sensitive_keys):
+    """Format a configuration value for display.
+
+    :param key: config key name.
+    :param value: the config value.
+    :param sensitive_keys: set of key names to mask.
+    :returns: formatted display string.
+    """
+    if key in sensitive_keys and value:
+        return "****"
+    if value is None or value == "" or value == []:
+        return "<not set>"
+    if isinstance(value, bool):
+        return str(value).lower()
+    return str(value)
+
+
+def _safe_load_ini(file, profile):
+    """Load INI file without exiting if the profile is missing.
+
+    :param file: path to the INI file.
+    :param profile: profile section to read.
+    :returns: Config object or None if profile not found.
+    """
+    try:
+        ini = configparser.RawConfigParser()
+        ini.read(file)
+        if ini.has_section(profile):
+            return process_ini_file(file, profile)
+    except configparser.Error:
+        pass
+    return None
+
+
+def _resolve_profile(args):
+    """Resolve the active profile from CLI args or environment.
+
+    CLI args take precedence over env vars per documented precedence.
+
+    :param args: argparse namespace.
+    :returns: profile name string.
+    """
+    default_profile = config.get_defaults()["user"]["config_profile"]
+    if args.user_config_profile != default_profile:
+        return args.user_config_profile
+    env_profile = os.environ.get("TOKENDITO_USER_CONFIG_PROFILE")
+    if env_profile:
+        return env_profile
+    return args.user_config_profile
+
+
+def configure_list(args):
+    """Display current configuration values and their sources."""
+    profile = _resolve_profile(args)
+
+    config_ini = _safe_load_ini(args.user_config_file, profile)
+    config_env = process_environment()
+
+    merged = Config()
+    if config_ini:
+        merged.update(config_ini)
+    if config_env:
+        merged.update(config_env)
+
+    sensitive_keys = {"password", "device_token"}
+    skip_keys = {"mask_items"}
+
+    builtins.print(f"{'Name':>28s}    {'Value':30s}    {'Source':12s}    Location")
+    builtins.print(f"{'----':>28s}    {'-----':30s}    {'------':12s}    --------")
+
+    for section in ["user", "aws", "okta"]:
+        builtins.print(f"  [{section}]")
+        section_data = getattr(merged, section)
+
+        for key in sorted(section_data.keys()):
+            if key in skip_keys:
+                continue
+            value = section_data[key]
+
+            source_type, location = _get_value_source(
+                section,
+                key,
+                config_ini,
+                config_env,
+                args.user_config_file,
+            )
+
+            display_value = _format_value(key, value, sensitive_keys)
+
+            builtins.print(
+                f"{key:>28s}    {display_value:30s}    " f"{source_type:12s}    {location}"
+            )
+
+        builtins.print()
+
+
+def _handle_configure_subcommand(args):
+    """Handle --configure subcommands like 'list'.
+
+    :param args: argparse namespace.
+    """
+    if args.configure != "list":
+        logger.error(
+            f"Unknown configure option: {args.configure}. "
+            "Use '--configure list' to display settings."
+        )
+        sys.exit(1)
+    configure_list(args)
+    sys.exit(0)
+
+
+def _load_config_sources(args):
+    """Load configuration from all sources and merge into config.
+
+    Priority order: ini file < environment < CLI args < interactive.
+
+    :param args: argparse namespace.
+    """
+    # 1: read ini file (if it exists)
+    if not args.configure:
+        config_ini = process_ini_file(args.user_config_file, args.user_config_profile)
+        if config_ini:
+            config.update(config_ini)
+
+    # 2: override with ENV
+    config_env = process_environment()
+    if config_env:
+        config.update(config_env)
+
+    # 3: override with args
+    config_args = process_arguments(args)
+    if config_args:
+        config.update(config_args)
+
+    # 4: Get missing data from the user, if necessary
+    config_int = process_interactive_input(config, args.configure)
+    if config_int:
+        config.update(config_int)
+
+
 def process_options(args):
     """Collect all user-specific credentials and config params."""
     if args.version:
         display_version()
         sys.exit(0)
 
-    # 1: read ini file (if it exists)
-    config_ini = Config()
-    if not args.configure:
-        config_ini = process_ini_file(args.user_config_file, args.user_config_profile)
+    if args.configure and args.configure is not True:
+        _handle_configure_subcommand(args)
 
-    # 2: override with ENV
-    config_env = process_environment()
-
-    # 3: override with args
-    config_args = process_arguments(args)
-
-    config.update(config_ini)
-    config.update(config_env)
-    config.update(config_args)
-
-    # 4: Get missing data from the user, if necessary
-    config_int = process_interactive_input(config, args.configure)
-    config.update(config_int)
+    _load_config_sources(args)
 
     sanitize_config_values(config)
     logger.debug(f"Final configuration is {config}")
@@ -1348,3 +1631,349 @@ def discover_tiles(url):
     logger.debug(f"Discovered {len(tile)} URLs.")
 
     return tile
+
+
+def get_input_with_timeout(prompt="-> ", timeout=0):
+    """Collect user input with optional timeout.
+
+    Timeout only applies to the first character input.
+
+    :param prompt: optional string with prompt.
+    :param timeout: timeout in seconds, 0 means no timeout.
+    :return user_input: raw from user or None if timeout.
+    """
+    tty_assertion()
+
+    if timeout <= 0:
+        # No timeout, use regular input
+        tty_assertion()
+        user_input = input(prompt)
+        return user_input.strip()
+
+    # Platform-specific timeout implementation
+    if platform.system() == "Windows":
+        return _get_input_timeout_windows(prompt, timeout)
+    else:
+        return _get_input_timeout_unix(prompt, timeout)
+
+
+def _write_timeout_message(timeout, context="Login"):
+    """Write timeout message to stdout and log it."""
+    sys.stdout.write("\r\n")
+    sys.stdout.flush()
+    sys.stdout.write(f"Timeout after {timeout} seconds\r\n")
+    sys.stdout.flush()
+    logger.debug(f"{context} timeout after {timeout} seconds")
+
+
+def _process_char_echo(char, user_input):
+    """Process a character with echo for visible input fields.
+
+    :returns: (updated_input, should_return, return_value)
+    """
+    if char in ["\n", "\r"]:
+        sys.stdout.write("\r\n")
+        sys.stdout.flush()
+        return user_input, True, user_input
+    elif char == "\x03":  # Ctrl+C
+        raise KeyboardInterrupt
+    elif char in ["\x7f", "\x08"]:  # Backspace
+        if user_input:
+            user_input = user_input[:-1]
+            sys.stdout.write("\b \b")
+            sys.stdout.flush()
+    else:
+        user_input += char
+        sys.stdout.write(char)
+        sys.stdout.flush()
+    return user_input, False, None
+
+
+def _unix_read_nonblocking(fd):
+    """Read available characters from fd in non-blocking mode.
+
+    :returns: string of characters read, empty string if none available.
+    """
+    flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+    fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+    try:
+        data = os.read(fd, 1024).decode("utf-8", errors="ignore")
+    except BlockingIOError:
+        data = ""
+    finally:
+        fcntl.fcntl(fd, fcntl.F_SETFL, flags)
+    return data
+
+
+def _unix_read_input_data(fd):
+    """Read available input data from file descriptor, with fallback.
+
+    :returns: string of characters read.
+    :raises: KeyboardInterrupt if Ctrl+C is pressed.
+    """
+    try:
+        return _unix_read_nonblocking(fd)
+    except (ImportError, OSError):
+        char = sys.stdin.read(1)
+        return char
+
+
+def _unix_input_loop(fd, timeout):
+    """Run the input loop for Unix timeout input.
+
+    :returns: user input string, or None on timeout.
+    """
+    user_input = ""
+    start_time = time.time()
+
+    while True:
+        if time.time() - start_time > timeout:
+            _write_timeout_message(timeout)
+            return None
+
+        ready, _, _ = select.select([sys.stdin], [], [], 0.1)
+        if not ready:
+            continue
+
+        data = _unix_read_input_data(fd)
+        for char in data:
+            user_input, done, result = _process_char_echo(char, user_input)
+            if done:
+                logger.debug(f"User input: {result}")
+                return result
+
+
+def _unix_secret_loop(fd, timeout):
+    """Run the secret input loop for Unix with timeout.
+
+    :returns: password string.
+    """
+
+    def timeout_handler(signum, frame):
+        raise TimeoutError("Input timeout")
+
+    if timeout > 0:
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(timeout)
+
+    password = ""
+    while True:
+        char = _unix_read_password_char()
+        if char is None:
+            break
+        elif char == "\b":
+            if password:
+                password = password[:-1]
+        else:
+            password += char
+
+    if timeout > 0:
+        signal.alarm(0)
+    sys.stdout.write("\r\n")
+    sys.stdout.flush()
+    logger.debug("Secret value set interactively with timeout")
+    return password
+
+
+def _process_windows_char(char, user_input, echo):
+    """Process a single Windows character for input.
+
+    :returns: (updated_input, should_break)
+    """
+    if char in [b"\r", b"\n"]:
+        return user_input, True
+    elif char == b"\x03":  # Ctrl+C
+        raise KeyboardInterrupt
+    elif char in [b"\x08", b"\x7f"]:  # Backspace
+        if user_input:
+            user_input = user_input[:-1]
+            if echo:
+                sys.stdout.write("\b \b")
+                sys.stdout.flush()
+    else:
+        char_str = char.decode("utf-8", errors="ignore")
+        user_input += char_str
+        if echo:
+            sys.stdout.write(char_str)
+            sys.stdout.flush()
+    return user_input, False
+
+
+def _windows_input_loop(timeout, echo=True):
+    """Handle Windows input loop for both visible and secret input.
+
+    :param timeout: timeout in seconds, 0 means no timeout.
+    :param echo: if True, echo characters; if False, suppress output.
+    :returns: input string, or None on timeout.
+    """
+    user_input = ""
+    start_time = time.time()
+
+    try:
+        while True:
+            if timeout > 0 and time.time() - start_time > timeout:
+                _write_timeout_message(timeout)
+                return None
+
+            if msvcrt.kbhit():
+                char = msvcrt.getch()
+                user_input, done = _process_windows_char(char, user_input, echo)
+                if done:
+                    break
+            else:
+                time.sleep(0.01)
+
+        sys.stdout.write("\r\n")
+        sys.stdout.flush()
+        log_msg = (
+            f"User input: {user_input}" if echo else "Secret value set interactively with timeout"
+        )
+        logger.debug(log_msg)
+        return user_input
+
+    except (KeyboardInterrupt, EOFError):
+        sys.stdout.write("\r\n")
+        sys.stdout.flush()
+        sys.stdout.write("Input cancelled\r\n")
+        sys.stdout.flush()
+        logger.debug("Input cancelled by user")
+        return None
+
+
+def _get_input_timeout_unix(prompt, timeout):
+    """Unix/Linux timeout input implementation."""
+    sys.stdout.write(prompt)
+    sys.stdout.flush()
+
+    try:
+        # Save terminal settings
+        if sys.stdin is None:
+            raise OSError("stdin is None")
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+    except (OSError, io.UnsupportedOperation):
+        # Fallback to regular input if in test environment or no TTY
+        user_input = input()
+        return user_input.strip()
+
+    try:
+        # Set terminal to raw mode for character-by-character input
+        tty.setraw(fd)
+        user_input = _unix_input_loop(fd, timeout)
+        return user_input
+
+    except (KeyboardInterrupt, EOFError):
+        sys.stdout.write("\r\n")
+        sys.stdout.flush()
+        sys.stdout.write("Input cancelled\r\n")
+        sys.stdout.flush()
+        return None
+    finally:
+        # Restore terminal settings
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+
+def _get_input_timeout_windows(prompt, timeout):
+    """Windows timeout input implementation."""
+    try:
+        # Test if msvcrt is available
+        msvcrt.getch
+    except (ImportError, NameError):
+        # Fallback to regular input if msvcrt is not available (e.g., in tests)
+        tty_assertion()
+        user_input = input(prompt)
+        return user_input.strip()
+
+    sys.stdout.write(prompt)
+    sys.stdout.flush()
+    return _windows_input_loop(timeout, echo=True)
+
+
+def get_secret_input_with_timeout(message=None, timeout=0):
+    """Get secret value interactively with optional timeout.
+
+    :param message: message to display user.
+    :param timeout: timeout in seconds, 0 means no timeout.
+    :return: secret or None if timeout
+    """
+    tty_assertion()
+
+    # Use our custom implementation for both timeout and non-timeout cases
+    # for consistent * character display behavior
+    if platform.system() == "Windows":
+        return _get_secret_input_timeout_windows(message, timeout)
+    else:
+        return _get_secret_input_timeout_unix(message, timeout)
+
+
+def _unix_read_password_char():
+    """Read a single character for password input on Unix."""
+    char = sys.stdin.read(1)
+    if char == "\n" or char == "\r":
+        return None  # End of input
+    elif char == "\x03":  # Ctrl+C
+        raise KeyboardInterrupt
+    elif char == "\x7f" or char == "\x08":  # Backspace
+        return "\b"
+    else:
+        return char
+
+
+def _get_secret_input_timeout_unix(message, timeout):
+    """Unix/Linux secret input with timeout."""
+    if message is None:
+        message = "Password: "
+
+    sys.stdout.write(message)
+    sys.stdout.flush()
+
+    try:
+        # Save terminal settings
+        if sys.stdin is None:
+            raise OSError("stdin is None")
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+    except (OSError, io.UnsupportedOperation):
+        # Fallback to regular getpass if in test environment or no TTY
+        return getpass("")
+
+    try:
+        tty.setraw(fd)
+        password = _unix_secret_loop(fd, timeout)
+        return password
+
+    except TimeoutError:
+        _write_timeout_message(timeout, "Secret input")
+        return None
+    except (KeyboardInterrupt, EOFError):
+        sys.stdout.write("\r\n")
+        sys.stdout.flush()
+        sys.stdout.write("Input cancelled\r\n")
+        sys.stdout.flush()
+        logger.debug("Secret input cancelled by user")
+        return None
+    finally:
+        if timeout > 0:
+            signal.alarm(0)
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+
+def _get_secret_input_timeout_windows(message, timeout):
+    """Windows secret input with timeout."""
+    try:
+        # Test if msvcrt is available
+        msvcrt.getch
+    except (ImportError, NameError):
+        # Fallback to regular getpass if msvcrt is not available (e.g., in tests)
+        import getpass
+
+        if message is None:
+            message = "Password: "
+        return getpass.getpass(message)
+
+    if message is None:
+        message = "Password: "
+
+    sys.stdout.write(message)
+    sys.stdout.flush()
+    return _windows_input_loop(timeout, echo=False)

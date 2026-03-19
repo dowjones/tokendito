@@ -1,6 +1,7 @@
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
 """Reusable functions."""
+
 import subprocess
 
 
@@ -30,7 +31,7 @@ def run_process(proc):
     Returns a dict with stdout, sdterr, exit status, and command executed.
     """
     process = subprocess.Popen(proc, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    (stdoutdata, stderrdata) = process.communicate()
+    stdoutdata, stderrdata = process.communicate()
 
     proc_status = {
         "stdout": string_decode(stdoutdata),

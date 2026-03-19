@@ -1,6 +1,7 @@
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
 """Unit tests, and local fixtures for the Tokendito module."""
+
 import os
 import sys
 

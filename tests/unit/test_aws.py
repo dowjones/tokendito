@@ -1,6 +1,7 @@
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
 """Unit tests, and local fixtures for AWS module."""
+
 from unittest.mock import Mock
 
 import pytest
@@ -8,7 +9,7 @@ import pytest
 
 def test_assert_credentials():
     """Test whether getting credentials works as expeted."""
-    from moto import mock_sts
+    from moto import mock_aws
     from tokendito import aws
 
     with pytest.raises(SystemExit) as err:
@@ -22,7 +23,7 @@ def test_assert_credentials():
             "SessionToken": "pytest",
         }
     }
-    with mock_sts():
+    with mock_aws():
         ret = aws.assert_credentials(role_response=saml_response)
         assert "Arn" in ret and "UserId" in ret
 

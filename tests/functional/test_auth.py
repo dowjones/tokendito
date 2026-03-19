@@ -1,6 +1,7 @@
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
 """Functional, endt-to-end authenticated tests, and local fixtures."""
+
 import datetime
 from os import environ
 from os import path

@@ -1,6 +1,7 @@
 # vim: set filetype=python ts=4 sw=4
 # -*- coding: utf-8 -*-
 """Handle Duo operations."""
+
 import json
 import logging
 import sys
@@ -238,7 +239,7 @@ def mfa_verify(duo_info, txid):
         logger.debug("Waiting for MFA challenge response")
         mfa_result = api_post(url, payload=challenged_mfa)
         verify_mfa = get_mfa_response(mfa_result)
-        (challenge_result, challenge_reason) = parse_challenge(verify_mfa, challenge_result)
+        challenge_result, challenge_reason = parse_challenge(verify_mfa, challenge_result)
 
         if challenge_result == "success":
             logger.debug("Successful MFA challenge received")
@@ -312,7 +313,7 @@ def authenticate(selected_okta_factor):
     """
     duo_info = prepare_info(selected_okta_factor)
     # Collect devices, factors, auth params for Duo
-    (duo_info, duo_auth_response) = get_sid(duo_info)
+    duo_info, duo_auth_response = get_sid(duo_info)
     factor_options = get_devices(duo_auth_response)
     mfa_index = user.select_preferred_mfa_index(
         factor_options, factor_key="factor", subfactor_key="device"
