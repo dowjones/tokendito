@@ -212,16 +212,56 @@ launchctl unload ~/Library/LaunchAgents/com.tokendito.renewal.plist
 
 \* On Linux/Windows, run the daemon manually: `tokendito-renew-daemon` or set up with systemd/Task Scheduler
 
+### macOS Login Items Note
+
+After enabling auto-renewal, you'll see an entry in **System Settings > Login Items & Extensions > App Background Activity**:
+
+- **Name**: "tokendito-renew-daemon"
+- **Developer**: "unidentified developer"
+
+This is expected behavior:
+
+- The daemon runs via Python, which isn't code-signed specifically for your organization
+- The "unidentified developer" message is normal for pip-installed tools
+- This does NOT indicate a security issue - it's your local Python environment
+- The service runs with your user permissions (not system-wide)
+
 ## Troubleshooting
+
+### Permission Denied When Enabling (macOS)
+
+**Error:** `[Errno 13] Permission denied: '/Users/username/Library/LaunchAgents/com.tokendito.renewal.plist'`
+
+**Cause:** Your `~/Library/LaunchAgents/` directory is owned by root instead of your user. This can happen when certain applications are installed.
+
+**Fix:**
+
+```bash
+# Check current ownership
+ls -la ~/Library/LaunchAgents/
+
+# If owned by root, fix it
+sudo chown $(whoami):staff ~/Library/LaunchAgents/
+
+# Verify ownership changed
+ls -la ~/Library/LaunchAgents/
+
+# Retry enabling auto-renewal
+tokendito --auto-renew-enable --auto-renew-profiles <profiles>
+```
+
+**Note:** This is a one-time fix. The `chown` command changes the directory ownership to your user account, allowing tokendito to create the launchd plist file.
 
 ### Service Not Running
 
 Check service status:
+
 ```bash
 tokendito --auto-renew-status
 ```
 
 Restart service:
+
 ```bash
 tokendito --auto-renew-disable
 tokendito --auto-renew-enable --auto-renew-profiles <profiles>
@@ -236,11 +276,13 @@ tokendito --auto-renew-enable --auto-renew-profiles <profiles>
 ### "Password not set" Error
 
 Enable device tokens for passwordless renewal:
+
 ```bash
 tokendito --profile <name> --use-device-token
 ```
 
 Or store password in config (less secure):
+
 ```ini
 [profile_name]
 okta_password = your_password
@@ -249,6 +291,7 @@ okta_password = your_password
 ### Check Daemon Logs
 
 View recent daemon activity:
+
 ```bash
 tail -20 ~/Library/Logs/tokendito/renewal.error.log
 ```

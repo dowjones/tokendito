@@ -49,12 +49,19 @@ def create_launchd_plist(config_file=None):
     plist_path.parent.mkdir(parents=True, exist_ok=True)
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    # Get Python executable and tokendito module path
-    python_exe = sys.executable
-    tokendito_cmd = ["tokendito-renew-daemon"]
+    # Find the tokendito-renew-daemon entry point
+    # Using shutil.which to locate it in PATH
+    import shutil  # noqa: C0415
+    daemon_cmd = shutil.which("tokendito-renew-daemon")
 
-    # Build command
-    program_args = [python_exe, "-m", "tokendito.renewal"]
+    if not daemon_cmd:
+        # Fallback to python -m if entry point not found
+        logger.warning("tokendito-renew-daemon not found in PATH, using python -m fallback")
+        daemon_cmd = sys.executable
+        program_args = [daemon_cmd, "-m", "tokendito.renewal"]
+    else:
+        # Use the entry point directly (shows better name in macOS)
+        program_args = [daemon_cmd]
     if config_file:
         program_args.extend(["--config-file", config_file])
 

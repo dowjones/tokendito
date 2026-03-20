@@ -181,16 +181,6 @@ check_interval_minutes = 10       # Fallback check interval
 max_sleep_minutes = 60            # Check config at least every 60 minutes
 ```
 
-#### Passwordless renewal with device tokens
-
-For unattended renewal without password prompts, enable device tokens during your initial authentication:
-
-``` txt
-tokendito --profile default --use-device-token
-```
-
-After the first authentication, the device token is saved and future renewals don't require your password or MFA approval.
-
 #### Platform support
 
 - **macOS**: Full support with automatic launchd service
