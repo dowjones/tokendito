@@ -300,6 +300,26 @@ def parse_cli_args(args):
         help="Login timeout in seconds (default: 0, which is disabled). "
         "You can also use the TOKENDITO_USER_LOGIN_TIMEOUT environment variable.",
     )
+    parser.add_argument(
+        "--auto-renew-enable",
+        action="store_true",
+        help="Enable automatic credential renewal for specified profiles.",
+    )
+    parser.add_argument(
+        "--auto-renew-disable",
+        action="store_true",
+        help="Disable automatic credential renewal.",
+    )
+    parser.add_argument(
+        "--auto-renew-status",
+        action="store_true",
+        help="Display auto-renewal status and monitored profiles.",
+    )
+    parser.add_argument(
+        "--auto-renew-profiles",
+        action="append",
+        help="Profile names to monitor for auto-renewal (can be specified multiple times).",
+    )
 
     parsed_args = parser.parse_args(args)
 
@@ -1166,9 +1186,13 @@ def set_local_credentials(response={}, role="default", region="us-east-1", outpu
         aws_access_key_id = response["Credentials"]["AccessKeyId"]
         aws_secret_access_key = response["Credentials"]["SecretAccessKey"]
         aws_session_token = response["Credentials"]["SessionToken"]
+        expiration = response["Credentials"]["Expiration"]
     except KeyError as err:
         logger.error(f"Could not retrieve crendentials: {err}")
         sys.exit(1)
+
+    # Store expiration time in ISO 8601 format for auto-renewal
+    expiration_str = expiration.isoformat() if hasattr(expiration, 'isoformat') else str(expiration)
 
     update_ini(
         profile=role,
@@ -1176,6 +1200,7 @@ def set_local_credentials(response={}, role="default", region="us-east-1", outpu
         aws_access_key_id=aws_access_key_id,
         aws_secret_access_key=aws_secret_access_key,
         aws_session_token=aws_session_token,
+        x_security_token_expires=expiration_str,
     )
 
     update_ini(
@@ -1488,6 +1513,33 @@ def process_options(args):
 
     if args.configure and args.configure is not True:
         _handle_configure_subcommand(args)
+
+    # Handle auto-renewal commands
+    if args.auto_renew_status:
+        from tokendito import daemon
+        daemon.display_status(args.user_config_file)
+        sys.exit(0)
+
+    if args.auto_renew_enable:
+        from tokendito import daemon
+        if not args.auto_renew_profiles:
+            logger.error("--auto-renew-profiles must be specified when enabling auto-renewal")
+            sys.exit(1)
+        if daemon.enable_auto_renewal(args.auto_renew_profiles, args.user_config_file):
+            print(f"Auto-renewal enabled for profiles: {', '.join(args.auto_renew_profiles)}")
+        else:
+            logger.error("Failed to enable auto-renewal")
+            sys.exit(1)
+        sys.exit(0)
+
+    if args.auto_renew_disable:
+        from tokendito import daemon
+        if daemon.disable_auto_renewal(args.user_config_file):
+            print("Auto-renewal disabled")
+        else:
+            logger.error("Failed to disable auto-renewal")
+            sys.exit(1)
+        sys.exit(0)
 
     _load_config_sources(args)
 

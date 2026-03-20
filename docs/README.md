@@ -7,6 +7,7 @@
   - [Multi-tile-Guide](#multi-tile-guide)
   - [Single-command usage](#single-command-usage)
   - [Multi-profile usage](#multi-profile-usage)
+  - [Automatic credential renewal](#automatic-credential-renewal)
   - [Listing current configuration](#listing-current-configuration)
   - [Additional command line reference](#additional-command-line-reference)
 - [Environment variables and user configuration](#environment-variables-and-user-configuration)
@@ -132,6 +133,70 @@ aws --profile prod ec2 describe-instances
 - **Overrides `--aws-profile`**: The `--aws-profile` flag and the `TOKENDITO_AWS_PROFILE` environment variable are ignored. Instead, the tokendito INI profile name (e.g. `dev`, `staging`) is always used as the AWS profile name in `~/.aws/credentials`.
 - **Authentication is shared**: Okta authentication happens only once. Subsequent profiles reuse the session, so you will only see a single MFA prompt.
 - **Configuration inheritance**: Each profile inherits values from the `[default]` section of the INI file, so common settings only need to be specified once.
+
+### Automatic credential renewal
+
+Tokendito can automatically renew your AWS credentials before they expire, eliminating the need to manually re-authenticate throughout your workday.
+
+#### Quick start
+
+Enable auto-renewal for your profiles:
+
+``` txt
+tokendito --auto-renew-enable \
+    --auto-renew-profiles default \
+    --auto-renew-profiles dev \
+    --auto-renew-profiles prod
+```
+
+Check the status:
+
+``` txt
+tokendito --auto-renew-status
+```
+
+Disable auto-renewal:
+
+``` txt
+tokendito --auto-renew-disable
+```
+
+#### How it works
+
+1. **Background service**: On macOS, a launchd service monitors your credentials in the background
+2. **Smart scheduling**: The daemon calculates when credentials expire and sleeps until renewal is needed (no constant polling)
+3. **Batch renewal**: Multiple profiles expiring around the same time are renewed together with a single Okta authentication
+4. **Automatic recovery**: The service automatically restarts after system sleep/wake
+
+#### Configuration
+
+Settings are stored in your `tokendito.ini` file:
+
+``` ini
+[auto-renewal]
+enabled = true
+profiles = default, dev, prod
+renewal_threshold_minutes = 30    # Renew 30 minutes before expiration
+check_interval_minutes = 10       # Fallback check interval
+max_sleep_minutes = 60            # Check config at least every 60 minutes
+```
+
+#### Passwordless renewal with device tokens
+
+For unattended renewal without password prompts, enable device tokens during your initial authentication:
+
+``` txt
+tokendito --profile default --use-device-token
+```
+
+After the first authentication, the device token is saved and future renewals don't require your password or MFA approval.
+
+#### Platform support
+
+- **macOS**: Full support with automatic launchd service
+- **Linux/Windows**: Manual daemon execution required (or use systemd/Task Scheduler)
+
+For complete documentation, see [AUTO_RENEWAL.md](AUTO_RENEWAL.md).
 
 ### Listing current configuration
 
