@@ -1,5 +1,5 @@
 -r ./requirements.txt
-black>=24.3.0,<26.0.0
+black>=24.3.0,<27.0.0
 coverage>=7.0.0,<8.0.0
 docutils
 flake8>=5.0.0
