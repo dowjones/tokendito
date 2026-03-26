@@ -59,6 +59,9 @@ setup(
     zip_safe=False,
     install_requires=[required],
     entry_points={
-        "console_scripts": ["tokendito=tokendito.__main__:main"],
+        "console_scripts": [
+            "tokendito=tokendito.__main__:main",
+            "tokendito-renew-daemon=tokendito.renewal:main",
+        ],
     },
 )
