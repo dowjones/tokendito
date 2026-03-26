@@ -106,14 +106,21 @@ def renew_profiles(profile_names, config_file=None):
     :param config_file: Path to tokendito config file
     :return: True if successful, False otherwise
     """
+    import shutil
     import subprocess
 
     if not profile_names:
         logger.warning("No profiles provided for renewal")
         return True
 
+    # Find the tokendito command (important for launchd which doesn't have user's PATH)
+    tokendito_cmd = shutil.which("tokendito")
+    if not tokendito_cmd:
+        logger.error("tokendito command not found in PATH")
+        return False
+
     # Build command with --multi-profiles for each profile
-    cmd = ["tokendito"]
+    cmd = [tokendito_cmd]
     for profile_name in profile_names:
         cmd.extend(["--multi-profiles", profile_name])
 

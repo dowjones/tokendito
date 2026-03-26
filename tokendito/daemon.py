@@ -65,6 +65,9 @@ def create_launchd_plist(config_file=None):
     if config_file:
         program_args.extend(["--config-file", config_file])
 
+    # Get user's PATH to ensure tokendito command can be found
+    user_path = os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin")
+
     # Create plist structure
     plist_data = {
         "Label": "com.tokendito.renewal",
@@ -74,6 +77,9 @@ def create_launchd_plist(config_file=None):
         "StandardOutPath": str(log_dir / "renewal.log"),
         "StandardErrorPath": str(log_dir / "renewal.error.log"),
         "StartInterval": 600,  # Run every 10 minutes as fallback
+        "EnvironmentVariables": {
+            "PATH": user_path,  # Include user's PATH so tokendito command can be found
+        },
     }
 
     try:
