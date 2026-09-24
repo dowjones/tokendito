@@ -392,7 +392,7 @@ def test_utc_to_local():
 
     from tokendito import user
 
-    utc = datetime.utcnow()
+    utc = datetime.now(timezone.utc)
     local_time = utc.replace(tzinfo=timezone.utc).astimezone(tz=None)
     local_time = local_time.strftime("%Y-%m-%d %H:%M:%S %Z")
 

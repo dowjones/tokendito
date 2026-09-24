@@ -28,6 +28,11 @@ tokens into your local `~/.aws/credentials` file.
 
 See [Releases](https://github.com/dowjones/tokendito/releases) for a detailed Changelog.
 
+### Tokendito 2.6.0
+
+- Add support for Python 3.13 and 3.14.
+- Remove support for Python 3.10, which reaches end of life in October 2026. Python 3.11+ is now required.
+
 ### Tokendito 2.5.0
 
 Version 2.5.0 of Tokendito introduces the following changes:
@@ -93,7 +98,7 @@ Consult [additional notes](https://github.com/dowjones/tokendito/blob/main/docs/
 
 ## Requirements
 
-- Python 3.9+, or a working Docker environment
+- Python 3.11+, or a working Docker environment
 - AWS account(s) federated with Okta
 
 Tokendito is compatible with Python 3 and can be installed with either
