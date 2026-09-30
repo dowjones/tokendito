@@ -520,6 +520,52 @@ def test_process_ini_file(tmpdir):
     assert err.value.code == 1
 
 
+def test_process_ini_file_user_settings(tmpdir, caplog):
+    """Test bare and prefixed [user] ini keys, value conversion, and unknown keys."""
+    from tokendito import user
+
+    path = tmpdir.join("pytest_tokendito.ini")
+    path.write(
+        "[default]\n"
+        "loglevel = WARN\n"
+        "login_timeout = 5\n"
+        "quiet = false\n"
+        "user_use_device_token = yes\n"
+        "bogus = 1\n"
+        "\n"
+        "[pytest]\n"
+        "aws_profile = pytest_aws\n"
+    )
+
+    ret = user.process_ini_file(str(path), "pytest")
+    assert ret.user["loglevel"] == "WARN"
+    assert ret.user["login_timeout"] == 5
+    assert ret.user["quiet"] is False
+    assert ret.user["use_device_token"] is True
+    assert ret.aws["profile"] == "pytest_aws"
+    assert "bogus" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [("true", True), ("Yes", True), ("1", True), ("false", False), ("off", False), ("0", False)],
+)
+def test_convert_value_bool(value, expected):
+    """Test boolean conversion of string config values."""
+    from tokendito import user
+
+    assert user._convert_value("TOKENDITO_USER_QUIET", value, "quiet") is expected
+
+
+def test_convert_value_invalid():
+    """Test that unconvertible config values are dropped."""
+    from tokendito import user
+
+    assert user._convert_value("quiet", "maybe", "quiet") is None
+    assert user._convert_value("login_timeout", "soon", "login_timeout") is None
+    assert user._convert_value("loglevel", "DEBUG", "loglevel") == "DEBUG"
+
+
 @pytest.mark.parametrize(
     "factor_type, output",
     [

@@ -230,7 +230,7 @@ def parse_cli_args(args):
         type=lambda s: s.upper(),
         dest="user_loglevel",
         choices=["DEBUG", "INFO", "WARN", "ERROR"],
-        help="[DEBUG|INFO|WARN|ERROR], default loglevel is WARNING.",
+        help="[DEBUG|INFO|WARN|ERROR], default loglevel is INFO.",
     )
     parser.add_argument(
         "--log-output-file",
@@ -732,21 +732,40 @@ def add_sensitive_value_to_be_masked(value, key=None):
             mask_items.append(value)
 
 
+def _split_ini_key(key):
+    """Split an ini key into (section, param).
+
+    Bare keys that name a [user] setting (e.g. ``loglevel``) are placed in the user section.
+
+    :returns: tuple, or None if the key cannot be mapped.
+    """
+    section, sep, param = key.partition("_")
+    if sep and section in config.get_defaults():
+        return section, param
+    if key in config.get_defaults()["user"]:
+        return "user", key
+    if sep:
+        return section, param
+    return None
+
+
 def _read_ini(file, profile, default_section):
     res = dict()
-    pattern = re.compile(r"^(.*?)_(.*)")
 
     ini = configparser.RawConfigParser(default_section=default_section)
-    # Here, group(1) is the dictionary key, and group(2) the configuration element
     try:
         ini.read(file)
         for key, val in ini.items(profile):
-            match = re.search(pattern, key.lower())
-            if match:
-                if match.group(1) not in res:
-                    res[match.group(1)] = dict()
-                res[match.group(1)][match.group(2)] = val
-                add_sensitive_value_to_be_masked(val, match.group(2))
+            split_key = _split_ini_key(key.lower())
+            if split_key is None:
+                logger.warning(f"Ignoring unknown setting '{key}' in {file} [{profile}].")
+                continue
+            section, param = split_key
+            converted = _convert_value(key, val, param)
+            if converted is None:
+                continue
+            res.setdefault(section, dict())[param] = converted
+            add_sensitive_value_to_be_masked(converted, param)
     except configparser.Error as err:
         logger.error(f"Could not load profile '{profile}': {str(err)}")
         sys.exit(2)
@@ -815,8 +834,8 @@ def process_arguments(args):
         sys.exit(1)
 
 
-def _convert_env_value(key, val, param_name):
-    """Convert environment variable value to the appropriate type.
+def _convert_value(key, val, param_name):
+    """Convert a string value from the environment or ini file to the appropriate type.
 
     :returns: converted value, or None if conversion fails.
     """
@@ -826,6 +845,14 @@ def _convert_env_value(key, val, param_name):
         except ValueError:
             logger.warning(f"Invalid value for {key}: {val}. Must be an integer.")
             return None
+    if param_name in ("quiet", "use_device_token"):
+        lowered = str(val).strip().lower()
+        if lowered in ("true", "yes", "on", "1"):
+            return True
+        if lowered in ("false", "no", "off", "0"):
+            return False
+        logger.warning(f"Invalid value for {key}: {val}. Must evaluate to true or false.")
+        return None
     return val
 
 
@@ -845,7 +872,7 @@ def process_environment(prefix="tokendito"):
         if match.group(2) not in res:
             res[match.group(2)] = dict()
         param_name = match.group(3)
-        converted = _convert_env_value(key, val, param_name)
+        converted = _convert_value(key, val, param_name)
         if converted is None:
             continue
         res[match.group(2)][param_name] = converted
