@@ -1241,9 +1241,9 @@ def test_login_timeout_cli_arg():
     """Test that --login-timeout CLI argument is parsed correctly."""
     from tokendito import user
 
-    # Default value
+    # Unset, so it does not override the ini file or environment
     args = user.parse_cli_args([])
-    assert args.user_login_timeout == 0
+    assert args.user_login_timeout is None
 
     # Custom value
     args = user.parse_cli_args(["--login-timeout", "30"])
@@ -1389,37 +1389,56 @@ def test_get_value_source_env_overrides_ini():
     assert location == "TOKENDITO_OKTA_USERNAME"
 
 
-def test_resolve_profile_cli_over_env(monkeypatch):
-    """Test that CLI --profile takes precedence over env var."""
-    import argparse
-
-    from tokendito.user import _resolve_profile
-
-    monkeypatch.setenv("TOKENDITO_USER_CONFIG_PROFILE", "env-profile")
-    args = argparse.Namespace(user_config_profile="cli-profile")
-    assert _resolve_profile(args) == "cli-profile"
-
-
-def test_resolve_profile_env_over_default(monkeypatch):
-    """Test that env var overrides the default profile."""
-    import argparse
-
-    from tokendito.user import _resolve_profile
-
-    monkeypatch.setenv("TOKENDITO_USER_CONFIG_PROFILE", "env-profile")
-    args = argparse.Namespace(user_config_profile="default")
-    assert _resolve_profile(args) == "env-profile"
-
-
-def test_resolve_profile_default(monkeypatch):
-    """Test that default profile is returned when no overrides."""
-    import argparse
-
-    from tokendito.user import _resolve_profile
+@pytest.mark.parametrize(
+    "cli, env, expected",
+    [
+        (["--profile", "cli-profile"], "env-profile", "cli-profile"),
+        (["--profile", "default"], "env-profile", "default"),
+        ([], "env-profile", "env-profile"),
+        ([], None, "default"),
+    ],
+)
+def test_parse_cli_args_profile_precedence(monkeypatch, cli, env, expected):
+    """Test that the profile is resolved as CLI, then environment, then default."""
+    from tokendito import user
 
     monkeypatch.delenv("TOKENDITO_USER_CONFIG_PROFILE", raising=False)
-    args = argparse.Namespace(user_config_profile="default")
-    assert _resolve_profile(args) == "default"
+    if env:
+        monkeypatch.setenv("TOKENDITO_USER_CONFIG_PROFILE", env)
+    assert user.parse_cli_args(cli).user_config_profile == expected
+
+
+def test_parse_cli_args_config_file_from_env(monkeypatch):
+    """Test that TOKENDITO_USER_CONFIG_FILE is used when --config-file is not given."""
+    from tokendito import user
+    from tokendito.config import config
+
+    monkeypatch.setenv("TOKENDITO_USER_CONFIG_FILE", "/env/tokendito.ini")
+    assert user.parse_cli_args([]).user_config_file == "/env/tokendito.ini"
+    assert user.parse_cli_args(["--config-file", "/cli.ini"]).user_config_file == "/cli.ini"
+
+    monkeypatch.delenv("TOKENDITO_USER_CONFIG_FILE")
+    assert user.parse_cli_args([]).user_config_file == config.get_defaults()["user"]["config_file"]
+
+
+def test_unset_cli_flags_do_not_override_env(monkeypatch):
+    """Test that unset --quiet, --use-device-token and --login-timeout do not override env."""
+    from tokendito import user
+    from tokendito.config import Config
+
+    monkeypatch.setenv("TOKENDITO_USER_QUIET", "true")
+    monkeypatch.setenv("TOKENDITO_USER_USE_DEVICE_TOKEN", "true")
+    monkeypatch.setenv("TOKENDITO_USER_LOGIN_TIMEOUT", "30")
+
+    merged = Config()
+    merged.update(user.process_environment())
+    merged.update(user.process_arguments(user.parse_cli_args([])))
+    assert merged.user["quiet"] is True
+    assert merged.user["use_device_token"] is True
+    assert merged.user["login_timeout"] == 30
+
+    merged.update(user.process_arguments(user.parse_cli_args(["--login-timeout", "5"])))
+    assert merged.user["login_timeout"] == 5
 
 
 def test_format_value_masks_password():

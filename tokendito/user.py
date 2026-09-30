@@ -208,7 +208,6 @@ def parse_cli_args(args):
     parser.add_argument(
         "--profile",
         dest="user_config_profile",
-        default=config.user["config_profile"],
         help="Tokendito configuration profile to use.",
     )
     parser.add_argument(
@@ -221,7 +220,6 @@ def parse_cli_args(args):
     parser.add_argument(
         "--config-file",
         dest="user_config_file",
-        default=config.user["config_file"],
         help=f"Use an alternative configuration file. Defaults to {config.user['config_file']}",
     )
     parser.add_argument(
@@ -282,26 +280,33 @@ def parse_cli_args(args):
         "--use-device-token",
         dest="user_use_device_token",
         action="store_true",
-        default=False,
+        default=None,
         help="Use device token across sessions",
     )
     parser.add_argument(
         "--quiet",
         dest="user_quiet",
         action="store_true",
-        default=False,
+        default=None,
         help="Suppress output",
     )
     parser.add_argument(
         "--login-timeout",
         dest="user_login_timeout",
         type=int,
-        default=0,
         help="Login timeout in seconds (default: 0, which is disabled). "
         "You can also use the TOKENDITO_USER_LOGIN_TIMEOUT environment variable.",
     )
 
     parsed_args = parser.parse_args(args)
+
+    # These select which ini file and profile to read, so they must be resolved before
+    # any configuration is loaded: CLI, then environment, then the built-in default.
+    for dest in ("user_config_file", "user_config_profile"):
+        if getattr(parsed_args, dest) is None:
+            env_value = os.environ.get(f"TOKENDITO_{dest.upper()}")
+            default = config.get_defaults()["user"][dest.removeprefix("user_")]
+            setattr(parsed_args, dest, env_value or default)
 
     return parsed_args
 
@@ -1401,26 +1406,9 @@ def _safe_load_ini(file, profile):
     return None
 
 
-def _resolve_profile(args):
-    """Resolve the active profile from CLI args or environment.
-
-    CLI args take precedence over env vars per documented precedence.
-
-    :param args: argparse namespace.
-    :returns: profile name string.
-    """
-    default_profile = config.get_defaults()["user"]["config_profile"]
-    if args.user_config_profile != default_profile:
-        return args.user_config_profile
-    env_profile = os.environ.get("TOKENDITO_USER_CONFIG_PROFILE")
-    if env_profile:
-        return env_profile
-    return args.user_config_profile
-
-
 def configure_list(args):
     """Display current configuration values and their sources."""
-    profile = _resolve_profile(args)
+    profile = args.user_config_profile
 
     config_ini = _safe_load_ini(args.user_config_file, profile)
     config_env = process_environment()
