@@ -25,7 +25,7 @@
 
 ### Default usage
 
-Configure your profile by running tokendito with the `--configure` flag, or by populating your `tokendito.ini` file as [here](tokendito.ini.md).
+Configure your profile by running tokendito with the `--configure` flag, or by populating your `tokendito.ini` file as described in [tokendito.ini reference](tokendito.ini.md).
 Using --configure will only set the okta_username, okta_todo
 
 Then execute: `tokendito` in your command line.
@@ -195,7 +195,7 @@ options:
   --config-file USER_CONFIG_FILE
                         Use an alternative configuration file. Defaults to tokendito.ini with location depending on the OS.
   --loglevel {DEBUG,INFO,WARN,ERROR}, -l {DEBUG,INFO,WARN,ERROR}
-                        [DEBUG|INFO|WARN|ERROR], default loglevel is WARNING.
+                        [DEBUG|INFO|WARN|ERROR], default loglevel is INFO.
   --log-output-file USER_LOG_OUTPUT_FILE
                         Optional file to log output to.
   --aws-config-file AWS_CONFIG_FILE
@@ -220,7 +220,7 @@ options:
                         Sets the MFA response to a challenge. You can also use the TOKENDITO_OKTA_MFA_RESPONSE environment variable.
   --use-device-token    Use device token across sessions.
   --quiet               Suppress output.
-  --login-timeout TIMEOUT     
+  --login-timeout TIMEOUT
                         Login timeout in seconds (default: 0 for disabled). You can also use the TOKENDITO_LOGIN_TIMEOUT environment variable.
 ```
 
@@ -245,26 +245,26 @@ The following table lists the environment variable and user configuration entry 
 
 | Command line option | Environment variable | User configuration |
 | ------------------- | -------------------- | ------------------ |
-| `--username` | `TOKENDITO_OKTA_USERNAME`        | `okta_username` |
-| `--password` | `TOKENDITO_OKTA_PASSWORD` |   |
-| `--profile`  | `TOKENDITO_USER_CONFIG_PROFILE` | `profile` |
+| `--username` | `TOKENDITO_OKTA_USERNAME` | `okta_username` |
+| `--password` | `TOKENDITO_OKTA_PASSWORD` | |
+| `--profile` | `TOKENDITO_USER_CONFIG_PROFILE` | |
 | `--multi-profiles` | | |
 | `--config-file` | `TOKENDITO_USER_CONFIG_FILE` | |
 | `--loglevel` | `TOKENDITO_USER_LOGLEVEL` | `loglevel` |
-| `--log-output-file` | `TOKENDITO_USER_LOG_OUTPUT_FILE`        | `log_output_file` |
-| `--aws-config-file` | `TOKENDITO_AWS_CONFIG_FILE`        | `aws_config_file` |
-| `--aws-output` | `TOKENDITO_AWS_OUTPUT`        | `aws_output` |
-| `--aws-profile` | `TOKENDITO_AWS_PROFILE`        | `aws_profile` |
-| `--aws-region` | `TOKENDITO_AWS_REGION`       | `aws_region` |
-| `--aws-role-arn` | `TOKENDITO_AWS_ROLE_ARN`       | `aws_role_arn` |
-| `--aws-shared-credentials-file` | `TOKENDITO_AWS_SHARED_CREDENTIALS_FILE`        | `aws_shared_credentials_file` |
-| `--okta-org` | `TOKENDITO_OKTA_ORG`        | `okta_org` |
-| `--okta-tile` | `TOKENDITO_OKTA_TILE`        | `okta_tile` |
-| `--okta-mfa` | `TOKENDITO_OKTA_MFA`        | `okta_mfa` |
-| `--okta-mfa-response` | `TOKENDITO_OKTA_MFA_RESPONSE`        | `okta_mfa_response` |
-| `--use-device-token` | `TOKENDITO_USER_USE_DEVICE_TOKEN`        | `user_use_device_token` |
-| `--quiet` | `TOKENDITO_USER_QUIET`        | `quiet` |
-| `--login-timeout` | `TOKENDITO_USER_LOGIN_TIMEOUT`        | `login_timeout` |
+| `--log-output-file` | `TOKENDITO_USER_LOG_OUTPUT_FILE` | `log_output_file` |
+| `--aws-config-file` | `TOKENDITO_AWS_CONFIG_FILE` | `aws_config_file` |
+| `--aws-output` | `TOKENDITO_AWS_OUTPUT` | `aws_output` |
+| `--aws-profile` | `TOKENDITO_AWS_PROFILE` | `aws_profile` |
+| `--aws-region` | `TOKENDITO_AWS_REGION` | `aws_region` |
+| `--aws-role-arn` | `TOKENDITO_AWS_ROLE_ARN` | `aws_role_arn` |
+| `--aws-shared-credentials-file` | `TOKENDITO_AWS_SHARED_CREDENTIALS_FILE` | `aws_shared_credentials_file` |
+| `--okta-org` | `TOKENDITO_OKTA_ORG` | `okta_org` |
+| `--okta-tile` | `TOKENDITO_OKTA_TILE` | `okta_tile` |
+| `--okta-mfa` | `TOKENDITO_OKTA_MFA` | `okta_mfa` |
+| `--okta-mfa-response` | `TOKENDITO_OKTA_MFA_RESPONSE` | `okta_mfa_response` |
+| `--use-device-token` | `TOKENDITO_USER_USE_DEVICE_TOKEN` | `use_device_token` |
+| `--quiet` | `TOKENDITO_USER_QUIET` | `quiet` |
+| `--login-timeout` | `TOKENDITO_USER_LOGIN_TIMEOUT` | `login_timeout` |
 
 ## Configuration file location
 
@@ -311,6 +311,7 @@ tokendito --version
 ```
 
 **Note:** The system-wide installation approach using a virtual environment ensures:
+
 - All users can access tokendito
 - No conflicts with system Python packages
 - Clean upgrades and dependency management
@@ -323,6 +324,7 @@ pip install --upgrade tokendito
 ```
 
 For system-wide venv-based installations:
+
 ```bash
 sudo /opt/tokendito/bin/pip install --upgrade tokendito
 ```
