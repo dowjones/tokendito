@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """Tokendito module initialization."""
 
-__version__ = "2.5.0"
+__version__ = "2.5.1"
 __title__ = "tokendito"
 __description__ = "Get AWS STS tokens from Okta SSO"
 __long_description_content_type__ = "text/markdown"
