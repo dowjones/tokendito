@@ -311,8 +311,7 @@ def parse_cli_args(args):
         dest="user_quiet",
         action="store_true",
         default=None,
-        help="Suppress output. You "
-        "can also use the TOKENDITO_USER_QUIET environment variable.",
+        help="Suppress output. You can also use the TOKENDITO_USER_QUIET environment variable.",
     )
     parser.add_argument(
         "--login-timeout",
