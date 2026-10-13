@@ -26,7 +26,7 @@
 ### Default usage
 
 Configure your profile by running tokendito with the `--configure` flag, or by populating your `tokendito.ini` file as described in [tokendito.ini reference](tokendito.ini.md).
-Using --configure will only set the okta_username, okta_todo
+Using `--configure` will prompt for and set `okta_org` (or `okta_tile`) and `okta_username`, then persist those along with `okta_mfa` (if already known) to your `tokendito.ini` file. Your password is never persisted to the configuration file.
 
 Then execute: `tokendito` in your command line.
 
@@ -52,7 +52,7 @@ You can just pass in your information at runtime:
 
 ``` txt
 tokendito --username prod_service_user@company.com \
---role-arn arn:aws:iam::123456789000:role/dowjones-engineer \
+--aws-role-arn arn:aws:iam::123456789000:role/dowjones-engineer \
 --okta-mfa push \
 --okta-tile https://acme.oktapreview.com/home/amazon_aws/b07384d113edec49eaa6/123 \
 ```
@@ -170,58 +170,102 @@ tokendito --profile engineer --configure list
 ### Additional command line reference
 
 ``` txt
-usage: tokendito [-h] [--version] [--configure] [--username OKTA_USERNAME] [--password OKTA_PASSWORD] [--profile USER_CONFIG_PROFILE] [--config-file USER_CONFIG_FILE]
-                 [--loglevel {DEBUG,INFO,WARN,ERROR}] [--log-output-file USER_LOG_OUTPUT_FILE] [--aws-config-file AWS_CONFIG_FILE] [--aws-output AWS_OUTPUT]
-                 [--aws-profile AWS_PROFILE] [--aws-region AWS_REGION] [--aws-role-arn AWS_ROLE_ARN] [--aws-shared-credentials-file AWS_SHARED_CREDENTIALS_FILE]
-                 [--okta-org OKTA_ORG | --okta-tile OKTA_TILE] [--okta-client-id OKTA_CLIENT_ID] [--okta-mfa OKTA_MFA] [--okta-mfa-response OKTA_MFA_RESPONSE]
-                 [--use-device-token] [--quiet]
+usage: tokendito [-h] [--version] [--configure [CONFIGURE]]
+                 [--username OKTA_USERNAME] [--password OKTA_PASSWORD]
+                 [--profile USER_CONFIG_PROFILE]
+                 [--multi-profiles MULTI_PROFILES]
+                 [--config-file USER_CONFIG_FILE]
+                 [--loglevel {DEBUG,INFO,WARN,ERROR}]
+                 [--log-output-file USER_LOG_OUTPUT_FILE]
+                 [--aws-config-file AWS_CONFIG_FILE] [--aws-output AWS_OUTPUT]
+                 [--aws-profile AWS_PROFILE] [--aws-region AWS_REGION]
+                 [--aws-role-arn AWS_ROLE_ARN]
+                 [--aws-shared-credentials-file AWS_SHARED_CREDENTIALS_FILE]
+                 [--okta-org OKTA_ORG | --okta-tile OKTA_TILE]
+                 [--okta-client-id OKTA_CLIENT_ID] [--okta-mfa OKTA_MFA]
+                 [--okta-mfa-response OKTA_MFA_RESPONSE] [--use-device-token]
+                 [--quiet] [--login-timeout USER_LOGIN_TIMEOUT]
 
 Gets an STS token to use with the AWS CLI and SDK.
 
 options:
-  -h, --help            show this help message and exit.
-  --version             Displays version and exit.
-  --configure [list]    Prompt user for configuration parameters.
-                        Use '--configure list' to display current settings and their sources.
+  -h, --help            show this help message and exit
+  --version             Displays version and exit
+  --configure [list]
+                        Prompt user for configuration parameters. Use '--
+                        configure list' to display current settings and their
+                        sources.
   --username OKTA_USERNAME
-                        username to log in to Okta. You can also use the TOKENDITO_OKTA_USERNAME environment variable.
+                        username to log in to Okta. You can also use the
+                        TOKENDITO_OKTA_USERNAME environment variable.
   --password OKTA_PASSWORD
-                        password to log in to Okta. You can also use the TOKENDITO_OKTA_PASSWORD environment variable.
+                        password to log in to Okta. You can also use the
+                        TOKENDITO_OKTA_PASSWORD environment variable.
   --profile USER_CONFIG_PROFILE
-                        Tokendito configuration profile to use.
+                        Tokendito configuration profile to use. You can also
+                        use the TOKENDITO_USER_CONFIG_PROFILE environment
+                        variable.
   --multi-profiles USER_CONFIG_PROFILE
-                        Similar to --profile, but can be specified multiple times.
-                        Note: Using this will override --profile and cause --aws-profile to be ignored and replaced with this value.
+                        Tokendito configuration profiles to use. Can be
+                        specified multiple times. Using this will override
+                        --profile and cause --aws-profile to be ignored and
+                        replaced with this value.
   --config-file USER_CONFIG_FILE
-                        Use an alternative configuration file. Defaults to tokendito.ini with location depending on the OS.
-  --loglevel {DEBUG,INFO,WARN,ERROR}, -l {DEBUG,INFO,WARN,ERROR}
-                        [DEBUG|INFO|WARN|ERROR], default loglevel is INFO.
+                        Use an alternative configuration file. Defaults to
+                        tokendito.ini with location depending on the OS. You
+                        can also use the TOKENDITO_USER_CONFIG_FILE
+                        environment variable.
+  --loglevel, -l {DEBUG,INFO,WARN,ERROR}
+                        [DEBUG|INFO|WARN|ERROR], default loglevel is INFO. You
+                        can also use the TOKENDITO_USER_LOGLEVEL environment
+                        variable.
   --log-output-file USER_LOG_OUTPUT_FILE
-                        Optional file to log output to.
+                        Optional file to log output to. You can also use the
+                        TOKENDITO_USER_LOG_OUTPUT_FILE environment variable.
   --aws-config-file AWS_CONFIG_FILE
-                        AWS Configuration file to write to.
+                        AWS Configuration file to write to. You can also use
+                        the TOKENDITO_AWS_CONFIG_FILE environment variable.
   --aws-output AWS_OUTPUT
-                        Sets the output type for the AWS profile.
+                        Sets the output type for the AWS profile. You can also
+                        use the TOKENDITO_AWS_OUTPUT environment variable.
   --aws-profile AWS_PROFILE
-                        AWS profile to save as in the credentials file.
+                        AWS profile to save as in the credentials file. You
+                        can also use the TOKENDITO_AWS_PROFILE environment
+                        variable.
   --aws-region AWS_REGION
-                        Sets the region for the AWS profile.
+                        Sets the region for the AWS profile. You can also use
+                        the TOKENDITO_AWS_REGION environment variable.
   --aws-role-arn AWS_ROLE_ARN
-                        Sets the IAM role.
+                        Sets the IAM role. You can also use the
+                        TOKENDITO_AWS_ROLE_ARN environment variable.
   --aws-shared-credentials-file AWS_SHARED_CREDENTIALS_FILE
-                        AWS credentials file to write to.
-  --okta-org OKTA_ORG   Set the Okta Org base URL. This enables role auto-discovery.
+                        AWS credentials file to write to. You can also use the
+                        TOKENDITO_AWS_SHARED_CREDENTIALS_FILE environment
+                        variable.
+  --okta-org OKTA_ORG   Set the Okta Org base URL. This enables role auto-
+                        discovery. You can also use the TOKENDITO_OKTA_ORG
+                        environment variable.
   --okta-tile OKTA_TILE
-                        Okta tile URL to use.
+                        Okta tile URL to use. You can also use the
+                        TOKENDITO_OKTA_TILE environment variable.
   --okta-client-id OKTA_CLIENT_ID
-                        For OIE enabled Orgs this sets the Okta client ID to replace the value found by tokendito. It is used in the authorize code flow.
-  --okta-mfa OKTA_MFA   Sets the MFA method. You can also use the TOKENDITO_OKTA_MFA environment variable.
+                        For OIE enabled Orgs this sets the Okta client ID to
+                        replace the value found by tokendito. It is used in
+                        the authorize code flow. You can also use the
+                        TOKENDITO_OKTA_CLIENT_ID environment variable.
+  --okta-mfa OKTA_MFA   Sets the MFA method. You can also use the
+                        TOKENDITO_OKTA_MFA environment variable.
   --okta-mfa-response OKTA_MFA_RESPONSE
-                        Sets the MFA response to a challenge. You can also use the TOKENDITO_OKTA_MFA_RESPONSE environment variable.
-  --use-device-token    Use device token across sessions.
-  --quiet               Suppress output.
+                        Sets the MFA response to a challenge. You can also use
+                        the TOKENDITO_OKTA_MFA_RESPONSE environment variable.
+  --use-device-token    Use device token across sessions. You can also use the
+                        TOKENDITO_USER_USE_DEVICE_TOKEN environment variable.
+  --quiet               Suppress output. You can also use the
+                        TOKENDITO_USER_QUIET environment variable.
   --login-timeout TIMEOUT
-                        Login timeout in seconds (default: 0 for disabled). You can also use the TOKENDITO_LOGIN_TIMEOUT environment variable.
+                        Login timeout in seconds (default: 0, which is
+                        disabled). You can also use the
+                        TOKENDITO_USER_LOGIN_TIMEOUT environment variable.
 ```
 
 Regarding the storage of the Okta password, we are fans of automation but do not recommend passing in the password to tokendito via plaintext or storing
@@ -235,7 +279,7 @@ Tokendito supports the use of environment variables and user configuration equiv
 
 Credentials and configuration settings take precedence in the following order:
 
-1. Command line options -- Overrides settings in any other location. You can specify `--username`, `--role-arn`, `--okta-tile`, and `--okta-mfa` as parameters on the command line.
+1. Command line options -- Overrides settings in any other location. You can specify `--username`, `--aws-role-arn`, `--okta-tile`, and `--okta-mfa` as parameters on the command line.
 1. Environment variables -- You can store values in your system\'s environment variables. It overrides the configuration file.
 1. User configuration file -- The user configuration file is updated when you run the command tokendito \--configure. Tokendito uses [platformdirs](https://github.com/platformdirs/platformdirs) to store user configuration in the [tokendito.ini](tokendito.ini.md) file. This file can contain the credential details for the default profile and any named profiles.
 
@@ -260,6 +304,7 @@ The following table lists the environment variable and user configuration entry 
 | `--aws-shared-credentials-file` | `TOKENDITO_AWS_SHARED_CREDENTIALS_FILE` | `aws_shared_credentials_file` |
 | `--okta-org` | `TOKENDITO_OKTA_ORG` | `okta_org` |
 | `--okta-tile` | `TOKENDITO_OKTA_TILE` | `okta_tile` |
+| `--okta-client-id` | `TOKENDITO_OKTA_CLIENT_ID` | `okta_client_id` |
 | `--okta-mfa` | `TOKENDITO_OKTA_MFA` | `okta_mfa` |
 | `--okta-mfa-response` | `TOKENDITO_OKTA_MFA_RESPONSE` | `okta_mfa_response` |
 | `--use-device-token` | `TOKENDITO_USER_USE_DEVICE_TOKEN` | `use_device_token` |

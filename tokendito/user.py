@@ -208,7 +208,8 @@ def parse_cli_args(args):
     parser.add_argument(
         "--profile",
         dest="user_config_profile",
-        help="Tokendito configuration profile to use.",
+        help="Tokendito configuration profile to use. You "
+        "can also use the TOKENDITO_USER_CONFIG_PROFILE environment variable.",
     )
     parser.add_argument(
         "--multi-profiles",
@@ -220,7 +221,8 @@ def parse_cli_args(args):
     parser.add_argument(
         "--config-file",
         dest="user_config_file",
-        help=f"Use an alternative configuration file. Defaults to {config.user['config_file']}",
+        help=f"Use an alternative configuration file. Defaults to {config.user['config_file']}"
+        ". You can also use the TOKENDITO_USER_CONFIG_FILE environment variable.",
     )
     parser.add_argument(
         "--loglevel",
@@ -228,43 +230,63 @@ def parse_cli_args(args):
         type=lambda s: s.upper(),
         dest="user_loglevel",
         choices=["DEBUG", "INFO", "WARN", "ERROR"],
-        help="[DEBUG|INFO|WARN|ERROR], default loglevel is INFO.",
+        help="[DEBUG|INFO|WARN|ERROR], default loglevel is INFO. You "
+        "can also use the TOKENDITO_USER_LOGLEVEL environment variable.",
     )
     parser.add_argument(
         "--log-output-file",
         dest="user_log_output_file",
-        help="Optional file to log output to.",
+        help="Optional file to log output to. You "
+        "can also use the TOKENDITO_USER_LOG_OUTPUT_FILE environment variable.",
     )
-    parser.add_argument("--aws-config-file", help="AWS Configuration file to write to.")
+    parser.add_argument(
+        "--aws-config-file",
+        help="AWS Configuration file to write to. You "
+        "can also use the TOKENDITO_AWS_CONFIG_FILE environment variable.",
+    )
     parser.add_argument(
         "--aws-output",
-        help="Sets the output type for the AWS profile.",
+        help="Sets the output type for the AWS profile. You "
+        "can also use the TOKENDITO_AWS_OUTPUT environment variable.",
     )
     parser.add_argument(
         "--aws-profile",
-        help="AWS profile to save as in the credentials file.",
+        help="AWS profile to save as in the credentials file. You "
+        "can also use the TOKENDITO_AWS_PROFILE environment variable.",
     )
     parser.add_argument(
         "--aws-region",
-        help="Sets the region for the AWS profile.",
+        help="Sets the region for the AWS profile. You "
+        "can also use the TOKENDITO_AWS_REGION environment variable.",
     )
-    parser.add_argument("--aws-role-arn", help="Sets the IAM role.")
-    parser.add_argument("--aws-shared-credentials-file", help="AWS credentials file to write to.")
+    parser.add_argument(
+        "--aws-role-arn",
+        help="Sets the IAM role. You "
+        "can also use the TOKENDITO_AWS_ROLE_ARN environment variable.",
+    )
+    parser.add_argument(
+        "--aws-shared-credentials-file",
+        help="AWS credentials file to write to. You "
+        "can also use the TOKENDITO_AWS_SHARED_CREDENTIALS_FILE environment variable.",
+    )
 
     okta_me_group = parser.add_mutually_exclusive_group()
     okta_me_group.add_argument(
         "--okta-org",
         dest="okta_org",
-        help="Set the Okta Org base URL. This enables role auto-discovery",
+        help="Set the Okta Org base URL. This enables role auto-discovery. You "
+        "can also use the TOKENDITO_OKTA_ORG environment variable.",
     )
     okta_me_group.add_argument(
         "--okta-tile",
-        help="Okta tile URL to use.",
+        help="Okta tile URL to use. You "
+        "can also use the TOKENDITO_OKTA_TILE environment variable.",
     )
     parser.add_argument(
         "--okta-client-id",
         help="""For OIE enabled Orgs this sets the Okta client ID to replace the value
-        found by tokendito. It is used in the authorize code flow.""",
+        found by tokendito. It is used in the authorize code flow. You can also use the
+        TOKENDITO_OKTA_CLIENT_ID environment variable.""",
     )
     parser.add_argument(
         "--okta-mfa",
@@ -281,14 +303,16 @@ def parse_cli_args(args):
         dest="user_use_device_token",
         action="store_true",
         default=None,
-        help="Use device token across sessions",
+        help="Use device token across sessions. You "
+        "can also use the TOKENDITO_USER_USE_DEVICE_TOKEN environment variable.",
     )
     parser.add_argument(
         "--quiet",
         dest="user_quiet",
         action="store_true",
         default=None,
-        help="Suppress output",
+        help="Suppress output. You "
+        "can also use the TOKENDITO_USER_QUIET environment variable.",
     )
     parser.add_argument(
         "--login-timeout",
