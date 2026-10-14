@@ -208,8 +208,8 @@ def parse_cli_args(args):
     parser.add_argument(
         "--profile",
         dest="user_config_profile",
-        default=config.user["config_profile"],
-        help="Tokendito configuration profile to use.",
+        help="Tokendito configuration profile to use. You "
+        "can also use the TOKENDITO_USER_CONFIG_PROFILE environment variable.",
     )
     parser.add_argument(
         "--multi-profiles",
@@ -221,8 +221,8 @@ def parse_cli_args(args):
     parser.add_argument(
         "--config-file",
         dest="user_config_file",
-        default=config.user["config_file"],
-        help=f"Use an alternative configuration file. Defaults to {config.user['config_file']}",
+        help=f"Use an alternative configuration file. Defaults to {config.user['config_file']}"
+        ". You can also use the TOKENDITO_USER_CONFIG_FILE environment variable.",
     )
     parser.add_argument(
         "--loglevel",
@@ -230,43 +230,63 @@ def parse_cli_args(args):
         type=lambda s: s.upper(),
         dest="user_loglevel",
         choices=["DEBUG", "INFO", "WARN", "ERROR"],
-        help="[DEBUG|INFO|WARN|ERROR], default loglevel is WARNING.",
+        help="[DEBUG|INFO|WARN|ERROR], default loglevel is INFO. You "
+        "can also use the TOKENDITO_USER_LOGLEVEL environment variable.",
     )
     parser.add_argument(
         "--log-output-file",
         dest="user_log_output_file",
-        help="Optional file to log output to.",
+        help="Optional file to log output to. You "
+        "can also use the TOKENDITO_USER_LOG_OUTPUT_FILE environment variable.",
     )
-    parser.add_argument("--aws-config-file", help="AWS Configuration file to write to.")
+    parser.add_argument(
+        "--aws-config-file",
+        help="AWS Configuration file to write to. You "
+        "can also use the TOKENDITO_AWS_CONFIG_FILE environment variable.",
+    )
     parser.add_argument(
         "--aws-output",
-        help="Sets the output type for the AWS profile.",
+        help="Sets the output type for the AWS profile. You "
+        "can also use the TOKENDITO_AWS_OUTPUT environment variable.",
     )
     parser.add_argument(
         "--aws-profile",
-        help="AWS profile to save as in the credentials file.",
+        help="AWS profile to save as in the credentials file. You "
+        "can also use the TOKENDITO_AWS_PROFILE environment variable.",
     )
     parser.add_argument(
         "--aws-region",
-        help="Sets the region for the AWS profile.",
+        help="Sets the region for the AWS profile. You "
+        "can also use the TOKENDITO_AWS_REGION environment variable.",
     )
-    parser.add_argument("--aws-role-arn", help="Sets the IAM role.")
-    parser.add_argument("--aws-shared-credentials-file", help="AWS credentials file to write to.")
+    parser.add_argument(
+        "--aws-role-arn",
+        help="Sets the IAM role. You "
+        "can also use the TOKENDITO_AWS_ROLE_ARN environment variable.",
+    )
+    parser.add_argument(
+        "--aws-shared-credentials-file",
+        help="AWS credentials file to write to. You "
+        "can also use the TOKENDITO_AWS_SHARED_CREDENTIALS_FILE environment variable.",
+    )
 
     okta_me_group = parser.add_mutually_exclusive_group()
     okta_me_group.add_argument(
         "--okta-org",
         dest="okta_org",
-        help="Set the Okta Org base URL. This enables role auto-discovery",
+        help="Set the Okta Org base URL. This enables role auto-discovery. You "
+        "can also use the TOKENDITO_OKTA_ORG environment variable.",
     )
     okta_me_group.add_argument(
         "--okta-tile",
-        help="Okta tile URL to use.",
+        help="Okta tile URL to use. You "
+        "can also use the TOKENDITO_OKTA_TILE environment variable.",
     )
     parser.add_argument(
         "--okta-client-id",
         help="""For OIE enabled Orgs this sets the Okta client ID to replace the value
-        found by tokendito. It is used in the authorize code flow.""",
+        found by tokendito. It is used in the authorize code flow. You can also use the
+        TOKENDITO_OKTA_CLIENT_ID environment variable.""",
     )
     parser.add_argument(
         "--okta-mfa",
@@ -282,26 +302,34 @@ def parse_cli_args(args):
         "--use-device-token",
         dest="user_use_device_token",
         action="store_true",
-        default=False,
-        help="Use device token across sessions",
+        default=None,
+        help="Use device token across sessions. You "
+        "can also use the TOKENDITO_USER_USE_DEVICE_TOKEN environment variable.",
     )
     parser.add_argument(
         "--quiet",
         dest="user_quiet",
         action="store_true",
-        default=False,
-        help="Suppress output",
+        default=None,
+        help="Suppress output. You can also use the TOKENDITO_USER_QUIET environment variable.",
     )
     parser.add_argument(
         "--login-timeout",
         dest="user_login_timeout",
         type=int,
-        default=0,
         help="Login timeout in seconds (default: 0, which is disabled). "
         "You can also use the TOKENDITO_USER_LOGIN_TIMEOUT environment variable.",
     )
 
     parsed_args = parser.parse_args(args)
+
+    # These select which ini file and profile to read, so they must be resolved before
+    # any configuration is loaded: CLI, then environment, then the built-in default.
+    for dest in ("user_config_file", "user_config_profile"):
+        if getattr(parsed_args, dest) is None:
+            env_value = os.environ.get(f"TOKENDITO_{dest.upper()}")
+            default = config.get_defaults()["user"][dest.removeprefix("user_")]
+            setattr(parsed_args, dest, env_value or default)
 
     return parsed_args
 
@@ -732,21 +760,40 @@ def add_sensitive_value_to_be_masked(value, key=None):
             mask_items.append(value)
 
 
+def _split_ini_key(key):
+    """Split an ini key into (section, param).
+
+    Bare keys that name a [user] setting (e.g. ``loglevel``) are placed in the user section.
+
+    :returns: tuple, or None if the key cannot be mapped.
+    """
+    section, sep, param = key.partition("_")
+    if sep and section in config.get_defaults():
+        return section, param
+    if key in config.get_defaults()["user"]:
+        return "user", key
+    if sep:
+        return section, param
+    return None
+
+
 def _read_ini(file, profile, default_section):
     res = dict()
-    pattern = re.compile(r"^(.*?)_(.*)")
 
     ini = configparser.RawConfigParser(default_section=default_section)
-    # Here, group(1) is the dictionary key, and group(2) the configuration element
     try:
         ini.read(file)
         for key, val in ini.items(profile):
-            match = re.search(pattern, key.lower())
-            if match:
-                if match.group(1) not in res:
-                    res[match.group(1)] = dict()
-                res[match.group(1)][match.group(2)] = val
-                add_sensitive_value_to_be_masked(val, match.group(2))
+            split_key = _split_ini_key(key.lower())
+            if split_key is None:
+                logger.warning(f"Ignoring unknown setting '{key}' in {file} [{profile}].")
+                continue
+            section, param = split_key
+            converted = _convert_value(key, val, param)
+            if converted is None:
+                continue
+            res.setdefault(section, dict())[param] = converted
+            add_sensitive_value_to_be_masked(converted, param)
     except configparser.Error as err:
         logger.error(f"Could not load profile '{profile}': {str(err)}")
         sys.exit(2)
@@ -815,8 +862,8 @@ def process_arguments(args):
         sys.exit(1)
 
 
-def _convert_env_value(key, val, param_name):
-    """Convert environment variable value to the appropriate type.
+def _convert_value(key, val, param_name):
+    """Convert a string value from the environment or ini file to the appropriate type.
 
     :returns: converted value, or None if conversion fails.
     """
@@ -826,6 +873,14 @@ def _convert_env_value(key, val, param_name):
         except ValueError:
             logger.warning(f"Invalid value for {key}: {val}. Must be an integer.")
             return None
+    if param_name in ("quiet", "use_device_token"):
+        lowered = str(val).strip().lower()
+        if lowered in ("true", "yes", "on", "1"):
+            return True
+        if lowered in ("false", "no", "off", "0"):
+            return False
+        logger.warning(f"Invalid value for {key}: {val}. Must evaluate to true or false.")
+        return None
     return val
 
 
@@ -845,7 +900,7 @@ def process_environment(prefix="tokendito"):
         if match.group(2) not in res:
             res[match.group(2)] = dict()
         param_name = match.group(3)
-        converted = _convert_env_value(key, val, param_name)
+        converted = _convert_value(key, val, param_name)
         if converted is None:
             continue
         res[match.group(2)][param_name] = converted
@@ -1374,26 +1429,9 @@ def _safe_load_ini(file, profile):
     return None
 
 
-def _resolve_profile(args):
-    """Resolve the active profile from CLI args or environment.
-
-    CLI args take precedence over env vars per documented precedence.
-
-    :param args: argparse namespace.
-    :returns: profile name string.
-    """
-    default_profile = config.get_defaults()["user"]["config_profile"]
-    if args.user_config_profile != default_profile:
-        return args.user_config_profile
-    env_profile = os.environ.get("TOKENDITO_USER_CONFIG_PROFILE")
-    if env_profile:
-        return env_profile
-    return args.user_config_profile
-
-
 def configure_list(args):
     """Display current configuration values and their sources."""
-    profile = _resolve_profile(args)
+    profile = args.user_config_profile
 
     config_ini = _safe_load_ini(args.user_config_file, profile)
     config_env = process_environment()

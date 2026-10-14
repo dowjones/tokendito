@@ -28,6 +28,12 @@ tokens into your local `~/.aws/credentials` file.
 
 See [Releases](https://github.com/dowjones/tokendito/releases) for a detailed Changelog.
 
+### Tokendito 2.5.1
+
+- Fix: CLI flags for `--quiet`, `--use-device-token`, and `--login-timeout` no longer override
+  values set via ini file or environment variable when left unset.
+- Dependency updates: botocore, beautifulsoup4, requests, platformdirs, pytest, black, moto.
+
 ### Tokendito 2.5.0
 
 Version 2.5.0 of Tokendito introduces the following changes:
@@ -93,7 +99,7 @@ Consult [additional notes](https://github.com/dowjones/tokendito/blob/main/docs/
 
 ## Requirements
 
-- Python 3.9+, or a working Docker environment
+- Python 3.10+, or a working Docker environment
 - AWS account(s) federated with Okta
 
 Tokendito is compatible with Python 3 and can be installed with either
