@@ -48,10 +48,11 @@ Choosing the version number and cutting the branch is a human decision.
 
 - Land fixes, changelog updates, and dependency bumps on the release
   branch, directly or via PRs targeting it.
-- Every PR targeting `main` or a release branch automatically builds and
-  publishes a test package to [TestPyPI](https://test.pypi.org/) via the
-  `testpypipublish` job, so a PR's packaging can be confidence-checked before
-  anything is tagged.
+- The pull-request trigger matches `main` and numeric version branches such as
+  `2.6.0`, not `release/2.6.0`. For same-repository PRs from non-Dependabot
+  branches targeting those branches, the `testpypipublish` job builds and
+  publishes a test package to [TestPyPI](https://test.pypi.org/), so packaging
+  can be confidence-checked before anything is tagged.
 
 ### 3. Publish a prerelease/beta (manual tag push)
 
