@@ -50,7 +50,7 @@ Choosing the version number and cutting the branch is a human decision.
   branch, directly or via PRs targeting it.
 - Every PR targeting `main` or a release branch automatically builds and
   publishes a test package to [TestPyPI](https://test.pypi.org/) via the
-  `testpypipublish` job, so a PR's packaging can be sanity-checked before
+  `testpypipublish` job, so a PR's packaging can be confidence-checked before
   anything is tagged.
 
 ### 3. Publish a prerelease/beta (manual tag push)
